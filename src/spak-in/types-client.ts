@@ -2,4 +2,5 @@
 export type { IntentResult } from "./schemas/result";
 export type { ExecutionPlan } from "./schemas/plan";
 export type { Clarification } from "./schemas/intent";
-export type { ProviderQuote, Submission, ExecutionState, DepositInstruction } from "./coordinator/types";
+export type { ExecutionState } from "../execution/state";
+export type { ExecutionView, QuoteView } from "../execution/views";

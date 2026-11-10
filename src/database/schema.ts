@@ -131,3 +131,104 @@ export const agentIdentities = pgTable("spak_agent_identities", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 }, (t) => [uniqueIndex("spak_agent_identities_user_uq").on(t.userId), uniqueIndex("spak_agent_identities_near_uq").on(t.nearAccountId)]);
+
+// ---------------------------------------------------------------------------
+// SPak Execution (phase 2). spak_submissions above is superseded and no longer written.
+// ---------------------------------------------------------------------------
+
+/** One execution of one SPak-in plan for one user. */
+export const executions = pgTable("spak_executions", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  intentId: text("intent_id").notNull(),
+  planRevision: integer("plan_revision").notNull(),
+  planId: text("plan_id").notNull(),
+  planHash: text("plan_hash").notNull(),
+  /** Snapshot of the plan as issued by SPak-in. Execution never reads plan data from the browser. */
+  plan: jsonb("plan").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  /** Hash of user + leg, for the "same transfer twice in a short window" guard. */
+  fingerprint: text("fingerprint").notNull(),
+  state: text("state").notNull(),
+  provider: text("provider").notNull(),
+  sourceNetwork: text("source_network").notNull(),
+  destinationNetwork: text("destination_network").notNull(),
+  sourceAssetId: text("source_asset_id").notNull(),
+  destinationAssetId: text("destination_asset_id").notNull(),
+  amountIn: text("amount_in").notNull(), // smallest units
+  recipient: text("recipient").notNull(),
+  recipientKind: text("recipient_kind").notNull(), // SELF | EXTERNAL
+  refundAddress: text("refund_address").notNull(),
+  currentQuoteId: text("current_quote_id"),
+  firmQuoteId: text("firm_quote_id"),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  depositAddress: text("deposit_address"),
+  depositMemo: text("deposit_memo"),
+  depositDeadline: timestamp("deposit_deadline", { withTimezone: true }),
+  providerStatus: text("provider_status"),
+  providerUpdatedAt: timestamp("provider_updated_at", { withTimezone: true }),
+  originTxHashes: jsonb("origin_tx_hashes").notNull().default([]),
+  destinationTxHashes: jsonb("destination_tx_hashes").notNull().default([]),
+  amountOutSettled: text("amount_out_settled"),
+  refundedAmount: text("refunded_amount"),
+  lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+  lastSuccessfulCheckAt: timestamp("last_successful_check_at", { withTimezone: true }),
+  lastStatusError: text("last_status_error"),
+  error: jsonb("error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+}, (t) => [
+  uniqueIndex("spak_executions_idem_uq").on(t.userId, t.idempotencyKey),
+  uniqueIndex("spak_executions_plan_uq").on(t.userId, t.planHash),
+  uniqueIndex("spak_executions_deposit_uq").on(t.depositAddress),
+  index("spak_executions_user_idx").on(t.userId, t.createdAt),
+  index("spak_executions_fp_idx").on(t.userId, t.fingerprint, t.createdAt),
+]);
+
+/** Every quote received from the provider, indicative or firm, with the provider's signature for disputes. */
+export const quotes = pgTable("spak_quotes", {
+  id: text("id").primaryKey(),
+  executionId: text("execution_id").notNull().references(() => executions.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull(),
+  planId: text("plan_id").notNull(),
+  planHash: text("plan_hash").notNull(),
+  planRevision: integer("plan_revision").notNull(),
+  kind: text("kind").notNull(), // INDICATIVE (dry) | FIRM (deposit address)
+  status: text("status").notNull(), // VALID | EXPIRED | REJECTED | SUPERSEDED | USED
+  sourceNetwork: text("source_network").notNull(),
+  destinationNetwork: text("destination_network").notNull(),
+  sourceAssetId: text("source_asset_id").notNull(),
+  destinationAssetId: text("destination_asset_id").notNull(),
+  providerOriginAsset: text("provider_origin_asset").notNull(),
+  providerDestinationAsset: text("provider_destination_asset").notNull(),
+  amountIn: text("amount_in").notNull(),
+  amountOut: text("amount_out"),
+  minAmountOut: text("min_amount_out"),
+  amountInUsd: text("amount_in_usd"),
+  amountOutUsd: text("amount_out_usd"),
+  slippageBps: integer("slippage_bps").notNull(),
+  fees: jsonb("fees").notNull().default([]),
+  depositAddress: text("deposit_address"),
+  depositMemo: text("deposit_memo"),
+  timeEstimateSec: integer("time_estimate_sec"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  providerDeadline: timestamp("provider_deadline", { withTimezone: true }),
+  providerCorrelationId: text("provider_correlation_id"),
+  providerSignature: text("provider_signature"),
+  providerTimestamp: text("provider_timestamp"),
+  rejectionReason: text("rejection_reason"),
+  request: jsonb("request").notNull(),
+  response: jsonb("response"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+}, (t) => [index("spak_quotes_exec_idx").on(t.executionId, t.createdAt), index("spak_quotes_user_idx").on(t.userId)]);
+
+/** Append-only state history of each execution. */
+export const executionEvents = pgTable("spak_execution_events", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  executionId: text("execution_id").notNull().references(() => executions.id, { onDelete: "cascade" }),
+  at: timestamp("at", { withTimezone: true }).notNull(),
+  fromState: text("from_state"),
+  toState: text("to_state").notNull(),
+  reason: text("reason").notNull(),
+  data: jsonb("data").notNull().default({}),
+}, (t) => [index("spak_execution_events_exec_idx").on(t.executionId, t.at)]);

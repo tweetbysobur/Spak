@@ -10,7 +10,7 @@ import { POST as logout } from "@/app/api/auth/logout/route";
 import { PATCH as patchWallet } from "@/app/api/wallets/[id]/route";
 import { POST as interpret } from "@/app/api/spak-in/interpret/route";
 import { POST as manual } from "@/app/api/spak-in/manual/route";
-import { POST as cancel } from "@/app/api/spak-in/submissions/[id]/cancel/route";
+import { POST as cancel } from "@/app/api/executions/[id]/cancel/route";
 import { evmWallet, solanaWallet } from "./keys";
 
 const ORIGIN = "http://localhost:3000";
@@ -102,7 +102,7 @@ describe("protected SPak-in routes", () => {
     const r = new Request(`${ORIGIN}/api/spak-in/interpret`, { method: "POST", headers: { "content-type": "application/json", origin: ORIGIN, "x-spak-user": "anon_someone_12345" }, body: JSON.stringify({ text: "swap 1 eth on base to usdc" }) });
     expect((await interpret(r)).status).toBe(401);
     expect((await manual(req("/api/spak-in/manual", { body: {} }))).status).toBe(401);
-    expect((await cancel(req("/api/spak-in/submissions/x/cancel", { body: {} }), { params: Promise.resolve({ id: "x" }) })).status).toBe(401);
+    expect((await cancel(req("/api/executions/x/cancel", { body: {} }), { params: Promise.resolve({ id: "x" }) })).status).toBe(401);
   });
 
   it("use verified wallets as SPak-in context and ignore client-sent addresses", async () => {

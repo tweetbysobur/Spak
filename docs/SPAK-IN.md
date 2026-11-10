@@ -1,6 +1,6 @@
 # SPak-in: SPak Intent Brain Box
 
-SPak-in turns an instruction ("Swap 50 USDC on Base to SOL on Solana") into a validated, policy-checked execution plan. It is deterministic TypeScript. It calls no LLM, holds no keys, signs nothing and never calls an execution provider. The Execution Coordinator is the only door to SPak Execution.
+SPak-in turns an instruction ("Swap 50 USDC on Base to SOL on Solana") into a validated, policy-checked execution plan. It is deterministic TypeScript. It calls no LLM, holds no keys, signs nothing and never calls an execution provider. Execution is handled by SPak Execution (`src/execution`, see docs/SPAK-EXECUTION.md), which replaced the Execution Coordinator described below.
 
 ## Status: what is real and what is not
 

@@ -4,6 +4,7 @@ Cross-chain execution agent on NEAR. You state an intent. SPak-in parses and val
 
 - SPak-in technical docs: [docs/SPAK-IN.md](docs/SPAK-IN.md)
 - Wallet authentication: [docs/AUTH.md](docs/AUTH.md)
+- SPak Execution: [docs/SPAK-EXECUTION.md](docs/SPAK-EXECUTION.md)
 - Benchmark: [docs/BENCHMARK.md](docs/BENCHMARK.md)
 - PRD: `gentles-build-brain/projects/spak.md`
 
@@ -13,7 +14,8 @@ Cross-chain execution agent on NEAR. You state an intent. SPak-in parses and val
 src/spak-in/            SPak-in engine (deterministic, no LLM, no keys)
   processor/ tokenizer/ parser/ extractor/ classifier/ context/
   validator/ planner/ policy/ coordinator/ schemas/ registries/ errors/ lib/
-src/integrations/near-intents/   NEAR Intents 1Click provider (the only provider-specific code)
+src/execution/          SPak Execution: plan validation, asset resolution, quotes, execution records, states
+src/integrations/near-intents/   NEAR Intents 1Click client (the only provider-specific code)
 src/auth/               Wallet sign-in: challenges, signature verification (EVM, Solana, NEAR), sessions, wallets
 src/wallets/            Browser wallet connectors: EIP-6963, Wallet Standard, NEAR Wallet Selector
 src/database/           Drizzle schema, migrations, Postgres repositories
@@ -57,8 +59,8 @@ Without `DATABASE_URL`, local development uses an embedded PGlite database in `.
 
 ## Safety rules in code
 
-- SPak-in never signs, holds keys or calls a provider. The coordinator returns deposit instructions; your wallet sends them.
+- SPak-in never signs, holds keys or calls a provider. SPak Execution returns deposit instructions; your wallet sends them.
 - A deposit address is created only after explicit approval bound to the exact plan hash.
-- The coordinator accepts only plans SPak-in issued, and refuses changed plans, stale approvals and duplicates.
+- SPak Execution accepts only plans SPak-in issued to you, and refuses changed plans, stale approvals, mismatched quotes and duplicates.
 - Ambiguous instructions stop with a question. Nothing is guessed: no invented contracts, addresses, amounts or networks.
 - Success shows only after NEAR Intents reports verified delivery.

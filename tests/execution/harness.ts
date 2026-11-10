@@ -1,0 +1,40 @@
+import { AuthService } from "@/auth/service";
+import { PgAuditLog, PgIntentLog, PgSessionStore, type Db } from "@/database/repositories";
+import { OneClickClient } from "@/integrations/near-intents/client";
+import { ExecutionRecords, ExecutionService, IntentLogPlanStore, type VerifiedWallet } from "@/execution";
+import { SpakIn } from "@/spak-in";
+import { freshDb } from "../auth/db";
+import { evmWallet, solanaWallet } from "../auth/keys";
+import { Fake1Click } from "./fake-1click";
+
+export const T0 = Date.parse("2026-11-10T10:00:00Z");
+
+/** A real user (signed in with real keys) with a verified EVM and Solana wallet, real SPak-in, mocked 1Click. */
+export async function harness(opts: { client?: OneClickClient } = {}) {
+  const db: Db = await freshDb();
+  const clock = { now: T0 };
+  const now = () => new Date(clock.now);
+  const auth = new AuthService(db, { clock: now, nearRpc: { accessKey: async () => null } });
+  const intentLog = new PgIntentLog(db);
+  const spakIn = new SpakIn({ sessions: new PgSessionStore(db), clock: now, onResult: (r, req) => intentLog.record(r, req.userId ?? null) });
+  const fake = new Fake1Click();
+  const records = new ExecutionRecords(db, now);
+  const svc = new ExecutionService({ client: opts.client ?? new OneClickClient({ fetchImpl: fake.fetch as typeof fetch }), records, plans: new IntentLogPlanStore(db), audit: new PgAuditLog(db), clock: now });
+
+  async function newUser() {
+    const e = evmWallet(), s = solanaWallet();
+    const c = await auth.createChallenge({ family: "evm", address: e.address, purpose: "SIGN_IN", domain: "spak.test", uri: "https://spak.test" });
+    const { userId } = await auth.verifyChallenge({ challengeId: c.challengeId, signature: (await e.sign(c.message)).signature });
+    const l = await auth.createChallenge({ family: "solana", address: s.address, purpose: "LINK", domain: "spak.test", uri: "https://spak.test", userId });
+    await auth.verifyChallenge({ challengeId: l.challengeId, signature: (await s.sign(l.message)).signature, currentUserId: userId });
+    const wallets = async (): Promise<VerifiedWallet[]> => (await auth.listWallets(userId)).map((w) => ({ family: w.family, address: w.address, networks: w.networks }));
+    const plan = async (text: string, sessionId = `s-${Math.random()}`) => {
+      const r = await spakIn.interpret({ text, userId, sessionId, wallets: await auth.walletContext(userId), now: now().toISOString() });
+      return r;
+    };
+    return { userId, evm: e, sol: s, wallets, plan };
+  }
+  return { db, clock, now, auth, spakIn, fake, svc, records, newUser };
+}
+
+export const approval = (planHash: string, at: Date, allowDuplicate = false) => ({ planHash, approvedAt: at.toISOString(), allowDuplicate });

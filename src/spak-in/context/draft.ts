@@ -36,7 +36,7 @@ export interface SessionState {
   revision: number;
   draft: Draft;
   lastStatus: string;
-  /** Set once the coordinator has accepted a plan for this intent; later edits start a new intent. */
+  /** Set once SPak Execution has accepted a plan for this intent; later edits start a new intent. */
   submitted: boolean;
   updatedAt: string;
 }

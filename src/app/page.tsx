@@ -9,7 +9,7 @@ import { WalletPicker } from "@/components/WalletPicker";
 import { WalletsPanel, short } from "@/components/WalletsPanel";
 import { loadSession, type Session } from "@/components/session";
 import { Card } from "@/components/ui";
-import { api, store, type IntentResult, type ProviderQuote, type TxRecord } from "@/lib/client";
+import { api, type ExecutionView, type IntentResult, type QuoteView } from "@/lib/client";
 import { takeNearRedirectResult } from "@/wallets/near";
 import { classifyWalletError } from "@/wallets/errors";
 
@@ -22,17 +22,14 @@ const TABS: { id: Tab; label: string }[] = [
 export default function Home() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [tab, setTab] = useState<Tab>("chat");
-  const [history, setHistory] = useState<TxRecord[]>([]);
-  const [pending, setPending] = useState<{ intent: IntentResult; quote: ProviderQuote }>();
-  const [active, setActive] = useState<TxRecord>();
+  const [pending, setPending] = useState<{ intent: IntentResult; execution: ExecutionView; quote: QuoteView }>();
+  const [active, setActive] = useState<ExecutionView>();
   const [timezone, setTimezone] = useState("UTC");
   const [notice, setNotice] = useState<string>();
 
   const refresh = useCallback(async () => {
     const s = await loadSession().catch(() => null);
     setSession(s);
-    store.setUser(s?.userId ?? null);
-    setHistory(store.history());
   }, []);
 
   useEffect(() => {
@@ -47,8 +44,8 @@ export default function Home() {
     finish.then(refresh);
   }, [refresh]);
 
-  const signedOut = () => { setSession(null); store.setUser(null); setPending(undefined); setActive(undefined); setTab("chat"); };
-  const onReady = (intent: IntentResult, quote: ProviderQuote) => { setActive(undefined); setPending({ intent, quote }); };
+  const signedOut = () => { setSession(null); setPending(undefined); setActive(undefined); setTab("chat"); };
+  const onReady = (intent: IntentResult, execution: ExecutionView, quote: QuoteView) => { setActive(undefined); setPending({ intent, execution, quote }); };
   const activeWallet = session?.wallets.find((w) => w.active);
   const ownAddress = (net: string) => {
     if (!session) return undefined;
@@ -79,7 +76,7 @@ export default function Home() {
         <>
           <nav className="flex gap-1 overflow-x-auto rounded-xl border border-white/10 p-1">
             {TABS.map((t) => (
-              <button key={t.id} onClick={() => { setTab(t.id); if (t.id === "history") setHistory(store.history()); }}
+              <button key={t.id} onClick={() => setTab(t.id)}
                 className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm ${tab === t.id ? "bg-white/10 text-white" : "text-white/50 hover:text-white"}`}>
                 {t.label}
               </button>
@@ -88,14 +85,14 @@ export default function Home() {
 
           {tab === "chat" && <Chat timezone={timezone} onReady={onReady} />}
           {tab === "manual" && <Manual ownAddress={ownAddress} onReady={onReady} />}
-          {tab === "history" && <History items={history} onOpen={(t) => { setPending(undefined); setActive(t); }} />}
+          {tab === "history" && <History onOpen={(x) => { setPending(undefined); setActive(x); }} />}
           {tab === "wallets" && <WalletsPanel session={session} refresh={async () => { setPending(undefined); await refresh(); }} signedOut={signedOut} />}
 
           {pending && !active && (
-            <Review intent={pending.intent} quote={pending.quote} onCancel={() => setPending(undefined)}
-              onApproved={(tx) => { setPending(undefined); setActive(tx); setHistory(store.history()); }} />
+            <Review intent={pending.intent} execution={pending.execution} quote={pending.quote} onCancel={() => setPending(undefined)}
+              onApproved={(x) => { setPending(undefined); setActive(x); }} />
           )}
-          {active && <Tracker key={active.submission.id} initial={active} />}
+          {active && <Tracker key={active.id} initial={active} />}
         </>
       )}
     </main>

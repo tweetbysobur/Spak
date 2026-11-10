@@ -1,43 +1,38 @@
 "use client";
-import type { ExecutionPlan, IntentResult, ProviderQuote, Submission } from "@/spak-in/types-client";
+import type { ExecutionPlan, ExecutionView, IntentResult, QuoteView } from "@/spak-in/types-client";
+import { getAsset } from "@/spak-in/registries/assets";
+import { fromBaseUnits } from "@/spak-in/lib/decimal";
 
-export type { ExecutionPlan, IntentResult, ProviderQuote, Submission };
+export type { ExecutionPlan, ExecutionView, IntentResult, QuoteView };
 
 export interface ApiError { code: string; message: string }
 
 /** JSON call to the SPak API. The session cookie is HttpOnly and sent by the browser; JS never reads it. */
-export async function api<T>(url: string, body?: unknown, method?: "POST" | "PATCH" | "DELETE"): Promise<T> {
+export async function api<T>(url: string, body?: unknown, method?: "POST" | "PATCH" | "DELETE", headers: Record<string, string> = {}): Promise<T> {
   const res = await fetch(url, {
     method: method ?? (body === undefined ? "GET" : "POST"),
     credentials: "same-origin",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...headers },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   const data = await res.json();
-  if (!res.ok) throw Object.assign(new Error(data.error?.message ?? `Request failed (${res.status})`), { code: data.error?.code as string | undefined });
+  if (!res.ok) throw Object.assign(new Error(data.error?.message ?? `Request failed (${res.status})`), { code: data.error?.code as string | undefined, details: data.error?.details });
   return data as T;
 }
 
-/** Saved record of an approved transaction, for the History tab. */
-export interface TxRecord {
-  submission: Submission;
-  intent: IntentResult;
-  quote: ProviderQuote;
+export interface Prepared { execution: ExecutionView; quote: QuoteView }
+
+/**
+ * Hand a validated SPak-in plan to SPak Execution. The idempotency key is derived from the plan hash,
+ * so pressing the button twice returns the same execution instead of creating two.
+ */
+export function startExecution(planHash: string): Promise<Prepared> {
+  return api<Prepared>("/api/executions", { planHash }, "POST", { "idempotency-key": `ui-${planHash.slice(0, 40)}` });
 }
 
-function read<T>(key: string, fallback: T): T {
-  try { const v = localStorage.getItem(key); return v ? (JSON.parse(v) as T) : fallback; } catch { return fallback; }
+/** Smallest units to a readable decimal, using the verified registry decimals. */
+export function formatUnits(units: string | null | undefined, assetId: string): string {
+  if (!units) return "?";
+  const a = getAsset(assetId);
+  return a ? `${fromBaseUnits(units, a.decimals)} ${a.symbol}` : `${units} units`;
 }
-function write(key: string, v: unknown) { try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* storage unavailable */ } }
-
-let currentUser = "none";
-export const store = {
-  /** Per-user display cache. The server is the source of truth for submissions. */
-  history: () => read<TxRecord[]>(`spak.history.v3.${currentUser}`, []),
-  saveTx: (tx: TxRecord) => {
-    const key = `spak.history.v3.${tx.submission.userId}`;
-    const h = read<TxRecord[]>(key, []).filter((t) => t.submission.id !== tx.submission.id);
-    write(key, [tx, ...h].slice(0, 50));
-  },
-  setUser: (id: string | null) => { currentUser = id ?? "none"; },
-};
