@@ -1,0 +1,5 @@
+/** Type-only exports that are safe to import from browser code. */
+export type { IntentResult } from "./schemas/result";
+export type { ExecutionPlan } from "./schemas/plan";
+export type { Clarification } from "./schemas/intent";
+export type { ProviderQuote, Submission, ExecutionState, DepositInstruction } from "./coordinator/types";

@@ -1,48 +1,58 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { NETWORKS } from "@/lib/spak-in/catalog";
-import { postJSON, type QuoteRequest, type QuoteView } from "@/lib/client";
+import { api, type IntentResult, type ProviderQuote } from "@/lib/client";
 import { Button, Card, Field, inputCls } from "./ui";
 
-interface Tok { symbol: string; blockchain: string; decimals: number }
+interface Net { id: string; name: string }
+interface Asset { id: string; network: string; symbol: string }
 
-export function Manual({ addresses, onQuote }: { addresses: Record<string, string>; onQuote: (r: QuoteRequest, q: QuoteView) => void }) {
-  const [tokens, setTokens] = useState<Tok[]>([]);
-  const [loadError, setLoadError] = useState<string>();
-  const [f, setF] = useState({ sourceNetwork: "base", sourceToken: "USDC", amount: "", destNetwork: "sol", destToken: "SOL", recipient: "", refundTo: "", slippageBps: 100 });
+export function Manual({ addresses, onReady }: { addresses: Record<string, string>; onReady: (i: IntentResult, q: ProviderQuote) => void }) {
+  const [nets, setNets] = useState<Net[]>([]);
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [f, setF] = useState({ sourceNetwork: "base", sourceAsset: "", amount: "", destinationNetwork: "solana", destinationAsset: "", recipient: "", slippageBps: 100 });
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  const [problems, setProblems] = useState<string[]>([]);
 
   useEffect(() => {
-    fetch("/api/tokens").then((r) => r.json()).then((d) => (Array.isArray(d) ? setTokens(d) : setLoadError(d.error))).catch((e) => setLoadError(String(e)));
+    api<{ networks: Net[]; assets: Asset[] }>("/api/spak-in/registry").then((r) => { setNets(r.networks); setAssets(r.assets); }).catch((e) => setProblems([String(e)]));
   }, []);
 
-  const networks = useMemo(() => [...new Set(tokens.map((t) => t.blockchain))].sort((a, b) => (NETWORKS[a]?.name ?? a).localeCompare(NETWORKS[b]?.name ?? b)), [tokens]);
-  const symbolsOn = (n: string) => [...new Set(tokens.filter((t) => t.blockchain === n).map((t) => t.symbol))].sort();
+  const on = (n: string) => assets.filter((a) => a.network === n).sort((a, b) => a.symbol.localeCompare(b.symbol));
+  const usable = useMemo(() => nets.filter((n) => assets.some((a) => a.network === n.id)), [nets, assets]);
+  const pick = (n: string, sym: string) => on(n).find((a) => a.symbol === sym)?.id ?? on(n)[0]?.id ?? "";
+  useEffect(() => {
+    if (!assets.length) return;
+    setF((p) => ({ ...p, sourceAsset: p.sourceAsset || pick(p.sourceNetwork, "USDC"), destinationAsset: p.destinationAsset || pick(p.destinationNetwork, "SOL") }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assets]);
   const set = (k: keyof typeof f, v: string | number) => setF((p) => ({ ...p, [k]: v }));
-  const recipient = f.recipient || addresses[f.destNetwork] || "";
-  const refundTo = f.refundTo || addresses[f.sourceNetwork] || "";
 
-  async function quote(e: React.FormEvent) {
-    e.preventDefault(); setBusy(true); setError(undefined);
+  async function submit(e: React.FormEvent) {
+    e.preventDefault(); setBusy(true); setProblems([]);
+    const src = assets.find((a) => a.id === f.sourceAsset), dst = assets.find((a) => a.id === f.destinationAsset);
+    const type = f.recipient ? "PAYMENT" : f.sourceNetwork === f.destinationNetwork ? "SWAP" : src?.symbol === dst?.symbol ? "BRIDGE" : "CROSS_CHAIN_SWAP";
     try {
-      const req: QuoteRequest = { ...f, recipient, refundTo };
-      onQuote(req, await postJSON<QuoteView>("/api/quote", req));
-    } catch (err) { setError((err as Error).message); } finally { setBusy(false); }
+      const r = await api<IntentResult>("/api/spak-in/manual", { wallets: addresses, intent: { type, ...f, recipient: f.recipient || undefined } });
+      if (r.status !== "VALIDATED" || !r.plan) {
+        setProblems([...r.errors.map((x) => x.message), ...(r.policy?.violations.map((x) => x.message) ?? []), ...r.clarifications.map((c) => c.question)]);
+        return;
+      }
+      onReady(r, await api<ProviderQuote>("/api/spak-in/quote", { plan: r.plan }));
+    } catch (err) { setProblems([(err as Error).message]); } finally { setBusy(false); }
   }
 
-  const side = (prefix: "source" | "dest") => {
-    const nk = `${prefix}Network` as const, tk = `${prefix}Token` as const;
+  const side = (p: "source" | "destination") => {
+    const nk = `${p}Network` as const, ak = `${p}Asset` as const;
     return (
       <div className="grid grid-cols-2 gap-3">
-        <Field label={prefix === "source" ? "From network" : "To network"}>
-          <select className={inputCls} value={f[nk]} onChange={(e) => { set(nk, e.target.value); set(tk, symbolsOn(e.target.value)[0] ?? ""); }}>
-            {networks.map((n) => <option key={n} value={n}>{NETWORKS[n]?.name ?? n}</option>)}
+        <Field label={p === "source" ? "From network" : "To network"}>
+          <select className={inputCls} value={f[nk]} onChange={(e) => { set(nk, e.target.value); set(ak, pick(e.target.value, assets.find((a) => a.id === f[ak])?.symbol ?? "USDC")); }}>
+            {usable.map((n) => <option key={n.id} value={n.id}>{n.name}</option>)}
           </select>
         </Field>
-        <Field label={prefix === "source" ? "Send asset" : "Receive asset"}>
-          <select className={inputCls} value={f[tk]} onChange={(e) => set(tk, e.target.value)}>
-            {symbolsOn(f[nk]).map((s) => <option key={s}>{s}</option>)}
+        <Field label={p === "source" ? "Send asset" : "Receive asset"}>
+          <select className={inputCls} value={f[ak]} onChange={(e) => set(ak, e.target.value)}>
+            {on(f[nk]).map((a) => <option key={a.id} value={a.id}>{a.symbol}</option>)}
           </select>
         </Field>
       </div>
@@ -51,20 +61,20 @@ export function Manual({ addresses, onQuote }: { addresses: Record<string, strin
 
   return (
     <Card>
-      {loadError && <p className="mb-3 text-sm text-red-400">Could not load NEAR Intents assets: {loadError}</p>}
-      <form onSubmit={quote} className="flex flex-col gap-4">
+      <form onSubmit={submit} className="flex flex-col gap-4">
         {side("source")}
         <Field label="Amount"><input className={inputCls} inputMode="decimal" placeholder="0.0" value={f.amount} onChange={(e) => set("amount", e.target.value.replace(/[^\d.]/g, ""))} /></Field>
-        {side("dest")}
-        <Field label={`Recipient on ${NETWORKS[f.destNetwork]?.name ?? f.destNetwork}`}><input className={`${inputCls} font-mono`} placeholder={addresses[f.destNetwork] ?? "Address"} value={f.recipient} onChange={(e) => set("recipient", e.target.value.trim())} /></Field>
-        <Field label={`Refund address on ${NETWORKS[f.sourceNetwork]?.name ?? f.sourceNetwork}`}><input className={`${inputCls} font-mono`} placeholder={addresses[f.sourceNetwork] ?? "Your source address"} value={f.refundTo} onChange={(e) => set("refundTo", e.target.value.trim())} /></Field>
+        {side("destination")}
+        <Field label="Recipient (leave empty to receive in your own wallet)">
+          <input className={`${inputCls} font-mono`} placeholder={addresses[f.destinationNetwork] ?? "Address"} value={f.recipient} onChange={(e) => set("recipient", e.target.value.trim())} />
+        </Field>
         <Field label="Max slippage">
           <select className={inputCls} value={f.slippageBps} onChange={(e) => set("slippageBps", Number(e.target.value))}>
-            {[50, 100, 200, 300].map((b) => <option key={b} value={b}>{b / 100}%</option>)}
+            {[30, 50, 100].map((b) => <option key={b} value={b}>{b / 100}%</option>)}
           </select>
         </Field>
-        {error && <p className="text-sm text-red-400">{error}</p>}
-        <Button type="submit" disabled={busy || !f.amount || !recipient || !refundTo}>{busy ? "Getting quote" : "Get quote"}</Button>
+        {!!problems.length && <ul className="list-disc pl-4 text-sm text-red-400">{problems.map((p) => <li key={p}>{p}</li>)}</ul>}
+        <Button type="submit" disabled={busy || !f.amount || !f.sourceAsset || !f.destinationAsset}>{busy ? "Checking" : "Get quote"}</Button>
       </form>
     </Card>
   );
