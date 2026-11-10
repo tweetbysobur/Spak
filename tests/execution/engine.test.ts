@@ -14,8 +14,12 @@ const create = async (text = SWAP, key = `k-${Math.random().toString(36).slice(2
   expect(r.status, JSON.stringify(r.errors)).toBe("VALIDATED");
   return { intent: r, ...(await h.svc.create({ userId: u.userId, planHash: r.plan!.hash, idempotencyKey: key, wallets: await u.wallets() })) };
 };
-const approve = async (x: Awaited<ReturnType<typeof create>>, extra: { quoteId?: string; allowDuplicate?: boolean } = {}) =>
-  h.svc.approve({ userId: u.userId, executionId: x.execution.id, quoteId: extra.quoteId ?? x.quote!.id, approval: approval(x.execution.planHash, h.now(), extra.allowDuplicate), wallets: await u.wallets() });
+/** Phase 3 flow: indicative quote → firm quote (reviewed) → approve that firm quote. */
+const firm = async (x: Awaited<ReturnType<typeof create>>) => (await h.svc.firmQuote({ userId: u.userId, executionId: x.execution.id, quoteId: x.quote!.id, wallets: await u.wallets() })).quote;
+const approve = async (x: Awaited<ReturnType<typeof create>>, extra: { quoteId?: string; allowDuplicate?: boolean } = {}) => {
+  const quoteId = extra.quoteId ?? (await firm(x)).id;
+  return h.svc.approve({ userId: u.userId, executionId: x.execution.id, quoteId, approval: approval(x.execution.planHash, h.now(), extra.allowDuplicate, x.execution.planRevision), wallets: await u.wallets() });
+};
 const code = async (p: Promise<unknown>) => { try { await p; return "OK"; } catch (e) { return (e as ExecutionError).code ?? (e as Error).message; } };
 
 describe("valid execution plans", () => {
@@ -36,9 +40,9 @@ describe("valid execution plans", () => {
     expect(a.execution.depositAddress).toMatch(/^0x[0-9a-f]{40}$/);
     expect(a.quote).toMatchObject({ kind: "FIRM", status: "VALID" });
     const d = await h.svc.details(x.execution.id, u.userId);
-    expect(d.events.map((e) => e.to)).toEqual(["DRAFT", "AWAITING_APPROVAL", "AWAITING_DEPOSIT"]);
+    expect(d.events.map((e) => e.to)).toEqual(["DRAFT", "AWAITING_APPROVAL", "AWAITING_APPROVAL", "AWAITING_DEPOSIT"]);
     expect(d.deposit).toMatchObject({ network: "base", amount: "50000000", address: a.execution.depositAddress });
-    expect(d.quotes.map((q) => `${q.kind}:${q.status}`)).toEqual(["INDICATIVE:USED", "FIRM:VALID"]);
+    expect(d.quotes.map((q) => `${q.kind}:${q.status}`)).toEqual(["INDICATIVE:SUPERSEDED", "FIRM:VALID"]);
   });
   it("payments to an external address are allowed but refunds must go to a verified wallet", async () => {
     const x = await create("Send 10 USDC on Base to 0x2222222222222222222222222222222222222222 on Arbitrum");
@@ -101,20 +105,18 @@ describe("quote validation", () => {
     expect(q).toMatchObject({ status: "REJECTED" });
     expect(q!.rejectionReason).toMatch(/recipient/);
   });
-  it("firm quotes without a valid deposit address are rejected and the approval can be retried", async () => {
+  it("firm quotes without a valid deposit address are rejected and the firm quote can be retried", async () => {
     const x = await create();
     h.fake.mode = "no-deposit-address";
-    expect(await code(approve(x))).toBe("QUOTE_MISMATCH");
+    expect(await code(firm(x))).toBe("QUOTE_MISMATCH");
     h.fake.mode = "bad-deposit-address";
-    expect(await code(approve(x))).toBe("QUOTE_MISMATCH");
+    expect(await code(firm(x))).toBe("QUOTE_MISMATCH");
     h.fake.mode = "ok";
     expect((await approve(x)).execution.state).toBe("AWAITING_DEPOSIT");
   });
-  it("a firm quote worse than the approved worst case is refused", async () => {
+  it("an indicative quote cannot be approved: the firm quote must be reviewed first", async () => {
     const x = await create();
-    h.fake.firmRate = { num: 10n, den: 1n }; // indicative min was 12 * 0.99
-    expect(await code(approve(x))).toBe("QUOTE_WORSE_THAN_APPROVED");
-    expect((await h.svc.details(x.execution.id, u.userId)).state).toBe("AWAITING_APPROVAL");
+    expect(await code(approve(x, { quoteId: x.quote!.id }))).toBe("FIRM_QUOTE_REQUIRED");
   });
   it("respects the plan's minimum output constraint", async () => {
     h.fake.rate = { num: 1n, den: 1n }; // 50 USDC (6dp) -> 50000000 lamports = 0.05 SOL
@@ -123,7 +125,7 @@ describe("quote validation", () => {
 });
 
 describe("expiry", () => {
-  it("expired indicative quotes cannot be approved; a re-quote can", async () => {
+  it("expired indicative quotes cannot be turned into firm quotes; a re-quote can", async () => {
     const x = await create();
     h.clock.now += INDICATIVE_TTL_MS + 1;
     expect(await code(approve(x))).toBe("QUOTE_EXPIRED");
@@ -138,8 +140,10 @@ describe("expiry", () => {
   it("stale approvals and approvals for another plan are refused", async () => {
     const x = await create();
     const wallets = await u.wallets();
-    expect(await code(h.svc.approve({ userId: u.userId, executionId: x.execution.id, quoteId: x.quote!.id, approval: approval("b".repeat(64), h.now()), wallets }))).toBe("APPROVAL_MISMATCH");
-    expect(await code(h.svc.approve({ userId: u.userId, executionId: x.execution.id, quoteId: x.quote!.id, approval: approval(x.execution.planHash, new Date(h.clock.now - 11 * 60_000)), wallets }))).toBe("APPROVAL_EXPIRED");
+    const f = await firm(x);
+    expect(await code(h.svc.approve({ userId: u.userId, executionId: x.execution.id, quoteId: f.id, approval: approval("b".repeat(64), h.now()), wallets }))).toBe("APPROVAL_MISMATCH");
+    expect(await code(h.svc.approve({ userId: u.userId, executionId: x.execution.id, quoteId: f.id, approval: approval(x.execution.planHash, h.now(), false, 7), wallets }))).toBe("APPROVAL_MISMATCH");
+    expect(await code(h.svc.approve({ userId: u.userId, executionId: x.execution.id, quoteId: f.id, approval: approval(x.execution.planHash, new Date(h.clock.now - 11 * 60_000)), wallets }))).toBe("APPROVAL_EXPIRED");
   });
   it("no deposit before the deadline -> EXPIRED", async () => {
     const x = await create();
@@ -160,21 +164,25 @@ describe("idempotency and duplicates", () => {
     expect(otherKey.execution.id).toBe(x.execution.id);
     expect(h.fake.calls.filter((c) => c.path === "/v0/quote").length).toBe(quotesBefore);
   });
-  it("concurrent approvals produce one firm quote and one deposit address", async () => {
+  it("concurrent approvals of one firm quote produce exactly one approval", async () => {
     const x = await create();
-    const rs = await Promise.allSettled([approve(x), approve(x), approve(x)]);
+    const f = await firm(x);
+    const rs = await Promise.allSettled([1, 2, 3].map(() => approve(x, { quoteId: f.id })));
     const firmCalls = h.fake.calls.filter((c) => c.path === "/v0/quote" && (c.body as { dry: boolean }).dry === false);
     expect(firmCalls).toHaveLength(1);
     expect(rs.filter((r) => r.status === "fulfilled").length).toBeGreaterThanOrEqual(1);
-    const repeat = await approve(x);
+    const rows = await h.db.execute(`select count(*)::int as n from spak_approvals where execution_id = '${x.execution.id}' and invalidated_at is null`) as unknown as { rows: { n: number }[] };
+    expect(rows.rows[0].n).toBe(1);
+    const repeat = await approve(x, { quoteId: f.id });
     expect(repeat.duplicate).toBe(true);
   });
   it("the same transfer twice within 2 minutes needs explicit confirmation", async () => {
     const a = await create(SWAP);
     await approve(a);
     const b = await create(SWAP);
-    expect(await code(approve(b))).toBe("DUPLICATE_SUSPECTED");
-    expect(await code(approve(b, { allowDuplicate: true }))).toBe("OK");
+    const fb = await firm(b);
+    expect(await code(approve(b, { quoteId: fb.id }))).toBe("DUPLICATE_SUSPECTED");
+    expect(await code(approve(b, { quoteId: fb.id, allowDuplicate: true }))).toBe("OK");
   });
 });
 
@@ -260,6 +268,7 @@ describe("cross-user access", () => {
       h.svc.details(x.execution.id, eve.userId), h.svc.quote(x.quote!.id, eve.userId),
       h.svc.requote({ userId: eve.userId, executionId: x.execution.id, wallets: w }),
       h.svc.approve({ userId: eve.userId, executionId: x.execution.id, quoteId: x.quote!.id, approval: approval(x.execution.planHash, h.now()), wallets: w }),
+      h.svc.firmQuote({ userId: eve.userId, executionId: x.execution.id, quoteId: x.quote!.id, wallets: w }),
       h.svc.refresh({ userId: eve.userId, executionId: x.execution.id }), h.svc.cancel({ userId: eve.userId, executionId: x.execution.id }),
     ]) expect(["EXECUTION_NOT_FOUND", "QUOTE_NOT_FOUND"]).toContain(await code(p));
     expect(await h.svc.history(eve.userId, { limit: 10 })).toEqual([]);

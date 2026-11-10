@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gte, inArray, isNull, lt, max, ne } from "drizzle-orm";
 import type { Db } from "../database/repositories";
-import { executionEvents, executions, intents, quotes } from "../database/schema";
+import { approvals, executionEvents, executions, intents, quotes } from "../database/schema";
 import type { IntentResult } from "../spak-in/schemas/result";
 import type { ExecutionPlan } from "../spak-in/schemas/plan";
 import type { IssuedPlan, PlanStore } from "./plan-validator";
@@ -11,6 +11,7 @@ export type ExecutionRow = typeof executions.$inferSelect;
 export type ExecutionInsert = typeof executions.$inferInsert;
 export type QuoteRow = typeof quotes.$inferSelect;
 export type QuoteInsert = typeof quotes.$inferInsert;
+export type ApprovalRow = typeof approvals.$inferSelect;
 export type QuoteStatus = "VALID" | "EXPIRED" | "REJECTED" | "SUPERSEDED" | "USED";
 
 export function isUniqueViolation(e: unknown): boolean {
@@ -115,6 +116,26 @@ export class ExecutionRecords {
 
   async events(id: string) {
     return this.db.select().from(executionEvents).where(eq(executionEvents.executionId, id)).orderBy(asc(executionEvents.at), asc(executionEvents.id));
+  }
+
+  // approvals
+  /** Returns null if a live approval already exists for the execution (unique partial index). */
+  async insertApproval(a: typeof approvals.$inferInsert): Promise<ApprovalRow | null> {
+    try {
+      const [r] = await this.db.insert(approvals).values(a).returning();
+      return r;
+    } catch (e) {
+      if (isUniqueViolation(e)) return null;
+      throw e;
+    }
+  }
+  async activeApproval(executionId: string): Promise<ApprovalRow | null> {
+    const [r] = await this.db.select().from(approvals).where(and(eq(approvals.executionId, executionId), isNull(approvals.invalidatedAt))).limit(1);
+    return r ?? null;
+  }
+  async invalidateApprovals(executionId: string, reason: string) {
+    await this.db.update(approvals).set({ invalidatedAt: this.clock(), invalidationReason: reason })
+      .where(and(eq(approvals.executionId, executionId), isNull(approvals.invalidatedAt)));
   }
 
   // quotes

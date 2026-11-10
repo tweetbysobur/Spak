@@ -19,7 +19,8 @@ describe("SPak Execution against live NEAR Intents", () => {
     expect(x.quote).toMatchObject({ status: "VALID", kind: "INDICATIVE", amountIn: "50000000" });
     expect(BigInt(x.quote!.amountOut!)).toBeGreaterThan(0n);
     if (process.env.LIVE_FIRM !== "1") return;
-    const a = await h.svc.approve({ userId: u.userId, executionId: x.execution.id, quoteId: x.quote!.id, approval: { planHash: x.execution.planHash, approvedAt: new Date().toISOString() }, wallets: await u.wallets() });
+    const f = await h.svc.firmQuote({ userId: u.userId, executionId: x.execution.id, quoteId: x.quote!.id, wallets: await u.wallets() });
+    const a = await h.svc.approve({ userId: u.userId, executionId: x.execution.id, quoteId: f.quote.id, approval: { planHash: x.execution.planHash, planRevision: x.execution.planRevision, approvedAt: new Date().toISOString() }, wallets: await u.wallets() });
     console.log("LIVE firm:", JSON.stringify({ state: a.execution.state, depositAddress: a.execution.depositAddress, deadline: a.execution.depositDeadline, amountOut: a.quote!.amountOut }));
     expect(a.execution.state).toBe("AWAITING_DEPOSIT");
     h.clock.now = Date.now() + 5000;

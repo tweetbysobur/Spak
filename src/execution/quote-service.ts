@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { OneClickError, type OneClickClient, type OneClickQuoteRequest, type OneClickQuoteResponse } from "../integrations/near-intents/client";
-import { compareDecimal, fromBaseUnits, toBaseUnits } from "../spak-in/lib/decimal";
+import { fromBaseUnits, toBaseUnits } from "../spak-in/lib/decimal";
 import type { ResolvedAsset } from "./asset-resolver";
 import { ExecutionError } from "./errors";
 import type { ValidatedPlan } from "./plan-validator";
@@ -93,9 +93,4 @@ export class QuoteService {
     }
     return row;
   }
-}
-
-/** Firm terms must be at least as good as the worst case the user approved. */
-export function firmWithinApproved(indicative: QuoteRow, firm: QuoteRow): boolean {
-  return compareDecimal(firm.amountOut ?? "0", indicative.minAmountOut ?? "0") >= 0 && compareDecimal(firm.minAmountOut ?? "0", "0") > 0;
 }

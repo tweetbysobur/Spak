@@ -25,7 +25,13 @@ export const approveBody = z.object({
   quoteId: idSchema("qte"),
   approval: z.object({
     planHash: z.string().regex(/^[0-9a-f]{64}$/),
+    planRevision: z.number().int().nonnegative(),
     approvedAt: z.string().datetime(),
     allowDuplicate: z.boolean().optional(),
   }),
 });
+
+export const firmQuoteBody = z.object({ quoteId: idSchema("qte") });
+
+export const txBody = z.object({ txHash: z.string().min(10).max(100) });
+export const rejectBody = z.object({ reason: z.string().min(1).max(200) });

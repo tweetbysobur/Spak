@@ -64,3 +64,7 @@ Without `DATABASE_URL`, local development uses an embedded PGlite database in `.
 - SPak Execution accepts only plans SPak-in issued to you, and refuses changed plans, stale approvals, mismatched quotes and duplicates.
 - Ambiguous instructions stop with a question. Nothing is guessed: no invented contracts, addresses, amounts or networks.
 - Success shows only after NEAR Intents reports verified delivery.
+
+## Deposits
+
+Approval and deposit flow: see [docs/SPAK-DEPOSIT-FLOW.md](docs/SPAK-DEPOSIT-FLOW.md).

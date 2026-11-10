@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, bigserial } from "drizzle-orm/pg-core";
 
 /** Conversation context for follow-ups. One row per session. */
@@ -232,3 +233,72 @@ export const executionEvents = pgTable("spak_execution_events", {
   reason: text("reason").notNull(),
   data: jsonb("data").notNull().default({}),
 }, (t) => [index("spak_execution_events_exec_idx").on(t.executionId, t.at)]);
+
+// ---------------------------------------------------------------------------
+// Approval and deposit (phase 3). Deposit states are separate from execution states.
+// ---------------------------------------------------------------------------
+
+/** An explicit user approval of one firm quote for one execution at one plan revision. */
+export const approvals = pgTable("spak_approvals", {
+  id: text("id").primaryKey(),
+  executionId: text("execution_id").notNull().references(() => executions.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull(),
+  quoteId: text("quote_id").notNull().references(() => quotes.id),
+  planHash: text("plan_hash").notNull(),
+  planRevision: integer("plan_revision").notNull(),
+  approvedAt: timestamp("approved_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  invalidatedAt: timestamp("invalidated_at", { withTimezone: true }),
+  invalidationReason: text("invalidation_reason"),
+}, (t) => [
+  // At most one live approval per execution: concurrent approvals cannot both succeed.
+  uniqueIndex("spak_approvals_active_uq").on(t.executionId).where(sql`invalidated_at is null`),
+  index("spak_approvals_quote_idx").on(t.quoteId),
+]);
+
+/** One attempt to fund an execution's deposit address from a user's wallet. */
+export const deposits = pgTable("spak_deposits", {
+  id: text("id").primaryKey(),
+  executionId: text("execution_id").notNull().references(() => executions.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull(),
+  quoteId: text("quote_id").notNull().references(() => quotes.id),
+  approvalId: text("approval_id").notNull().references(() => approvals.id),
+  family: text("family").notNull(), // evm | solana | near
+  network: text("network").notNull(),
+  kind: text("kind").notNull(), // NATIVE | ERC20 | SPL | NEP141
+  assetId: text("asset_id").notNull(),
+  tokenContract: text("token_contract"),
+  depositAddress: text("deposit_address").notNull(),
+  depositMemo: text("deposit_memo"),
+  amount: text("amount").notNull(), // smallest units
+  sender: text("sender").notNull(), // the user's verified wallet expected to sign
+  method: text("method").notNull(), // WALLET | MANUAL
+  state: text("state").notNull(),
+  txHash: text("tx_hash"),
+  confirmations: integer("confirmations"),
+  verification: jsonb("verification"),
+  providerNotifiedAt: timestamp("provider_notified_at", { withTimezone: true }),
+  providerRecognizedAt: timestamp("provider_recognized_at", { withTimezone: true }),
+  submittedAt: timestamp("submitted_at", { withTimezone: true }),
+  verifiedAt: timestamp("verified_at", { withTimezone: true }),
+  lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+  reason: text("reason"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+}, (t) => [
+  // A transaction can fund one deposit only, across all users.
+  uniqueIndex("spak_deposits_tx_uq").on(t.network, t.txHash),
+  index("spak_deposits_exec_idx").on(t.executionId, t.createdAt),
+  index("spak_deposits_user_idx").on(t.userId, t.createdAt),
+]);
+
+/** Append-only deposit state history. */
+export const depositEvents = pgTable("spak_deposit_events", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  depositId: text("deposit_id").notNull().references(() => deposits.id, { onDelete: "cascade" }),
+  at: timestamp("at", { withTimezone: true }).notNull(),
+  fromState: text("from_state"),
+  toState: text("to_state").notNull(),
+  reason: text("reason").notNull(),
+  data: jsonb("data").notNull().default({}),
+}, (t) => [index("spak_deposit_events_dep_idx").on(t.depositId, t.at)]);

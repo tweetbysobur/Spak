@@ -16,6 +16,7 @@ const { POST: interpret } = await import("@/app/api/spak-in/interpret/route");
 const { POST: createExec, GET: listExec } = await import("@/app/api/executions/route");
 const { GET: getExec } = await import("@/app/api/executions/[id]/route");
 const { POST: approveExec } = await import("@/app/api/executions/[id]/approve/route");
+const { POST: firmQuote } = await import("@/app/api/executions/[id]/firm-quote/route");
 const { GET: statusExec } = await import("@/app/api/executions/[id]/status/route");
 const { POST: requoteExec } = await import("@/app/api/executions/[id]/quote/route");
 const { POST: cancelExec } = await import("@/app/api/executions/[id]/cancel/route");
@@ -78,7 +79,9 @@ describe("execution API", () => {
     expect(again.body.execution.id).toBe(c.body.execution.id);
 
     const id = c.body.execution.id;
-    const a = await j(await approveExec(req(`/api/executions/${id}/approve`, { cookie: alice.cookie, body: { quoteId: c.body.quote.id, approval: { planHash, approvedAt: new Date().toISOString() } } }), p(id)));
+    const f = await j(await firmQuote(req(`/api/executions/${id}/firm-quote`, { cookie: alice.cookie, body: { quoteId: c.body.quote.id } }), p(id)));
+    expect(f.body.quote).toMatchObject({ kind: "FIRM", deposit: { address: expect.stringMatching(/^0x/) } });
+    const a = await j(await approveExec(req(`/api/executions/${id}/approve`, { cookie: alice.cookie, body: { quoteId: f.body.quote.id, approval: { planHash, planRevision: c.body.execution.plan.revision, approvedAt: new Date().toISOString() } } }), p(id)));
     expect(a.status).toBe(200);
     expect(a.body.execution.deposit).toMatchObject({ network: "base", amount: "50000000", address: expect.stringMatching(/^0x/) });
     const st = await j(await statusExec(req(`/api/executions/${id}/status`, { method: "GET", cookie: alice.cookie }), p(id)));

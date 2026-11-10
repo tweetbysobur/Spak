@@ -5,8 +5,8 @@ import { handle, spak } from "@/server/spak";
 import { toQuoteView } from "@/execution";
 
 /**
- * POST /api/executions/:id/approve  { quoteId, approval: { planHash, approvedAt, allowDuplicate? } }
- * The signed-in user approves the current indicative quote. Returns the firm quote and deposit instructions.
+ * POST /api/executions/:id/approve  { quoteId, approval: { planHash, planRevision, approvedAt, allowDuplicate? } }
+ * The signed-in user approves the exact firm quote they reviewed (see /firm-quote). Releases deposit instructions.
  * SPak signs nothing; the user's wallet sends the deposit.
  */
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
