@@ -1,16 +1,17 @@
 import { NextResponse } from "next/server";
-import { errorResponse, handle, spak, userIdFrom } from "@/server/spak";
+import { rateLimit, requireUser } from "@/server/auth";
+import { errorResponse, handle, spak } from "@/server/spak";
 
 /**
  * POST /api/spak-in/submit  { plan, approval } -> deposit instructions.
- * The user's wallet sends the deposit. SPak never signs or sends funds.
+ * The approval is the signed-in user's. SPak never signs or sends funds; the user's wallet does.
  */
 export async function POST(req: Request) {
-  return handle(async () => {
-    const userId = userIdFrom(req);
-    if (!userId) return errorResponse({ code: "APPROVAL_REQUIRED", message: "Missing x-spak-user header." });
+  return handle(req, async () => {
+    const user = await requireUser(req);
+    rateLimit(req, "submit", 10, 60_000, user.userId);
     const { plan, approval } = await req.json();
-    const r = await spak().coordinator.submit({ plan, approval: { ...approval, approvedBy: "USER" }, userId });
+    const r = await (await spak()).coordinator.submit({ plan, approval: { ...approval, approvedBy: "USER" }, userId: user.userId });
     return r.ok ? NextResponse.json(r.value) : errorResponse(r.error);
   });
 }

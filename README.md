@@ -3,6 +3,7 @@
 Cross-chain execution agent on NEAR. You state an intent. SPak-in parses and validates it, NEAR Intents quotes and settles it, and SPak tracks it until delivery is verified.
 
 - SPak-in technical docs: [docs/SPAK-IN.md](docs/SPAK-IN.md)
+- Wallet authentication: [docs/AUTH.md](docs/AUTH.md)
 - Benchmark: [docs/BENCHMARK.md](docs/BENCHMARK.md)
 - PRD: `gentles-build-brain/projects/spak.md`
 
@@ -13,6 +14,8 @@ src/spak-in/            SPak-in engine (deterministic, no LLM, no keys)
   processor/ tokenizer/ parser/ extractor/ classifier/ context/
   validator/ planner/ policy/ coordinator/ schemas/ registries/ errors/ lib/
 src/integrations/near-intents/   NEAR Intents 1Click provider (the only provider-specific code)
+src/auth/               Wallet sign-in: challenges, signature verification (EVM, Solana, NEAR), sessions, wallets
+src/wallets/            Browser wallet connectors: EIP-6963, Wallet Standard, NEAR Wallet Selector
 src/database/           Drizzle schema, migrations, Postgres repositories
 src/server/             Server wiring for the API routes
 src/app/api/spak-in/    HTTP API
@@ -29,7 +32,7 @@ Requirements: Node 20+.
     cp .env.example .env.local   # all values optional
     npm run dev                  # http://localhost:3000
 
-Without `DATABASE_URL`, sessions and submissions live in memory and reset on restart. With Postgres:
+Without `DATABASE_URL`, local development uses an embedded PGlite database in `.data/pglite`. Production needs Postgres and `SPAK_APP_ORIGIN`:
 
     DATABASE_URL=postgres://… npm run db:migrate
 
@@ -48,10 +51,9 @@ Without `DATABASE_URL`, sessions and submissions live in memory and reset on res
 
 ## Not built yet
 
-- Wallet connection. You paste your addresses under "Your addresses" and send the deposit from your own wallet.
-- Authentication. The API uses an anonymous browser id. Replace before multi-user use.
+- Sending the deposit from the connected wallet inside SPak. You still send it from your wallet app.
 - Balance reader, price feed, scheduler and condition monitor. Percentage amounts, rebalancing, schedules and triggers are understood and planned but not executed.
-- NEAR account agent onboarding and stored Guard settings. Autonomous execution is off over HTTP.
+- Creating a new NEAR account for the agent, and stored Guard settings. Autonomous execution is off.
 
 ## Safety rules in code
 
