@@ -9,14 +9,14 @@ interface Msg { from: "you" | "spak"; text: string; detail?: string[]; options?:
 const EXAMPLES = ["Swap 50 USDC on Base to SOL on Solana", "Bridge 0.5 ETH from Ethereum to NEAR", "Transfer 50 USDC from Base to Arbitrum"];
 const net = (id: string | null) => (id ? getNetwork(id)?.name ?? id : "?");
 
-export function Chat({ addresses, timezone, onReady }: {
-  addresses: Record<string, string>; timezone: string;
+export function Chat({ timezone, onReady }: {
+  timezone: string;
   onReady: (intent: IntentResult, quote: ProviderQuote) => void;
 }) {
   const [text, setText] = useState("");
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [busy, setBusy] = useState(false);
-  const sessionId = useRef(`ses_${Math.random().toString(36).slice(2, 14)}`);
+  const sessionId = useRef(`chat_${Math.random().toString(36).slice(2, 14)}`);
 
   async function send(input: string) {
     if (!input.trim() || busy) return;
@@ -24,7 +24,7 @@ export function Chat({ addresses, timezone, onReady }: {
     const add = (m: Msg) => setMsgs((p) => [...p, m]);
     add({ from: "you", text: input });
     try {
-      const r = await api<IntentResult>("/api/spak-in/interpret", { text: input, sessionId: sessionId.current, wallets: addresses, timezone });
+      const r = await api<IntentResult>("/api/spak-in/interpret", { text: input, sessionId: sessionId.current, timezone });
       const errs = [...r.errors.map((e) => e.message), ...(r.policy?.violations.map((v) => v.message) ?? [])];
       if (r.status === "NEEDS_CLARIFICATION") {
         add({ from: "spak", text: "I need a bit more before I can do this.", detail: [...errs, ...r.clarifications.map((c) => c.question)], options: r.clarifications.find((c) => c.options?.length)?.options?.slice(0, 6) });

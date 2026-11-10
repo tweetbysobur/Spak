@@ -6,7 +6,8 @@ import { Button, Card, Field, inputCls } from "./ui";
 interface Net { id: string; name: string }
 interface Asset { id: string; network: string; symbol: string }
 
-export function Manual({ addresses, onReady }: { addresses: Record<string, string>; onReady: (i: IntentResult, q: ProviderQuote) => void }) {
+/** ownAddress: the signed-in user's verified address on a network, for display only. The server decides. */
+export function Manual({ ownAddress, onReady }: { ownAddress: (network: string) => string | undefined; onReady: (i: IntentResult, q: ProviderQuote) => void }) {
   const [nets, setNets] = useState<Net[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [f, setF] = useState({ sourceNetwork: "base", sourceAsset: "", amount: "", destinationNetwork: "solana", destinationAsset: "", recipient: "", slippageBps: 100 });
@@ -32,7 +33,7 @@ export function Manual({ addresses, onReady }: { addresses: Record<string, strin
     const src = assets.find((a) => a.id === f.sourceAsset), dst = assets.find((a) => a.id === f.destinationAsset);
     const type = f.recipient ? "PAYMENT" : f.sourceNetwork === f.destinationNetwork ? "SWAP" : src?.symbol === dst?.symbol ? "BRIDGE" : "CROSS_CHAIN_SWAP";
     try {
-      const r = await api<IntentResult>("/api/spak-in/manual", { wallets: addresses, intent: { type, ...f, recipient: f.recipient || undefined } });
+      const r = await api<IntentResult>("/api/spak-in/manual", { intent: { type, ...f, recipient: f.recipient || undefined } });
       if (r.status !== "VALIDATED" || !r.plan) {
         setProblems([...r.errors.map((x) => x.message), ...(r.policy?.violations.map((x) => x.message) ?? []), ...r.clarifications.map((c) => c.question)]);
         return;
@@ -66,7 +67,7 @@ export function Manual({ addresses, onReady }: { addresses: Record<string, strin
         <Field label="Amount"><input className={inputCls} inputMode="decimal" placeholder="0.0" value={f.amount} onChange={(e) => set("amount", e.target.value.replace(/[^\d.]/g, ""))} /></Field>
         {side("destination")}
         <Field label="Recipient (leave empty to receive in your own wallet)">
-          <input className={`${inputCls} font-mono`} placeholder={addresses[f.destinationNetwork] ?? "Address"} value={f.recipient} onChange={(e) => set("recipient", e.target.value.trim())} />
+          <input className={`${inputCls} font-mono`} placeholder={ownAddress(f.destinationNetwork) ?? "Address (no verified wallet on this network)"} value={f.recipient} onChange={(e) => set("recipient", e.target.value.trim())} />
         </Field>
         <Field label="Max slippage">
           <select className={inputCls} value={f.slippageBps} onChange={(e) => set("slippageBps", Number(e.target.value))}>

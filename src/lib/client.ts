@@ -3,21 +3,14 @@ import type { ExecutionPlan, IntentResult, ProviderQuote, Submission } from "@/s
 
 export type { ExecutionPlan, IntentResult, ProviderQuote, Submission };
 
-/** Anonymous per-browser id. Placeholder until wallet or NEAR account sign-in exists. */
-export function userId(): string {
-  try {
-    let id = localStorage.getItem("spak.user");
-    if (!id) { id = `anon_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`; localStorage.setItem("spak.user", id); }
-    return id;
-  } catch { return "anon_ephemeral_session"; }
-}
-
 export interface ApiError { code: string; message: string }
 
-export async function api<T>(url: string, body?: unknown): Promise<T> {
+/** JSON call to the SPak API. The session cookie is HttpOnly and sent by the browser; JS never reads it. */
+export async function api<T>(url: string, body?: unknown, method?: "POST" | "PATCH" | "DELETE"): Promise<T> {
   const res = await fetch(url, {
-    method: body === undefined ? "GET" : "POST",
-    headers: { "content-type": "application/json", "x-spak-user": userId() },
+    method: method ?? (body === undefined ? "GET" : "POST"),
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   const data = await res.json();
@@ -37,18 +30,14 @@ function read<T>(key: string, fallback: T): T {
 }
 function write(key: string, v: unknown) { try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* storage unavailable */ } }
 
-// Old builds stored addresses under NEAR Intents codes. Map them to SPak network ids once.
-const LEGACY: Record<string, string> = { eth: "ethereum", arb: "arbitrum", op: "optimism", pol: "polygon", avax: "avalanche", sol: "solana", btc: "bitcoin" };
-
+let currentUser = "none";
 export const store = {
-  addresses: () => {
-    const raw = read<Record<string, string>>("spak.addresses", {});
-    return Object.fromEntries(Object.entries(raw).map(([k, v]) => [LEGACY[k] ?? k, v]));
-  },
-  setAddresses: (a: Record<string, string>) => write("spak.addresses", a),
-  history: () => read<TxRecord[]>("spak.history.v2", []),
+  /** Per-user display cache. The server is the source of truth for submissions. */
+  history: () => read<TxRecord[]>(`spak.history.v3.${currentUser}`, []),
   saveTx: (tx: TxRecord) => {
-    const h = read<TxRecord[]>("spak.history.v2", []).filter((t) => t.submission.id !== tx.submission.id);
-    write("spak.history.v2", [tx, ...h].slice(0, 50));
+    const key = `spak.history.v3.${tx.submission.userId}`;
+    const h = read<TxRecord[]>(key, []).filter((t) => t.submission.id !== tx.submission.id);
+    write(key, [tx, ...h].slice(0, 50));
   },
+  setUser: (id: string | null) => { currentUser = id ?? "none"; },
 };

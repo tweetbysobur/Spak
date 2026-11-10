@@ -1,46 +1,47 @@
 import "server-only";
 import { NextResponse } from "next/server";
-import { ZodError } from "zod";
-import { ExecutionCoordinator, MemoryPlanStore, MemorySessionStore, SpakIn, SpakInError, type SpakError } from "@/spak-in";
+import { ExecutionCoordinator, SpakIn, SpakInError, type SpakError } from "@/spak-in";
 import { NearIntentsProvider } from "@/integrations/near-intents";
-import { getDatabase, PgAuditLog, PgIntentLog, PgSessionStore, PgSubmissionRepository } from "@/database";
+import { getDb, PgAuditLog, PgIntentLog, PgSessionStore, PgSubmissionRepository } from "@/database";
+import { AuthError } from "@/auth/types";
+import { authService, requireUser, route } from "./auth";
 
 /**
- * Server wiring. One engine and one coordinator per server process.
- * With DATABASE_URL: sessions, intents, submissions and audit go to Postgres.
- * Without it: in-memory stores (fine for local development, lost on restart).
+ * Server wiring. One engine and one coordinator per server process, both on the shared database
+ * (Postgres with DATABASE_URL, embedded PGlite in local development).
  */
-function build() {
-  const db = getDatabase();
-  const intentLog = db ? new PgIntentLog(db) : null;
-  const memoryPlans = new MemoryPlanStore();
+async function build() {
+  const db = await getDb();
+  const intentLog = new PgIntentLog(db);
   const engine = new SpakIn({
-    sessions: db ? new PgSessionStore(db) : new MemorySessionStore(),
-    onResult: async (r, req) => {
-      if (intentLog) await intentLog.record(r, req.userId ?? null);
-      else if (r.plan) await memoryPlans.put(r.plan);
-    },
+    sessions: new PgSessionStore(db),
+    onResult: (r, req) => intentLog.record(r, req.userId ?? null),
     onError: (e) => console.error("[spak-in] result log failed", e),
   });
   const coordinator = new ExecutionCoordinator({
-    planSource: intentLog ?? memoryPlans,
+    planSource: intentLog, // only plans SPak-in issued can execute
     providers: [new NearIntentsProvider({ baseUrl: process.env.ONECLICK_API_URL, jwt: process.env.ONECLICK_JWT })],
-    ...(db ? { submissions: new PgSubmissionRepository(db), audit: new PgAuditLog(db) } : {}),
+    submissions: new PgSubmissionRepository(db),
+    audit: new PgAuditLog(db),
   });
-  return { engine, coordinator, persistent: !!db };
+  return { engine, coordinator };
 }
 
 const g = globalThis as unknown as { __spak?: ReturnType<typeof build> };
 export const spak = () => (g.__spak ??= build());
 
 /**
- * PLACEHOLDER IDENTITY. The browser sends an anonymous id it generated. This scopes duplicate checks and
- * cancellations per browser, but it is not authentication. Replace with wallet-signature or NEAR account auth
- * before any multi-user deployment.
+ * Identity for SPak-in calls: the signed-in user and the wallets they proved they own.
+ * Client-supplied wallet addresses are ignored.
  */
-export function userIdFrom(req: Request): string | null {
-  const id = req.headers.get("x-spak-user");
-  return id && /^[a-zA-Z0-9_-]{8,64}$/.test(id) ? id : null;
+export async function spakContext(req: Request, clientSessionId?: unknown) {
+  const user = await requireUser(req);
+  const auth = await authService();
+  const wallets = await auth.walletContext(user.userId);
+  const agent = await auth.getAgentIdentity(user.userId);
+  // Conversation sessions are namespaced by user, so one user can never continue another's draft.
+  const sid = typeof clientSessionId === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(clientSessionId) ? clientSessionId : "default";
+  return { userId: user.userId, wallets, agentLinked: agent.status === "LINKED", sessionId: `${user.userId}:${sid}` };
 }
 
 const STATUS: Partial<Record<SpakError["code"], number>> = {
@@ -53,14 +54,17 @@ export function errorResponse(error: SpakError) {
   return NextResponse.json({ error }, { status: STATUS[error.code] ?? 400 });
 }
 
-export async function handle(fn: () => Promise<Response>): Promise<Response> {
-  try {
-    return await fn();
-  } catch (e) {
-    if (e instanceof SpakInError) return errorResponse(e.error);
-    if (e instanceof ZodError) return errorResponse({ code: "INPUT_MALFORMED", message: e.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") });
-    if (e instanceof SyntaxError) return errorResponse({ code: "INPUT_MALFORMED", message: "Body must be JSON." });
-    console.error("[spak-in]", e);
-    return NextResponse.json({ error: { code: "PROVIDER_ERROR", message: "Internal error." } }, { status: 500 });
-  }
+/** Wrapper for SPak-in routes: CSRF, auth errors, SPak-in errors. */
+export function handle(req: Request, fn: () => Promise<Response>): Promise<Response> {
+  return route(req, async () => {
+    try {
+      return await fn();
+    } catch (e) {
+      if (e instanceof SpakInError) return errorResponse(e.error);
+      if (e instanceof AuthError) throw e;
+      if (e instanceof SyntaxError || (e as { name?: string }).name === "ZodError") throw e;
+      console.error("[spak-in]", e);
+      return NextResponse.json({ error: { code: "PROVIDER_ERROR", message: "Internal error." } }, { status: 500 });
+    }
+  });
 }
