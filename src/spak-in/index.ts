@@ -3,7 +3,7 @@
  *
  *   const engine = new SpakIn();
  *   const r = await engine.interpret({ text: "Swap 50 USDC on Base to SOL on Solana", wallets });
- *   if (r.status === "VALIDATED") coordinator.quote(r.plan)
+ *   if (r.status === "VALIDATED") executionService.create({ planHash: r.plan.hash, ... })  // src/execution
  */
 export { SpakIn, ENGINE_VERSION, statusFor, manualIntentSchema, type ManualIntent, type SpakInOptions } from "./engine";
 export * from "./schemas";
@@ -19,4 +19,3 @@ export { buildPlan, planHash } from "./planner/execution-planner";
 export { sequentialIds, randomIds, hashObject, type IdFactory } from "./lib/hash";
 export * as decimal from "./lib/decimal";
 export type { Frame } from "./parser/frame";
-export * from "./coordinator";

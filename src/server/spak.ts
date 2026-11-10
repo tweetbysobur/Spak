@@ -1,8 +1,9 @@
 import "server-only";
 import { NextResponse } from "next/server";
-import { ExecutionCoordinator, SpakIn, SpakInError, type SpakError } from "@/spak-in";
-import { NearIntentsProvider } from "@/integrations/near-intents";
-import { getDb, PgAuditLog, PgIntentLog, PgSessionStore, PgSubmissionRepository } from "@/database";
+import { SpakIn, SpakInError, type SpakError } from "@/spak-in";
+import { oneClickFromEnv } from "@/integrations/near-intents";
+import { getDb, PgAuditLog, PgIntentLog, PgSessionStore } from "@/database";
+import { ExecutionError, ExecutionRecords, ExecutionService, IntentLogPlanStore } from "@/execution";
 import { AuthError } from "@/auth/types";
 import { authService, requireUser, route } from "./auth";
 
@@ -18,13 +19,11 @@ async function build() {
     onResult: (r, req) => intentLog.record(r, req.userId ?? null),
     onError: (e) => console.error("[spak-in] result log failed", e),
   });
-  const coordinator = new ExecutionCoordinator({
-    planSource: intentLog, // only plans SPak-in issued can execute
-    providers: [new NearIntentsProvider({ baseUrl: process.env.ONECLICK_API_URL, jwt: process.env.ONECLICK_JWT })],
-    submissions: new PgSubmissionRepository(db),
-    audit: new PgAuditLog(db),
+  // SPak Execution: only plans SPak-in issued (read from the intent log) can execute.
+  const execution = new ExecutionService({
+    client: oneClickFromEnv(), records: new ExecutionRecords(db), plans: new IntentLogPlanStore(db), audit: new PgAuditLog(db),
   });
-  return { engine, coordinator };
+  return { engine, execution };
 }
 
 const g = globalThis as unknown as { __spak?: ReturnType<typeof build> };
@@ -61,6 +60,7 @@ export function handle(req: Request, fn: () => Promise<Response>): Promise<Respo
       return await fn();
     } catch (e) {
       if (e instanceof SpakInError) return errorResponse(e.error);
+      if (e instanceof ExecutionError) return NextResponse.json({ error: e.toJSON() }, { status: e.status });
       if (e instanceof AuthError) throw e;
       if (e instanceof SyntaxError || (e as { name?: string }).name === "ZodError") throw e;
       console.error("[spak-in]", e);

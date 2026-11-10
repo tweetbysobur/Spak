@@ -1,13 +1,13 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { api, type IntentResult, type ProviderQuote } from "@/lib/client";
+import { api, startExecution, type ExecutionView, type IntentResult, type QuoteView } from "@/lib/client";
 import { Button, Card, Field, inputCls } from "./ui";
 
 interface Net { id: string; name: string }
 interface Asset { id: string; network: string; symbol: string }
 
 /** ownAddress: the signed-in user's verified address on a network, for display only. The server decides. */
-export function Manual({ ownAddress, onReady }: { ownAddress: (network: string) => string | undefined; onReady: (i: IntentResult, q: ProviderQuote) => void }) {
+export function Manual({ ownAddress, onReady }: { ownAddress: (network: string) => string | undefined; onReady: (i: IntentResult, e: ExecutionView, q: QuoteView) => void }) {
   const [nets, setNets] = useState<Net[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [f, setF] = useState({ sourceNetwork: "base", sourceAsset: "", amount: "", destinationNetwork: "solana", destinationAsset: "", recipient: "", slippageBps: 100 });
@@ -38,7 +38,8 @@ export function Manual({ ownAddress, onReady }: { ownAddress: (network: string) 
         setProblems([...r.errors.map((x) => x.message), ...(r.policy?.violations.map((x) => x.message) ?? []), ...r.clarifications.map((c) => c.question)]);
         return;
       }
-      onReady(r, await api<ProviderQuote>("/api/spak-in/quote", { plan: r.plan }));
+      const { execution, quote } = await startExecution(r.plan.hash);
+      onReady(r, execution, quote);
     } catch (err) { setProblems([(err as Error).message]); } finally { setBusy(false); }
   }
 

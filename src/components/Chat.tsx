@@ -1,7 +1,7 @@
 "use client";
 import { useRef, useState } from "react";
 import { getNetwork } from "@/spak-in/registries/networks";
-import { api, type IntentResult, type ProviderQuote } from "@/lib/client";
+import { api, formatUnits, startExecution, type ExecutionView, type IntentResult, type QuoteView } from "@/lib/client";
 import { Button, Card, inputCls } from "./ui";
 
 interface Msg { from: "you" | "spak"; text: string; detail?: string[]; options?: string[] }
@@ -11,7 +11,7 @@ const net = (id: string | null) => (id ? getNetwork(id)?.name ?? id : "?");
 
 export function Chat({ timezone, onReady }: {
   timezone: string;
-  onReady: (intent: IntentResult, quote: ProviderQuote) => void;
+  onReady: (intent: IntentResult, execution: ExecutionView, quote: QuoteView) => void;
 }) {
   const [text, setText] = useState("");
   const [msgs, setMsgs] = useState<Msg[]>([]);
@@ -34,9 +34,9 @@ export function Chat({ timezone, onReady }: {
         add({ from: "spak", text: `Understood: ${r.intentType.replaceAll("_", " ").toLowerCase()}. This needs ${r.plan?.requires.join(", ").toLowerCase() || "features"} that are not live yet, so nothing will run.`, detail: r.plan?.steps.map((s) => s.description) });
       } else {
         add({ from: "spak", text: `Understood in ${r.meta.processingMs}ms. Getting a NEAR Intents quote for ${net(r.source.network)} → ${net(r.destination.network)}.`, detail: r.assumptions });
-        const q = await api<ProviderQuote>("/api/spak-in/quote", { plan: r.plan });
-        add({ from: "spak", text: `Quote ready: about ${q.amountOut} ${r.destination.asset?.symbol}. Review it below.` });
-        onReady(r, q);
+        const { execution, quote: q } = await startExecution(r.plan.hash);
+        add({ from: "spak", text: `Quote ready: about ${formatUnits(q.destination.amountOut, q.destination.assetId)}. Review it below.` });
+        onReady(r, execution, q);
       }
     } catch (err) {
       add({ from: "spak", text: `Something failed: ${(err as Error).message}` });
