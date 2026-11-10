@@ -5,7 +5,8 @@ import { appOrigin, authService, currentUser, rateLimit, route } from "@/server/
 
 const body = z.object({
   family: z.enum(WALLET_FAMILIES),
-  address: z.string().min(2).max(100),
+  // Optional for NEAR only: the wallet chooses the account while signing.
+  address: z.string().min(2).max(100).optional(),
   purpose: z.enum(["SIGN_IN", "LINK"]).default("SIGN_IN"),
   chainId: z.number().int().positive().max(2 ** 31).optional(),
 });

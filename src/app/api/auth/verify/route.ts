@@ -6,6 +6,7 @@ const body = z.object({
   challengeId: z.string().min(1).max(64),
   signature: z.string().min(1).max(1000),
   publicKey: z.string().max(100).optional(), // NEAR only
+  accountId: z.string().max(64).optional(), // NEAR only: account the wallet signed with
 });
 
 /** POST /api/auth/verify  Check the signature. SIGN_IN sets the session cookie; LINK adds the wallet. */

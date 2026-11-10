@@ -11,6 +11,7 @@ import { loadSession, type Session } from "@/components/session";
 import { Card } from "@/components/ui";
 import { api, store, type IntentResult, type ProviderQuote, type TxRecord } from "@/lib/client";
 import { takeNearRedirectResult } from "@/wallets/near";
+import { classifyWalletError } from "@/wallets/errors";
 
 type Tab = "chat" | "manual" | "history" | "wallets";
 const TABS: { id: Tab; label: string }[] = [
@@ -37,8 +38,13 @@ export default function Home() {
   useEffect(() => {
     setTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
     // Back from a NEAR browser wallet: finish the pending signature check.
+    // The callback is untrusted: the server verifies the signature, the one-time challenge and the account key.
     const near = takeNearRedirectResult();
-    (near ? api("/api/auth/verify", near).catch((e) => setNotice((e as Error).message)) : Promise.resolve()).then(refresh);
+    const finish = near?.kind === "signed"
+      ? api("/api/auth/verify", { challengeId: near.challengeId, signature: near.signature, publicKey: near.publicKey, accountId: near.accountId })
+          .catch((e) => setNotice(classifyWalletError(e).message))
+      : Promise.resolve(near && near.kind !== "none" ? setNotice(near.message) : undefined);
+    finish.then(refresh);
   }, [refresh]);
 
   const signedOut = () => { setSession(null); store.setUser(null); setPending(undefined); setActive(undefined); setTab("chat"); };

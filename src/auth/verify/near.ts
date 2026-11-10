@@ -43,10 +43,28 @@ export interface NearRpc {
   accessKey(accountId: string, publicKey: string): Promise<"FullAccess" | "FunctionCall" | null>;
 }
 
-/** NEAR JSON-RPC view_access_key. Mainnet by default; override with NEAR_RPC_URL. */
-export function nearRpc(url = process.env.NEAR_RPC_URL ?? "https://rpc.mainnet.near.org", fetchImpl: typeof fetch = fetch): NearRpc {
+export const DEFAULT_NEAR_RPC = ["https://rpc.mainnet.near.org", "https://free.rpc.fastnear.com"];
+
+/**
+ * NEAR JSON-RPC view_access_key. NEAR_RPC_URL may list several endpoints, comma separated.
+ * The next endpoint is tried only when one is unreachable or returns an unusable answer, never to override a "no".
+ */
+export function nearRpc(urls: string | string[] = process.env.NEAR_RPC_URL ?? DEFAULT_NEAR_RPC, fetchImpl: typeof fetch = fetch): NearRpc {
+  const list = (Array.isArray(urls) ? urls : urls.split(",")).map((u) => u.trim()).filter(Boolean);
+  const one = singleNearRpc(fetchImpl);
   return {
     async accessKey(accountId, publicKey) {
+      let last: unknown;
+      for (const url of list) {
+        try { return await one(url, accountId, publicKey); } catch (e) { last = e; }
+      }
+      throw last ?? new AuthError("NEAR_RPC_UNAVAILABLE", "No NEAR RPC endpoint configured.");
+    },
+  };
+}
+
+function singleNearRpc(fetchImpl: typeof fetch) {
+  return async (url: string, accountId: string, publicKey: string): Promise<"FullAccess" | "FunctionCall" | null> => {
       let res: Response;
       try {
         res = await fetchImpl(url, {
@@ -66,7 +84,6 @@ export function nearRpc(url = process.env.NEAR_RPC_URL ?? "https://rpc.mainnet.n
       const cause = body?.error?.cause?.name;
       if (cause === "UNKNOWN_ACCESS_KEY" || cause === "UNKNOWN_ACCOUNT") return null;
       throw new AuthError("NEAR_RPC_UNAVAILABLE", "NEAR returned an unexpected response. Try again.");
-    },
   };
 }
 

@@ -65,11 +65,13 @@ export class AuthService {
   // ------------------------------------------------------------------ challenges
 
   async createChallenge(input: {
-    family: WalletFamily; address: string; purpose: ChallengePurpose; domain: string; uri: string;
+    family: WalletFamily; address?: string | null; purpose: ChallengePurpose; domain: string; uri: string;
     userId?: string | null; chainId?: number;
   }) {
     if (input.purpose === "LINK" && !input.userId) throw new AuthError("UNAUTHENTICATED", "Sign in before linking another wallet.");
-    const address = normalizeAddress(input.family, input.address);
+    // NEAR wallets choose the account while signing (NEP-413 returns it). EVM and Solana must name the address up front.
+    if (!input.address && input.family !== "near") throw new AuthError("INVALID_ADDRESS", `A ${input.family} address is required.`);
+    const address = input.address ? normalizeAddress(input.family, input.address) : "";
     const now = this.clock();
     const nonce = randomBytes(32).toString("hex");
     const expiresAt = new Date(now.getTime() + CHALLENGE_TTL_MS);
@@ -93,7 +95,7 @@ export class AuthService {
    * so each one can be tried exactly once (replay and brute-force protection).
    */
   async verifyChallenge(input: {
-    challengeId: string; signature: string; publicKey?: string; currentUserId?: string | null; userAgent?: string | null;
+    challengeId: string; signature: string; publicKey?: string; accountId?: string; currentUserId?: string | null; userAgent?: string | null;
   }): Promise<{ userId: string; walletId: string; created: boolean; session?: { token: string; expiresAt: string } }> {
     const now = this.clock();
     const [c] = await this.db.update(walletChallenges).set({ usedAt: now })
@@ -107,18 +109,26 @@ export class AuthService {
     if (c.purpose === "LINK" && c.userId !== input.currentUserId) throw new AuthError("FORBIDDEN", "This link request belongs to another session.");
 
     const family = c.family as WalletFamily;
+    // An open NEAR challenge is bound to the account the wallet reports. The on-chain key check below proves it.
+    let address = c.address;
+    if (family === "near" && !address) {
+      if (!input.accountId) throw new AuthError("BAD_REQUEST", "NEAR sign-in needs the account id returned by the wallet.");
+      address = normalizeAddress("near", input.accountId);
+    } else if (family === "near" && input.accountId && normalizeAddress("near", input.accountId) !== address) {
+      throw new AuthError("SIGNATURE_INVALID", `You signed with ${input.accountId}, but this request was for ${address}.`);
+    }
     let ok = false;
     let publicKey: string | null = null;
-    if (family === "evm") ok = await verifyEvmSignature(c.address, c.message, input.signature);
-    else if (family === "solana") ok = verifySolanaSignature(c.address, c.message, input.signature);
+    if (family === "evm") ok = await verifyEvmSignature(address, c.message, input.signature);
+    else if (family === "solana") ok = verifySolanaSignature(address, c.message, input.signature);
     else {
       if (!input.publicKey) throw new AuthError("BAD_REQUEST", "NEAR sign-in needs the public key returned by the wallet.");
-      ok = await verifyNearSignature({ accountId: c.address, publicKey: input.publicKey, signatureB64: input.signature, message: c.message, nonceHex: c.nonce, recipient: c.domain, rpc: this.rpc });
+      ok = await verifyNearSignature({ accountId: address, publicKey: input.publicKey, signatureB64: input.signature, message: c.message, nonceHex: c.nonce, recipient: c.domain, rpc: this.rpc });
       publicKey = input.publicKey;
     }
     if (!ok) throw new AuthError("SIGNATURE_INVALID", "The signature does not match this wallet and message.");
 
-    const [existing] = await this.db.select().from(wallets).where(and(eq(wallets.family, family), eq(wallets.address, c.address))).limit(1);
+    const [existing] = await this.db.select().from(wallets).where(and(eq(wallets.family, family), eq(wallets.address, address))).limit(1);
 
     if (c.purpose === "SIGN_IN") {
       let userId = existing?.userId;
@@ -130,7 +140,7 @@ export class AuthService {
         try {
           await this.db.transaction(async (tx) => {
             await tx.insert(users).values({ id: userId!, activeWalletId: walletId!, createdAt: now });
-            await tx.insert(wallets).values({ id: walletId!, userId: userId!, family, address: c.address, publicKey, label: null, verifiedAt: now, createdAt: now });
+            await tx.insert(wallets).values({ id: walletId!, userId: userId!, family, address: address, publicKey, label: null, verifiedAt: now, createdAt: now });
             await tx.insert(walletNetworks).values(networksForFamily(family).map((n) => ({ walletId: walletId!, networkId: n, enabled: 1 })));
             await tx.insert(agentIdentities).values({ id: id("agt"), userId: userId!, nearAccountId: null, walletId: null, status: "NOT_LINKED", createdAt: now, updatedAt: now });
           });
@@ -138,7 +148,7 @@ export class AuthService {
         } catch (e) {
           if (!isUniqueViolation(e)) throw e;
           // Two first sign-ins raced. The other one created the wallet; use it.
-          const [w] = await this.db.select().from(wallets).where(and(eq(wallets.family, family), eq(wallets.address, c.address))).limit(1);
+          const [w] = await this.db.select().from(wallets).where(and(eq(wallets.family, family), eq(wallets.address, address))).limit(1);
           userId = w.userId; walletId = w.id;
         }
       } else {
@@ -157,7 +167,7 @@ export class AuthService {
     const walletId = id("wal");
     try {
       await this.db.transaction(async (tx) => {
-        await tx.insert(wallets).values({ id: walletId, userId, family, address: c.address, publicKey, label: null, verifiedAt: now, createdAt: now });
+        await tx.insert(wallets).values({ id: walletId, userId, family, address, publicKey, label: null, verifiedAt: now, createdAt: now });
         await tx.insert(walletNetworks).values(networksForFamily(family).map((n) => ({ walletId, networkId: n, enabled: 1 })));
       });
     } catch (e) {
