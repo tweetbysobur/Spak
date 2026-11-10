@@ -18,6 +18,8 @@ jobs:
           URL: ${{ secrets.SPAK_MONITOR_URL }}
           SECRET: ${{ secrets.SPAK_MONITOR_SECRET }}
         run: |
+          URL=$(printf '%s' "$URL" | tr -d '[:space:]')
+          SECRET=$(printf '%s' "$SECRET" | tr -d '[:space:]')
           if [ -z "$URL" ] || [ -z "$SECRET" ]; then echo "Monitor secrets not set; skipping."; exit 0; fi
           code=$(curl -sS -o out.json -w '%{http_code}' -X POST -H "Authorization: Bearer $SECRET" --max-time 90 "$URL")
           cat out.json; echo
