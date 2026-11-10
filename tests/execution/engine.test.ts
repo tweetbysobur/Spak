@@ -226,10 +226,10 @@ describe("status tracking", () => {
     h.fake.statuses.set(dep, statusPayload("SUCCESS", { amountOut: "1" }, sig));
     expect((await step(id)).state).toBe("PROCESSING");
   });
-  it("refunds and failures are terminal", async () => {
+  it("a provider refund is not taken on its word: REFUNDED status moves to REFUNDING until verified on chain", async () => {
     const a = await setup();
-    h.fake.statuses.set(a.dep, statusPayload("REFUNDED", { refundedAmount: "50000000" }, a.sig));
-    expect((await step(a.id))).toMatchObject({ state: "REFUNDED", refundedAmount: "50000000" });
+    h.fake.statuses.set(a.dep, statusPayload("REFUNDED", { refundedAmount: "50000000", refundReason: "PARTIAL_DEPOSIT" }, a.sig));
+    expect((await step(a.id))).toMatchObject({ state: "REFUNDING", refundedAmount: "50000000", refundReason: "PARTIAL_DEPOSIT", refundVerifiedAmount: null });
   });
   it("a status response for a different quote is ignored", async () => {
     const { id, dep } = await setup();

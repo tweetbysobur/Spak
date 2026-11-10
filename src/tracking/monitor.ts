@@ -6,6 +6,8 @@ import type { ExecutionService } from "../execution/service";
 import { TERMINAL, type ExecutionState } from "../execution/state";
 import type { DestinationVerifier } from "./destination";
 import type { TrackingRecords } from "./records";
+import type { FailureService } from "../failures/service";
+import type { RefundVerifier } from "../failures/refunds";
 
 export const MONITOR = {
   leaseMs: 2 * 60_000, // a crashed worker's claim expires after this; another run takes over
@@ -13,7 +15,7 @@ export const MONITOR = {
   maxRetryMs: 30 * 60_000,
   maxFailures: 24, // consecutive failed attempts before monitoring stops and asks for reconciliation
   maxAgeMs: 7 * 24 * 3600_000, // in-flight executions older than this stop being polled
-  interval: { AWAITING_DEPOSIT: 60_000, PROCESSING: 30_000, VERIFYING_DESTINATION: 30_000, UNKNOWN: 5 * 60_000 } as Record<string, number>,
+  interval: { AWAITING_DEPOSIT: 60_000, PROCESSING: 30_000, VERIFYING_DESTINATION: 30_000, FAILED: 2 * 60_000, REFUNDING: 60_000, UNKNOWN: 5 * 60_000 } as Record<string, number>,
 };
 
 export interface RunSummary { runId: string; claimed: number; processed: number; retried: number; gaveUp: number; skipped: number; durationMs: number }
@@ -26,7 +28,7 @@ export interface RunSummary { runId: string; claimed: number; processed: number;
 export class ExecutionMonitor {
   constructor(private readonly d: {
     tracking: TrackingRecords; executions: ExecutionRecords; execution: ExecutionService; deposits: DepositService; depositRecords: DepositRecords;
-    destination: DestinationVerifier; clock?: () => Date; log?: (msg: string, data?: Record<string, unknown>) => void;
+    destination: DestinationVerifier; refunds?: RefundVerifier; failures?: FailureService; clock?: () => Date; log?: (msg: string, data?: Record<string, unknown>) => void;
   }) {}
   private now() { return (this.d.clock ?? (() => new Date()))(); }
 
@@ -79,6 +81,13 @@ export class ExecutionMonitor {
         current = v.row;
         if (!v.ok) { ok = false; errors.push(`destination: ${v.error}`); }
       }
+      // 4. Failed swaps and refunds: track the refund to the refund address and verify it on the source chain.
+      if (this.d.refunds && (current.state === "FAILED" || current.state === "REFUNDING")) {
+        const v = await this.d.refunds.verify(current);
+        current = v.row;
+        if (!v.ok) { ok = false; errors.push(`refund: ${v.error}`); }
+        if (v.needsReview) await this.d.failures?.flagForReview(current.id, v.needsReview, "spak");
+      }
     } catch (e) {
       ok = false;
       errors.push((e as Error).message);
@@ -101,7 +110,10 @@ export class ExecutionMonitor {
           { error: { code: "NEEDS_RECONCILIATION", reason: why, destinationTxHashes: current.destinationTxHashes } })) ?? current;
       }
       this.d.log?.("monitor gave up", { executionId: current.id, failures, tooOld, reconcile });
+      await this.d.failures?.flagForReview(current.id, (current.error as { reason?: string } | null)?.reason ?? "Automatic monitoring stopped.", "spak");
     }
+    // 5. Classification (history is written only when it changes).
+    try { await this.d.failures?.record(current); } catch (e) { errors.push(`classify: ${(e as Error).message}`); }
     const delay = ok ? (MONITOR.interval[current.state] ?? 60_000) : Math.min(MONITOR.baseRetryMs * 2 ** (failures - 1), MONITOR.maxRetryMs);
     await this.d.tracking.release(row.id, worker, {
       monitorNextAt: terminal || gaveUpAt ? null : new Date(now.getTime() + delay), monitorFailures: failures, ...(gaveUpAt ? { monitorGaveUpAt: gaveUpAt } : {}),

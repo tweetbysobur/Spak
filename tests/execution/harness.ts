@@ -8,6 +8,7 @@ import { evmWallet, nearWallet, solanaWallet } from "../auth/keys";
 import { DepositRecords, DepositService } from "@/deposits";
 import { FakeChain } from "../deposits/fake-chain";
 import { DestinationVerifier, ExecutionMonitor, TrackingRecords, TrackingService } from "@/tracking";
+import { FailureRecords, FailureService, RefundVerifier, ReviewService } from "@/failures";
 import { Fake1Click } from "./fake-1click";
 
 export const T0 = Date.parse("2026-11-10T10:00:00Z");
@@ -29,8 +30,12 @@ export async function harness(opts: { client?: OneClickClient } = {}) {
   const deposits = new DepositService({ records: depositRecords, executions: records, executionService: svc, rpc: chain, client: new OneClickClient({ fetchImpl: fake.fetch as typeof fetch }), audit: new PgAuditLog(db), clock: now });
   const tracking = new TrackingRecords(db, now);
   const destination = new DestinationVerifier({ executions: records, tracking, rpc: chain, audit: new PgAuditLog(db), clock: now });
-  const monitor = new ExecutionMonitor({ tracking, executions: records, execution: svc, deposits, depositRecords, destination, clock: now });
-  const trackingService = new TrackingService({ executions: records, execution: svc, tracking, depositRecords, destination });
+  const failureRecords = new FailureRecords(db, now);
+  const refunds = new RefundVerifier({ executions: records, failures: failureRecords, depositRecords, rpc: chain, audit: new PgAuditLog(db), clock: now });
+  const failures = new FailureService({ executions: records, failures: failureRecords, depositRecords, tracking, refunds, audit: new PgAuditLog(db), clock: now });
+  const reviews = new ReviewService({ executions: records, failures: failureRecords, depositRecords, tracking, refunds, audit: new PgAuditLog(db), clock: now });
+  const monitor = new ExecutionMonitor({ tracking, executions: records, execution: svc, deposits, depositRecords, destination, refunds, failures, clock: now });
+  const trackingService = new TrackingService({ executions: records, execution: svc, tracking, depositRecords, destination, failures });
 
   async function newUser() {
     const e = evmWallet(), s = solanaWallet();
@@ -49,7 +54,7 @@ export async function harness(opts: { client?: OneClickClient } = {}) {
     };
     return { userId, evm: e, sol: s, near: n, wallets, plan };
   }
-  return { db, clock, now, auth, spakIn, fake, svc, records, newUser, chain, deposits, depositRecords, tracking, destination, monitor, trackingService };
+  return { db, clock, now, auth, spakIn, fake, svc, records, newUser, chain, deposits, depositRecords, tracking, destination, monitor, trackingService, failureRecords, refunds, failures, reviews };
 }
 
 export const approval = (planHash: string, at: Date, allowDuplicate = false, planRevision = 0) => ({ planHash, planRevision, approvedAt: at.toISOString(), allowDuplicate });

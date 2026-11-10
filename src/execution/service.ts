@@ -143,7 +143,7 @@ export class ExecutionService {
     const a = approvalSchema.parse(args.approval);
     const now = this.clock();
     const row = await this.mustGet(args.executionId, args.userId);
-    if (row.state === "AWAITING_DEPOSIT" || TERMINAL.has(row.state as ExecutionState) || row.state === "PROCESSING") {
+    if (row.state === "AWAITING_DEPOSIT" || TERMINAL.has(row.state as ExecutionState) || ["PROCESSING", "FAILED", "REFUNDING", "VERIFYING_DESTINATION", "UNKNOWN"].includes(row.state)) {
       const active = await this.d.records.activeApproval(row.id);
       if (row.firmQuoteId && active?.quoteId === args.quoteId) return { execution: row, quote: await this.d.records.getQuote(row.firmQuoteId), duplicate: true };
       throw new ExecutionError("INVALID_STATE", `This execution is ${row.state.toLowerCase().replaceAll("_", " ")}.`);
@@ -208,7 +208,7 @@ export class ExecutionService {
     const now = this.clock();
     if (TERMINAL.has(row.state as ExecutionState) || !row.depositAddress) return { row, ok: true };
     if (!opts.force && row.lastCheckedAt && now.getTime() - row.lastCheckedAt.getTime() < MIN_STATUS_INTERVAL_MS) return { row, ok: true };
-    let status: string | null, dest: string[] = [], origin: string[] = [], amountOut: string | null = null, refunded: string | null = null, updatedAt: Date | null = null;
+    let status: string | null, dest: string[] = [], origin: string[] = [], amountOut: string | null = null, refunded: string | null = null, refundReason: string | null = null, updatedAt: Date | null = null;
     try {
       const s = await this.d.client.status(row.depositAddress, row.depositMemo);
       const firm = row.firmQuoteId ? await this.d.records.getQuote(row.firmQuoteId) : null;
@@ -222,6 +222,7 @@ export class ExecutionService {
       origin = s.swapDetails?.originChainTxHashes.map((t) => t.hash) ?? [];
       amountOut = s.swapDetails?.amountOut ?? null;
       refunded = s.swapDetails?.refundedAmount ?? null;
+      refundReason = s.swapDetails?.refundReason ?? null;
       updatedAt = s.updatedAt ? new Date(s.updatedAt) : null;
     } catch (e) {
       if (e instanceof OneClickError && e.kind === "NOT_FOUND") status = "NOT_FOUND";
@@ -249,12 +250,12 @@ export class ExecutionService {
       // Keep references already seen: an incomplete response never erases them.
       originTxHashes: origin.length ? origin : row.originTxHashes, destinationTxHashes: dest.length ? dest : row.destinationTxHashes,
       // Provider-reported output is informational. The verified amount lives in amountOutVerified.
-      amountOutSettled: amountOut ?? row.amountOutSettled, refundedAmount: refunded ?? row.refundedAmount,
+      amountOutSettled: amountOut ?? row.amountOutSettled, refundedAmount: refunded ?? row.refundedAmount, refundReason: refundReason ?? row.refundReason,
       lastCheckedAt: now, lastSuccessfulCheckAt: now, lastStatusError: null,
     };
     const r = await this.d.records.transition(row.id, row.state as ExecutionState, next.state, next.reason, patch, next.state !== row.state ? { providerStatus: status } : {});
     if (r && next.state === "EXPIRED" && row.firmQuoteId) await this.d.records.setQuoteStatus(row.firmQuoteId, "EXPIRED");
-    if (r && ["VERIFYING_DESTINATION", "REFUNDED", "FAILED"].includes(next.state) && row.firmQuoteId) await this.d.records.setQuoteStatus(row.firmQuoteId, "USED");
+    if (r && ["VERIFYING_DESTINATION", "REFUNDING", "FAILED"].includes(next.state) && row.firmQuoteId) await this.d.records.setQuoteStatus(row.firmQuoteId, "USED");
     return { row: r ?? (await this.d.records.get(row.id))!, ok: true };
   }
 
@@ -264,6 +265,10 @@ export class ExecutionService {
     if (row.state === "AWAITING_DEPOSIT") row = await this.refresh(args);
     if (!["DRAFT", "QUOTED", "AWAITING_APPROVAL", "AWAITING_DEPOSIT"].includes(row.state)) {
       throw new ExecutionError("INVALID_STATE", `This execution is ${row.state.toLowerCase().replaceAll("_", " ")} and cannot be cancelled.`);
+    }
+    // A deposit already on its way is never written off by a cancel; it is tracked to delivery or refund.
+    if (row.state === "AWAITING_DEPOSIT" && await this.d.records.hasLiveDeposit(row.id)) {
+      throw new ExecutionError("INVALID_STATE", "A deposit was already sent for this execution. SPak keeps tracking it; it cannot be cancelled.");
     }
     const note = row.state === "AWAITING_DEPOSIT" ? "Do not send the deposit. Funds sent after cancelling are refunded by NEAR Intents after the deadline." : "Cancelled before approval.";
     const r = await this.d.records.transition(row.id, row.state as ExecutionState, "CANCELLED", note);

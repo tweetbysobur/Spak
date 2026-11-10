@@ -155,3 +155,7 @@ Migrations run in the Vercel build (`npm run db:migrate && npm run build`).
 - EVM native delivery through an internal call cannot be seen without trace RPC. It stays unverifiable and is flagged for review.
 - Hobby Vercel crons run once a day. Use the GitHub Actions scheduler or Vercel Pro for 5-minute monitoring.
 - Reconciliation is manual. Flagged executions show in the UI. There is no admin screen yet.
+
+## Phase 5
+
+FAILED and REFUNDING are monitored too. Provider REFUNDED now moves to REFUNDING; REFUNDED needs source-chain verification. See SPAK-FAILURE-REFUNDS.md.

@@ -6,6 +6,7 @@ import type { ExecutionService } from "../execution/service";
 import type { DestinationVerifier } from "./destination";
 import { txExplorerUrl } from "./explorers";
 import type { DestinationVerificationRow, TrackingRecords } from "./records";
+import type { FailureService } from "../failures/service";
 
 export const TRACKING_STEPS = [
   ["APPROVED", "Transaction approved"], ["DEPOSIT_SUBMITTED", "Deposit submitted"], ["DEPOSIT_CONFIRMED", "Deposit confirmed"],
@@ -16,7 +17,7 @@ type StepId = (typeof TRACKING_STEPS)[number][0];
 
 /** User-facing tracking: one owned execution, its deposits, destination verification and history. */
 export class TrackingService {
-  constructor(private readonly d: { executions: ExecutionRecords; execution: ExecutionService; tracking: TrackingRecords; depositRecords: DepositRecords; destination: DestinationVerifier }) {}
+  constructor(private readonly d: { executions: ExecutionRecords; execution: ExecutionService; tracking: TrackingRecords; depositRecords: DepositRecords; destination: DestinationVerifier; failures?: FailureService }) {}
 
   private async owned(userId: string, id: string) {
     const r = await this.d.executions.getForUser(id, userId);
@@ -28,7 +29,10 @@ export class TrackingService {
     const row = await this.owned(userId, id);
     const [deps, dest, events] = await Promise.all([this.d.depositRecords.forExecution(row.id), this.d.tracking.destinationsFor(row.id), this.d.executions.events(row.id)]);
     const firm = row.firmQuoteId ? await this.d.executions.getQuote(row.firmQuoteId) : null;
-    return toTrackingView(row, firm ? { amountOut: firm.amountOut, minAmountOut: firm.minAmountOut } : null, deps, dest, events);
+    const base = toTrackingView(row, firm ? { amountOut: firm.amountOut, minAmountOut: firm.minAmountOut } : null, deps, dest, events);
+    if (!this.d.failures) return { ...base, failure: null, refund: null, review: null };
+    const [f, r] = await Promise.all([this.d.failures.failure(userId, id), this.d.failures.refund(userId, id)]);
+    return { ...base, failure: f.classification, review: f.review, refund: { eligibility: r.eligibility, instructions: r.instructions, record: r.refund, transactions: r.transactions } };
   }
 
   async events(userId: string, id: string) {
@@ -47,6 +51,7 @@ export class TrackingService {
     if (row.monitorGaveUpAt) await this.d.tracking.resume(row.id);
     row = (await this.d.execution.checkProvider(row)).row;
     if (row.state === "VERIFYING_DESTINATION") await this.d.destination.verify(row);
+    if (this.d.failures && (row.state === "FAILED" || row.state === "REFUNDING")) await this.d.failures.verifyRefund(userId, id, true).catch(() => undefined);
     return this.view(userId, id);
   }
 }
@@ -104,4 +109,4 @@ export function toTrackingView(
     lastCheckedAt: r.lastCheckedAt?.toISOString() ?? null, updatedAt: r.updatedAt.toISOString(), createdAt: r.createdAt.toISOString(),
   };
 }
-export type TrackingView = ReturnType<typeof toTrackingView>;
+export type TrackingView = Awaited<ReturnType<TrackingService["view"]>>;

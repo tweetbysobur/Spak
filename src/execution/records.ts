@@ -105,6 +105,12 @@ export class ExecutionRecords {
     return !!r;
   }
 
+  /** True when a deposit transaction was submitted, is being verified, or was confirmed. */
+  async hasLiveDeposit(executionId: string): Promise<boolean> {
+    const [r] = await this.db.select({ id: deposits.id }).from(deposits).where(and(eq(deposits.executionId, executionId), inArray(deposits.state, ["SUBMITTED", "VERIFICATION_PENDING", "CONFIRMED"]))).limit(1);
+    return !!r;
+  }
+
   /** Field updates that do not change state (status-check bookkeeping). */
   async touch(id: string, patch: Partial<ExecutionInsert>) {
     await this.db.update(executions).set({ ...patch, updatedAt: this.clock() }).where(eq(executions.id, id));

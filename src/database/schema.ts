@@ -185,6 +185,12 @@ export const executions = pgTable("spak_executions", {
   monitorNextAt: timestamp("monitor_next_at", { withTimezone: true }),
   monitorFailures: integer("monitor_failures").notNull().default(0),
   monitorGaveUpAt: timestamp("monitor_gave_up_at", { withTimezone: true }),
+  /** Refund facts. refundedAmount/refundReason are what NEAR Intents reports; refundVerified* is what SPak saw on chain. */
+  refundReason: text("refund_reason"),
+  refundVerifiedAmount: text("refund_verified_amount"),
+  refundVerifiedAt: timestamp("refund_verified_at", { withTimezone: true }),
+  /** Latest failure classification (see src/failures). */
+  failure: jsonb("failure"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 }, (t) => [
@@ -365,3 +371,95 @@ export const monitorRuns = pgTable("spak_monitor_runs", {
   failed: integer("failed").notNull().default(0),
   error: text("error"),
 }, (t) => [index("spak_monitor_runs_started_idx").on(t.startedAt)]);
+
+/**
+ * Refund transactions seen for an execution: reported by NEAR Intents (origin-chain hashes that are not the deposit)
+ * or submitted by the user. Each is verified on the source chain. A transaction can belong to one execution only.
+ */
+export const refundTxs = pgTable("spak_refund_txs", {
+  id: text("id").primaryKey(),
+  executionId: text("execution_id").notNull().references(() => executions.id, { onDelete: "cascade" }),
+  network: text("network").notNull(),
+  txHash: text("tx_hash").notNull(),
+  source: text("source").notNull(), // PROVIDER | USER | ADMIN
+  outcome: text("outcome").notNull(),
+  recipient: text("recipient").notNull(),
+  assetId: text("asset_id").notNull(),
+  tokenContract: text("token_contract"),
+  receivedAmount: text("received_amount"),
+  confirmations: integer("confirmations"),
+  problems: jsonb("problems").notNull().default([]),
+  observed: jsonb("observed").notNull().default({}),
+  attempts: integer("attempts").notNull().default(0),
+  firstCheckedAt: timestamp("first_checked_at", { withTimezone: true }).notNull(),
+  lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }).notNull(),
+  verifiedAt: timestamp("verified_at", { withTimezone: true }),
+}, (t) => [
+  uniqueIndex("spak_refund_txs_tx_uq").on(t.network, t.txHash),
+  index("spak_refund_txs_exec_idx").on(t.executionId),
+]);
+
+/** One refund record per execution that needs one. State is SPak's refund lifecycle, separate from the execution state. */
+export const refunds = pgTable("spak_refunds", {
+  executionId: text("execution_id").primaryKey().references(() => executions.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  state: text("state").notNull(),
+  network: text("network").notNull(),
+  assetId: text("asset_id").notNull(),
+  refundTo: text("refund_to").notNull(),
+  refundType: text("refund_type").notNull(),
+  depositedAmount: text("deposited_amount"),
+  providerRefundedAmount: text("provider_refunded_amount"),
+  providerRefundReason: text("provider_refund_reason"),
+  verifiedAmount: text("verified_amount"),
+  openedAt: timestamp("opened_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+}, (t) => [index("spak_refunds_state_idx").on(t.state)]);
+
+/** Append-only failure and refund history (classification changes, refund state changes). */
+export const failureEvents = pgTable("spak_failure_events", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  executionId: text("execution_id").notNull().references(() => executions.id, { onDelete: "cascade" }),
+  at: timestamp("at", { withTimezone: true }).notNull(),
+  category: text("category").notNull(),
+  code: text("code").notNull(),
+  temporary: integer("temporary").notNull().default(0),
+  detail: jsonb("detail").notNull().default({}),
+}, (t) => [index("spak_failure_events_exec_idx").on(t.executionId, t.at)]);
+
+/** User-initiated recovery actions (submit refund tx, verify), for audit and abuse limits. */
+export const recoveryAttempts = pgTable("spak_recovery_attempts", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  executionId: text("execution_id").notNull().references(() => executions.id, { onDelete: "cascade" }),
+  actor: text("actor").notNull(),
+  action: text("action").notNull(),
+  at: timestamp("at", { withTimezone: true }).notNull(),
+  outcome: text("outcome").notNull(),
+  detail: jsonb("detail").notNull().default({}),
+}, (t) => [index("spak_recovery_attempts_exec_idx").on(t.executionId, t.at)]);
+
+/** Manual review cases. At most one open case per execution. Reviewers add notes and evidence; they never set outcomes. */
+export const reviews = pgTable("spak_reviews", {
+  id: text("id").primaryKey(),
+  executionId: text("execution_id").notNull().references(() => executions.id, { onDelete: "cascade" }),
+  status: text("status").notNull(), // OPEN | IN_REVIEW | RESOLVED
+  reason: text("reason").notNull(),
+  openedBy: text("opened_by").notNull(),
+  openedAt: timestamp("opened_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  resolution: text("resolution"),
+}, (t) => [
+  uniqueIndex("spak_reviews_open_uq").on(t.executionId).where(sql`${t.status} <> 'RESOLVED'`),
+  index("spak_reviews_status_idx").on(t.status, t.openedAt),
+]);
+
+export const reviewNotes = pgTable("spak_review_notes", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  reviewId: text("review_id").notNull().references(() => reviews.id, { onDelete: "cascade" }),
+  at: timestamp("at", { withTimezone: true }).notNull(),
+  author: text("author").notNull(),
+  note: text("note").notNull(),
+  evidence: jsonb("evidence").notNull().default({}),
+}, (t) => [index("spak_review_notes_review_idx").on(t.reviewId, t.at)]);

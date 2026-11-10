@@ -72,3 +72,7 @@ Approval and deposit flow: see [docs/SPAK-DEPOSIT-FLOW.md](docs/SPAK-DEPOSIT-FLO
 ## Tracking
 
 Background monitoring and destination verification: see [docs/SPAK-TRACKING.md](docs/SPAK-TRACKING.md).
+
+## Failures and refunds
+
+See [docs/SPAK-FAILURE-REFUNDS.md](docs/SPAK-FAILURE-REFUNDS.md).

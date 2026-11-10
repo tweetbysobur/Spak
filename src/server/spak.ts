@@ -6,6 +6,7 @@ import { getDb, PgAuditLog, PgIntentLog, PgSessionStore } from "@/database";
 import { ExecutionError, ExecutionRecords, ExecutionService, IntentLogPlanStore } from "@/execution";
 import { DepositRecords, DepositService, httpChainRpc } from "@/deposits";
 import { DestinationVerifier, ExecutionMonitor, TrackingRecords, TrackingService } from "@/tracking";
+import { FailureRecords, FailureService, RefundVerifier, ReviewService } from "@/failures";
 import { AuthError } from "@/auth/types";
 import { authService, requireUser, route } from "./auth";
 
@@ -33,12 +34,17 @@ async function build() {
   // Tracking: background monitor and destination-chain verification over the same records. Not a second engine.
   const tracking = new TrackingRecords(db);
   const destination = new DestinationVerifier({ executions: executionRecords, tracking, rpc, audit });
+  // Failures and refunds: same records again; refunds are verified on the source chain, never taken on the provider's word.
+  const failureRecords = new FailureRecords(db);
+  const refunds = new RefundVerifier({ executions: executionRecords, failures: failureRecords, depositRecords, rpc, audit });
+  const failures = new FailureService({ executions: executionRecords, failures: failureRecords, depositRecords, tracking, refunds, audit });
+  const reviews = new ReviewService({ executions: executionRecords, failures: failureRecords, depositRecords, tracking, refunds, audit });
   const monitor = new ExecutionMonitor({
-    tracking, executions: executionRecords, execution, deposits, depositRecords, destination,
+    tracking, executions: executionRecords, execution, deposits, depositRecords, destination, refunds, failures,
     log: (msg, data) => console.warn(`[spak-monitor] ${msg}`, JSON.stringify(data ?? {})),
   });
-  const trackingService = new TrackingService({ executions: executionRecords, execution, tracking, depositRecords, destination });
-  return { engine, execution, deposits, monitor, tracking: trackingService };
+  const trackingService = new TrackingService({ executions: executionRecords, execution, tracking, depositRecords, destination, failures });
+  return { engine, execution, deposits, monitor, tracking: trackingService, failures, reviews };
 }
 
 const g = globalThis as unknown as { __spak?: ReturnType<typeof build> };

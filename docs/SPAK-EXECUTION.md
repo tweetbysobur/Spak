@@ -148,3 +148,5 @@ Approval now requires the firm quote. Deposits are tracked separately. See SPAK-
 ## Phase 4
 
 COMPLETED now requires SPak's own destination-chain verification. New state VERIFYING_DESTINATION. Background monitoring. See SPAK-TRACKING.md.
+
+Phase 5: REFUNDING state; FAILED is no longer final; refunds verified on chain. See SPAK-FAILURE-REFUNDS.md.

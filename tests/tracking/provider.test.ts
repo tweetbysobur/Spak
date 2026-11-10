@@ -27,8 +27,9 @@ describe("provider status responses", () => {
     expect(stateFromProvider("PROCESSING", obs("SUCCESS"), null, now).state).toBe("PROCESSING"); // success without a destination tx
     expect(stateFromProvider("PROCESSING", obs("SUCCESS", ["d"]), null, now).state).toBe("VERIFYING_DESTINATION");
     expect(stateFromProvider("PROCESSING", obs("FAILED"), null, now).state).toBe("FAILED");
-    expect(stateFromProvider("PROCESSING", obs("REFUNDED"), null, now).state).toBe("REFUNDED");
-    expect(stateFromProvider("VERIFYING_DESTINATION", obs("REFUNDED"), null, now).state).toBe("REFUNDED");
+    expect(stateFromProvider("PROCESSING", obs("REFUNDED"), null, now).state).toBe("REFUNDING"); // verified before REFUNDED
+    expect(stateFromProvider("VERIFYING_DESTINATION", obs("REFUNDED"), null, now).state).toBe("REFUNDING");
+    expect(stateFromProvider("FAILED", obs("REFUNDED"), null, now).state).toBe("REFUNDING");
     expect(stateFromProvider("PROCESSING", obs("BRAND_NEW_STATUS"), null, now).state).toBe("UNKNOWN");
     expect(stateFromProvider("PROCESSING", obs("NOT_FOUND"), new Date(0), now).state).toBe("PROCESSING"); // never expires once processing
   });

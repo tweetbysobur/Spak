@@ -6,19 +6,20 @@ import { getNetwork } from "@/spak-in/registries/networks";
 import { api, formatUnits, type ExecutionView } from "@/lib/client";
 import { Button, Card, Row } from "./ui";
 import { DepositPanel } from "./DepositPanel";
+import { RecoveryPanel } from "./RecoveryPanel";
 
 const LABEL: Record<ExecutionState, string> = {
   DRAFT: "Draft", QUOTED: "Quoted", AWAITING_APPROVAL: "Awaiting approval", AWAITING_DEPOSIT: "Waiting for your deposit",
-  PROCESSING: "Processing", VERIFYING_DESTINATION: "Verifying delivery", COMPLETED: "Completed", FAILED: "Failed", REFUNDED: "Refunded",
+  PROCESSING: "Processing", VERIFYING_DESTINATION: "Verifying delivery", REFUNDING: "Refund in progress", COMPLETED: "Completed", FAILED: "Failed", REFUNDED: "Refunded",
   EXPIRED: "Expired", CANCELLED: "Cancelled", UNKNOWN: "Unknown or delayed",
 };
 const TONE: Record<ExecutionState, string> = {
   DRAFT: "bg-white/10 text-white/70", QUOTED: "bg-white/10 text-white/70", AWAITING_APPROVAL: "bg-amber-400/15 text-amber-300",
   AWAITING_DEPOSIT: "bg-amber-400/15 text-amber-300", PROCESSING: "bg-sky-400/15 text-sky-300", VERIFYING_DESTINATION: "bg-sky-400/15 text-sky-300",
-  COMPLETED: "bg-emerald-400/15 text-emerald-300", FAILED: "bg-red-400/15 text-red-300", REFUNDED: "bg-violet-400/15 text-violet-300",
+  REFUNDING: "bg-violet-400/15 text-violet-300", COMPLETED: "bg-emerald-400/15 text-emerald-300", FAILED: "bg-red-400/15 text-red-300", REFUNDED: "bg-violet-400/15 text-violet-300",
   EXPIRED: "bg-white/10 text-white/60", CANCELLED: "bg-white/10 text-white/60", UNKNOWN: "bg-white/10 text-white/60",
 };
-const TERMINAL: string[] = ["COMPLETED", "FAILED", "REFUNDED", "EXPIRED", "CANCELLED"];
+const TERMINAL: string[] = ["COMPLETED", "REFUNDED", "EXPIRED", "CANCELLED"];
 const DOT: Record<string, string> = { done: "bg-emerald-400", current: "bg-sky-400 animate-pulse", halted: "bg-amber-400", pending: "bg-white/20" };
 const net = (id: string) => getNetwork(id)?.name ?? id;
 const time = (s: string | null) => (s ? new Date(s).toLocaleString() : "");
@@ -105,7 +106,8 @@ export function Tracker({ initial }: { initial: ExecutionView }) {
       {t?.state === "PROCESSING" && <p className="mt-3 text-sm text-sky-300">NEAR Intents has the deposit and is processing the cross-chain transfer. Delivery is not confirmed yet.</p>}
       {t?.state === "VERIFYING_DESTINATION" && <p className="mt-3 text-sm text-sky-300">NEAR Intents reports a destination transaction. SPak is checking it on {net(x.destination.network)} before calling this complete.</p>}
       {t?.state === "COMPLETED" && <p className="mt-3 text-sm text-emerald-300">Delivery verified by SPak on {net(x.destination.network)}: the recipient received {dst?.verifiedAmountOut ? formatUnits(dst.verifiedAmountOut, dst.assetId) : ""}.</p>}
-      {t?.state === "REFUNDED" && <p className="mt-3 text-sm text-violet-300">The transfer did not complete. NEAR Intents reports a refund to {x.refundAddress}.</p>}
+      {t?.state === "REFUNDED" && <p className="mt-3 text-sm text-violet-300">The transfer did not complete. SPak verified on chain that {t.refund?.record?.verifiedAmount ? formatUnits(t.refund.record.verifiedAmount, x.source.assetId) : "the refund"} returned to {x.refundAddress}.</p>}
+      {t && <RecoveryPanel executionId={x.id} view={t} onChange={setT} />}
       {t?.state === "UNKNOWN" && <p className="mt-3 text-sm text-white/70">Delayed or not verifiable yet. {t.note ?? ""} {t.needsReconciliation ? "SPak flagged this for manual review." : "SPak keeps checking."} Do not resend.</p>}
       {t && !TERMINAL.includes(t.state) && <Button variant="ghost" className="mt-3" onClick={checkNow} disabled={busy}>{busy ? "Checking" : "Check now"}</Button>}
     </Card>

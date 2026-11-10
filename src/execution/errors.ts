@@ -39,6 +39,8 @@ export const EXECUTION_ERRORS = {
   PROVIDER_UNAVAILABLE: 503,
   PROVIDER_ERROR: 502,
   RATE_LIMITED: 429,
+  REVIEW_NOT_FOUND: 404,
+  EVIDENCE_REQUIRED: 400,
 } as const;
 export type ExecutionErrorCode = keyof typeof EXECUTION_ERRORS;
 

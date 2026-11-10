@@ -2,23 +2,30 @@ import { ExecutionError } from "./errors";
 
 export const EXECUTION_STATES = [
   "DRAFT", "QUOTED", "AWAITING_APPROVAL", "AWAITING_DEPOSIT", "PROCESSING", "VERIFYING_DESTINATION",
-  "COMPLETED", "FAILED", "EXPIRED", "REFUNDED", "UNKNOWN", "CANCELLED",
+  "REFUNDING", "COMPLETED", "FAILED", "EXPIRED", "REFUNDED", "UNKNOWN", "CANCELLED",
 ] as const;
 export type ExecutionState = (typeof EXECUTION_STATES)[number];
 
-export const TERMINAL: ReadonlySet<ExecutionState> = new Set(["COMPLETED", "FAILED", "EXPIRED", "REFUNDED", "CANCELLED"]);
+/**
+ * Final states: nothing changes after these. FAILED is not final: NEAR Intents may still refund a failed swap,
+ * and a confirmed deposit is never written off, so FAILED stays monitored and can move to REFUNDING.
+ */
+export const TERMINAL: ReadonlySet<ExecutionState> = new Set(["COMPLETED", "EXPIRED", "REFUNDED", "CANCELLED"]);
 
 /** Allowed transitions. Anything else is a bug and is refused. */
 const NEXT: Record<ExecutionState, ExecutionState[]> = {
   DRAFT: ["QUOTED", "AWAITING_APPROVAL", "FAILED", "CANCELLED"],
   QUOTED: ["AWAITING_APPROVAL", "AWAITING_DEPOSIT", "QUOTED", "FAILED", "CANCELLED"],
   AWAITING_APPROVAL: ["AWAITING_APPROVAL", "AWAITING_DEPOSIT", "FAILED", "CANCELLED"],
-  AWAITING_DEPOSIT: ["PROCESSING", "VERIFYING_DESTINATION", "FAILED", "REFUNDED", "EXPIRED", "UNKNOWN", "CANCELLED"],
-  PROCESSING: ["PROCESSING", "VERIFYING_DESTINATION", "FAILED", "REFUNDED", "UNKNOWN"],
+  AWAITING_DEPOSIT: ["PROCESSING", "VERIFYING_DESTINATION", "FAILED", "REFUNDING", "EXPIRED", "UNKNOWN", "CANCELLED"],
+  PROCESSING: ["PROCESSING", "VERIFYING_DESTINATION", "FAILED", "REFUNDING", "UNKNOWN"],
   // COMPLETED is reachable only from here: SPak's own destination-chain verification, never a provider claim alone.
-  VERIFYING_DESTINATION: ["VERIFYING_DESTINATION", "COMPLETED", "REFUNDED", "UNKNOWN"],
-  UNKNOWN: ["AWAITING_DEPOSIT", "PROCESSING", "VERIFYING_DESTINATION", "FAILED", "REFUNDED", "EXPIRED", "UNKNOWN"],
-  COMPLETED: [], FAILED: [], EXPIRED: [], REFUNDED: [], CANCELLED: [],
+  VERIFYING_DESTINATION: ["VERIFYING_DESTINATION", "COMPLETED", "REFUNDING", "UNKNOWN"],
+  // REFUNDED is reachable only from here: SPak's own source-chain refund verification.
+  REFUNDING: ["REFUNDING", "REFUNDED", "UNKNOWN"],
+  FAILED: ["FAILED", "REFUNDING", "UNKNOWN"],
+  UNKNOWN: ["AWAITING_DEPOSIT", "PROCESSING", "VERIFYING_DESTINATION", "FAILED", "REFUNDING", "EXPIRED", "UNKNOWN"],
+  COMPLETED: [], EXPIRED: [], REFUNDED: [], CANCELLED: [],
 };
 
 export function assertTransition(from: ExecutionState, to: ExecutionState): void {
@@ -47,13 +54,15 @@ export function stateFromProvider(current: ExecutionState, o: ProviderObservatio
   if (current === "VERIFYING_DESTINATION" && o.status !== "REFUNDED") {
     return { state: current, reason: "Destination verification in progress." };
   }
+  if (current === "REFUNDING") return { state: current, reason: "Refund verification in progress." };
   if (!o.status) return { state: current, reason: "Provider response had no status; nothing changed." };
   switch (o.status) {
     case "SUCCESS":
       if (o.destinationTxHashes.length) return { state: "VERIFYING_DESTINATION", reason: "Provider reported success with destination transaction(s). Verifying on the destination chain." };
       return { state: "PROCESSING", reason: "Provider reported success without a destination transaction yet." };
-    case "REFUNDED": return { state: "REFUNDED", reason: "Provider refunded the deposit." };
-    case "FAILED": return { state: "FAILED", reason: "Provider reported failure." };
+    // Provider says it refunded. Not proof: SPak verifies the refund on the source chain before REFUNDED.
+    case "REFUNDED": return { state: "REFUNDING", reason: "NEAR Intents reports a refund. Verifying it on the source chain." };
+    case "FAILED": return { state: "FAILED", reason: "NEAR Intents reported that the swap failed." };
     case "KNOWN_DEPOSIT_TX": case "PROCESSING": case "INCOMPLETE_DEPOSIT":
       return { state: "PROCESSING", reason: `Provider status ${o.status}.` };
     case "PENDING_DEPOSIT":
