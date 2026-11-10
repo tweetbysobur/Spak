@@ -6,7 +6,7 @@ import { Review } from "@/components/Review";
 import { Tracker } from "@/components/Tracker";
 import { History } from "@/components/History";
 import { Addresses } from "@/components/Addresses";
-import { store, type QuoteRequest, type QuoteView, type TxRecord } from "@/lib/client";
+import { store, type IntentResult, type ProviderQuote, type TxRecord } from "@/lib/client";
 
 type Tab = "chat" | "manual" | "history" | "addresses";
 const TABS: { id: Tab; label: string }[] = [
@@ -18,19 +18,22 @@ export default function Home() {
   const [tab, setTab] = useState<Tab>("chat");
   const [addresses, setAddresses] = useState<Record<string, string>>({});
   const [history, setHistory] = useState<TxRecord[]>([]);
-  const [pending, setPending] = useState<{ req: QuoteRequest; quote: QuoteView }>();
+  const [pending, setPending] = useState<{ intent: IntentResult; quote: ProviderQuote }>();
   const [active, setActive] = useState<TxRecord>();
+  const [timezone, setTimezone] = useState("UTC");
 
-  useEffect(() => { setAddresses(store.addresses()); setHistory(store.history()); }, []);
-  const onQuote = (req: QuoteRequest, quote: QuoteView) => { setActive(undefined); setPending({ req, quote }); };
+  useEffect(() => {
+    setAddresses(store.addresses());
+    setHistory(store.history());
+    setTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  }, []);
+  const onReady = (intent: IntentResult, quote: ProviderQuote) => { setActive(undefined); setPending({ intent, quote }); };
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col gap-6 px-4 py-10">
-      <header className="flex items-end justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">SPak</h1>
-          <p className="text-sm text-white/50">Cross-chain execution on NEAR Intents</p>
-        </div>
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight">SPak</h1>
+        <p className="text-sm text-white/50">Cross-chain execution on NEAR Intents</p>
       </header>
 
       <nav className="flex gap-1 overflow-x-auto rounded-xl border border-white/10 p-1">
@@ -42,16 +45,16 @@ export default function Home() {
         ))}
       </nav>
 
-      {tab === "chat" && <Chat addresses={addresses} onQuote={onQuote} />}
-      {tab === "manual" && <Manual addresses={addresses} onQuote={onQuote} />}
+      {tab === "chat" && <Chat addresses={addresses} timezone={timezone} onReady={onReady} />}
+      {tab === "manual" && <Manual addresses={addresses} onReady={onReady} />}
       {tab === "history" && <History items={history} onOpen={(t) => { setPending(undefined); setActive(t); }} />}
       {tab === "addresses" && <Addresses value={addresses} onSave={(a) => { store.setAddresses(a); setAddresses(a); setTab("chat"); }} />}
 
       {pending && !active && (
-        <Review request={pending.req} quote={pending.quote} onCancel={() => setPending(undefined)}
+        <Review intent={pending.intent} quote={pending.quote} onCancel={() => setPending(undefined)}
           onApproved={(tx) => { setPending(undefined); setActive(tx); setHistory(store.history()); }} />
       )}
-      {active && <Tracker key={active.id} initial={active} />}
+      {active && <Tracker key={active.submission.id} initial={active} />}
     </main>
   );
 }
