@@ -1,0 +1,45 @@
+{
+  "wallet": "Phantom 26.38.1",
+  "results": [
+    {
+      "name": "Wallet Standard discovery lists Phantom under Solana",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "EIP-6963 discovery lists Phantom under EVM",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Phantom Solana sign-in (standard:connect + solana:signMessage)",
+      "ok": true,
+      "detail": "1SkS7RTE5JTSYHF5Uqcg7yvmaWc5vtSt5eGL1P4hmij | prompt: A1 Account 1 Sign In localhost:3100 Confirming will allow this site to view balances and activity for the selected account. Message localhost:3100 wants you to "
+    },
+    {
+      "name": "Session restored after reload",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Sign-out ends the session",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Rejecting in Phantom cancels cleanly",
+      "ok": true,
+      "detail": "Cancelled in your wallet. Nothing was signed."
+    },
+    {
+      "name": "Phantom EVM sign-in (EIP-6963 + SIWE personal_sign)",
+      "ok": true,
+      "detail": "0x527d905e0a2efd5c1d360f64d105b5ea9c9aa123"
+    },
+    {
+      "name": "Linking a Phantom account owned by another SPak user is refused",
+      "ok": true,
+      "detail": "This wallet belongs to another SPak account. Sign in with it there, or disconnect it from that account first."
+    }
+  ]
+}

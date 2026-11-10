@@ -39,6 +39,22 @@ export function watchEvmWallets(onChange: (wallets: EvmWalletInfo[]) => void): (
   return () => { window.removeEventListener("eip6963:announceProvider", onAnnounce); clearTimeout(legacy); };
 }
 
+const isUnauthorized = (e: unknown) => String((e as { code?: unknown })?.code) === "4100";
+
+/**
+ * MetaMask 13 grants each site a set of chains. On a network added after the site connected, requests fail
+ * with 4100 until the user re-grants access. Ask once through the wallet's own permission screen, then retry.
+ */
+async function withPermission<T>(w: EvmWalletInfo, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (e) {
+    if (!isUnauthorized(e)) throw e;
+    await w.provider.request({ method: "wallet_requestPermissions", params: [{ eth_accounts: {} }] });
+    return fn();
+  }
+}
+
 /**
  * Ask the wallet for an account. With pickAccount, the wallet shows its account chooser
  * (wallet_requestPermissions) instead of reusing the account the site already saw.
@@ -47,7 +63,7 @@ export async function connectEvm(w: EvmWalletInfo, opts: { pickAccount?: boolean
   if (opts.pickAccount) {
     await w.provider.request({ method: "wallet_requestPermissions", params: [{ eth_accounts: {} }] });
   }
-  const accounts = (await w.provider.request({ method: opts.pickAccount ? "eth_accounts" : "eth_requestAccounts" })) as string[];
+  const accounts = (await withPermission(w, () => w.provider.request({ method: opts.pickAccount ? "eth_accounts" : "eth_requestAccounts" }))) as string[];
   if (!accounts?.[0]) throw Object.assign(new Error("The wallet returned no account."), { code: "4100" });
   const chainHex = (await w.provider.request({ method: "eth_chainId" })) as string;
   return { address: accounts[0], chainId: Number.parseInt(chainHex, 16) || 1 };
@@ -62,5 +78,5 @@ export async function signEvm(w: EvmWalletInfo, address: string, message: string
   if (now && now.toLowerCase() !== address.toLowerCase()) {
     throw Object.assign(new Error(`Your wallet switched to ${now.slice(0, 6)}…${now.slice(-4)}. Start again to sign in with that account.`), { code: "ACCOUNT_CHANGED" });
   }
-  return (await w.provider.request({ method: "personal_sign", params: [toHex(message), address] })) as string;
+  return (await withPermission(w, () => w.provider.request({ method: "personal_sign", params: [toHex(message), address] }))) as string;
 }

@@ -2,7 +2,6 @@
 import { Buffer } from "buffer";
 import { setupWalletSelector, type WalletSelector } from "@near-wallet-selector/core";
 import { setupMeteorWallet } from "@near-wallet-selector/meteor-wallet";
-import { setupMyNearWallet } from "@near-wallet-selector/my-near-wallet";
 import { parseNearCallback, type NearCallback } from "./near-callback";
 
 /**
@@ -12,7 +11,9 @@ import { parseNearCallback, type NearCallback } from "./near-callback";
  */
 let selector: Promise<WalletSelector> | undefined;
 export function nearSelector(): Promise<WalletSelector> {
-  selector ??= setupWalletSelector({ network: "mainnet", modules: [setupMeteorWallet(), setupMyNearWallet()] });
+  // MyNearWallet was removed: its live app now refuses all app requests ("MyNearWallet is being retired"),
+  // observed on 2026-11-10 at app.mynearwallet.com/sign-message.
+  selector ??= setupWalletSelector({ network: "mainnet", modules: [setupMeteorWallet()] });
   return selector;
 }
 
@@ -26,7 +27,7 @@ export async function discoverNearWallets(): Promise<NearWalletInfo[]> {
 const PENDING = "spak.near.pending";
 
 /**
- * NEP-413 signMessage. Call it directly from a click handler: MyNearWallet and Meteor's web wallet open a
+ * NEP-413 signMessage. Call it directly from a click handler: Meteor's web wallet opens a
  * popup, and browsers block popups that do not follow a user gesture.
  * Returns null only if the wallet navigated away (redirect fallback); the result then arrives via the callback URL.
  */

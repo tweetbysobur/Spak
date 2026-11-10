@@ -19,7 +19,6 @@
     "@near-wallet-selector/core": "^10.1.4",
     "@near-wallet-selector/meteor-wallet": "^10.1.4",
     "@near-wallet-selector/modal-ui": "^10.1.4",
-    "@near-wallet-selector/my-near-wallet": "^10.1.4",
     "@noble/curves": "^2.4.0",
     "@scure/base": "^2.4.0",
     "@solana/wallet-standard-features": "^1.5.0",

@@ -1,0 +1,22 @@
+[
+  {
+    "name": "Meteor Wallet: challenge prepared without asking for an account first",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "Meteor Wallet: wallet window opened from the click (not blocked)",
+    "ok": true,
+    "detail": "https://wallet.meteorwallet.app/connect/mainnet/sign_message"
+  },
+  {
+    "name": "Meteor: real wallet page loads",
+    "ok": true,
+    "detail": "https://wallet.meteorwallet.app 261109-0626 Sign in to access your wallets Settings No Meteor Wallet account fou"
+  },
+  {
+    "name": "Meteor Wallet: closing the wallet window is reported as a cancellation",
+    "ok": true,
+    "detail": "Cancelled in your wallet. Nothing was signed."
+  }
+]
