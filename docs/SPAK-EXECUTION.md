@@ -140,3 +140,7 @@ Live results (2026-11-10, no funds sent): asset resolution against the live toke
 - One leg per plan; `EXACT_INPUT` and `ORIGIN_CHAIN` deposits only. Same asset on the same network is refused (wallet transfer, not an intent).
 - Re-executing a plan after it failed or expired needs a new plan (one execution per plan hash per user).
 - The provider's deposit deadline (about 3 days in testing) is shown to the user; the requested refund deadline is 30 minutes.
+
+## Phase 3
+
+Approval now requires the firm quote. Deposits are tracked separately. See SPAK-DEPOSIT-FLOW.md.

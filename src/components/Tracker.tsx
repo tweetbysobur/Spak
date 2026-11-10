@@ -1,9 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
-import { getNetwork } from "@/spak-in/registries/networks";
 import type { ExecutionState } from "@/spak-in/types-client";
 import { api, formatUnits, type ExecutionView } from "@/lib/client";
 import { Button, Card, Row } from "./ui";
+import { DepositPanel } from "./DepositPanel";
 
 const LABEL: Record<ExecutionState, string> = {
   DRAFT: "Draft", QUOTED: "Quoted", AWAITING_APPROVAL: "Awaiting approval", AWAITING_DEPOSIT: "Waiting for your deposit",
@@ -47,21 +47,15 @@ export function Tracker({ initial }: { initial: ExecutionView }) {
         <h3 className="font-semibold">Execution</h3>
         <StateBadge state={x.state} />
       </div>
-      {d && (
-        <div className="mb-4 rounded-xl border border-amber-400/30 bg-amber-400/5 p-4 text-sm">
-          <p className="mb-2 text-amber-200">From your wallet, send exactly {formatUnits(d.amount, d.assetId)} on {getNetwork(d.network)?.name} to:</p>
-          <p className="break-all font-mono text-xs text-white">{d.address}</p>
-          {d.memo && <p className="mt-2 font-mono text-xs">Memo: {d.memo}</p>}
-          {d.deadline && <p className="mt-2 text-xs text-white/50">Send before {new Date(d.deadline).toLocaleString()}. SPak checks NEAR Intents for the deposit.</p>}
-          <Button variant="ghost" className="mt-3" onClick={cancel}>Cancel, I will not send it</Button>
-        </div>
-      )}
+      {x.state === "AWAITING_DEPOSIT" && <DepositPanel execution={x} />}
+      {x.state === "AWAITING_DEPOSIT" && d && <Button variant="ghost" className="mb-3" onClick={cancel}>Cancel before sending the deposit</Button>}
       <Row k="Send" v={formatUnits(x.source.amountIn, x.source.assetId)} />
       {x.destination.amountOutSettled && <Row k="Delivered" v={formatUnits(x.destination.amountOutSettled, x.destination.assetId)} />}
       <Row k="Recipient" v={x.recipient.address} mono />
       <Row k="Reference" v={x.id} mono />
       {(x.destinationTxHashes as string[]).length > 0 && <Row k="Destination tx" v={(x.destinationTxHashes as string[]).join(", ")} mono />}
       {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
+      {x.state === "PROCESSING" && <p className="mt-3 text-sm text-sky-300">NEAR Intents has your deposit and is processing the cross-chain transfer. Delivery is not confirmed yet.</p>}
       {x.state === "COMPLETED" && <p className="mt-3 text-sm text-emerald-300">NEAR Intents reported delivery with a destination transaction.</p>}
       {x.state === "REFUNDED" && <p className="mt-3 text-sm text-violet-300">The transaction did not complete. Funds went back to {x.refundAddress}.</p>}
       {x.state === "UNKNOWN" && <p className="mt-3 text-sm text-white/60">No confirmed status yet. SPak keeps checking. Do not resend.</p>}

@@ -4,6 +4,7 @@ import { SpakIn, SpakInError, type SpakError } from "@/spak-in";
 import { oneClickFromEnv } from "@/integrations/near-intents";
 import { getDb, PgAuditLog, PgIntentLog, PgSessionStore } from "@/database";
 import { ExecutionError, ExecutionRecords, ExecutionService, IntentLogPlanStore } from "@/execution";
+import { DepositRecords, DepositService, httpChainRpc } from "@/deposits";
 import { AuthError } from "@/auth/types";
 import { authService, requireUser, route } from "./auth";
 
@@ -20,10 +21,13 @@ async function build() {
     onError: (e) => console.error("[spak-in] result log failed", e),
   });
   // SPak Execution: only plans SPak-in issued (read from the intent log) can execute.
-  const execution = new ExecutionService({
-    client: oneClickFromEnv(), records: new ExecutionRecords(db), plans: new IntentLogPlanStore(db), audit: new PgAuditLog(db),
-  });
-  return { engine, execution };
+  const client = oneClickFromEnv();
+  const executionRecords = new ExecutionRecords(db);
+  const audit = new PgAuditLog(db);
+  const execution = new ExecutionService({ client, records: executionRecords, plans: new IntentLogPlanStore(db), audit });
+  // Deposits extend the same execution engine: same records, same provider client, plus source-chain RPC.
+  const deposits = new DepositService({ records: new DepositRecords(db), executions: executionRecords, executionService: execution, rpc: httpChainRpc(), client, audit });
+  return { engine, execution, deposits };
 }
 
 const g = globalThis as unknown as { __spak?: ReturnType<typeof build> };
