@@ -46,14 +46,19 @@ beforeEach(() => {
   });
 });
 
-function evmSim(opts: { reject?: boolean } = {}) {
+function evmSim(opts: { reject?: boolean; unauthorizedOnce?: boolean } = {}) {
   let acct = privateKeyToAccount(generatePrivateKey());
+  let regranted = !opts.unauthorizedOnce;
+  const calls: string[] = [];
   const provider: Eip1193 = {
     request: async ({ method, params }) => {
+      calls.push(method);
+      if (method === "wallet_requestPermissions") { regranted = true; return [{ parentCapability: "eth_accounts" }]; }
       if (method === "eth_requestAccounts" || method === "eth_accounts") return [acct.address];
       if (method === "eth_chainId") return "0x2105"; // Base
-      if (method === "wallet_requestPermissions") return [{ parentCapability: "eth_accounts" }];
       if (method === "personal_sign") {
+        // MetaMask 13 on a chain the site was not granted yet
+        if (!regranted) throw Object.assign(new Error("The requested account and/or method has not been authorized by the user."), { code: 4100 });
         if (opts.reject) throw Object.assign(new Error("MetaMask Tx Signature: User denied message signature."), { code: 4001 });
         const [msgHex, addr] = params as [`0x${string}`, string];
         if (addr.toLowerCase() !== acct.address.toLowerCase()) throw new Error("wrong account");
@@ -62,7 +67,7 @@ function evmSim(opts: { reject?: boolean } = {}) {
       throw new Error(`unsupported ${method}`);
     },
   };
-  return { info: { id: "sim.evm", name: "Simulated EVM", provider } as EvmWalletInfo, switchAccount: () => { acct = privateKeyToAccount(generatePrivateKey()); } };
+  return { calls, info: { id: "sim.evm", name: "Simulated EVM", provider } as EvmWalletInfo, switchAccount: () => { acct = privateKeyToAccount(generatePrivateKey()); } };
 }
 
 function solanaSim() {
@@ -88,6 +93,12 @@ describe("simulated wallets through the real flow code", () => {
     expect(p.challenge.message).toContain("Chain ID: 8453");
     expect(await complete(p)).toMatchObject({ created: true });
     expect((await signedIn()).authenticated).toBe(true);
+  });
+  it("EVM: a 4100 on a newly added chain asks the wallet to re-grant access once, then signs", async () => {
+    const w = evmSim({ unauthorizedOnce: true });
+    expect(await complete(await prepare({ family: "evm", info: w.info }, "SIGN_IN"))).toMatchObject({ created: true });
+    expect(w.calls.filter((c) => c === "wallet_requestPermissions")).toHaveLength(1);
+    expect(w.calls.filter((c) => c === "personal_sign")).toHaveLength(2);
   });
   it("EVM: rejection in the wallet leaves the user signed out and is reported as cancelled", async () => {
     const w = evmSim({ reject: true });

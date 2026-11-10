@@ -1,0 +1,91 @@
+{
+  "wallet": "MetaMask 13.56.0.0",
+  "account": "0x0337001c0d99ceee691dc8e59f46ee9716b4286a",
+  "results": [
+    {
+      "name": "EIP-6963 discovery lists MetaMask",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "MetaMask shows a SIWE sign-in request with matching domain and no transaction",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Sign-in creates a session for the MetaMask account",
+      "ok": true,
+      "detail": "0x0337001c0d99ceee691dc8e59f46ee9716b4286a"
+    },
+    {
+      "name": "Session cookie is HttpOnly + SameSite=Lax",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Session restored after page reload",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "SPak-in uses the verified MetaMask address as recipient and refund address",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Sign-out ends the session server-side",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Rejecting the signature in MetaMask cancels cleanly",
+      "ok": true,
+      "detail": "Cancelled in your wallet. Nothing was signed."
+    },
+    {
+      "name": "Sign-in on Ethereum (chain 1)",
+      "ok": true,
+      "detail": "wallet chain 1"
+    },
+    {
+      "name": "Sign-in on Base (chain 8453)",
+      "ok": true,
+      "detail": "wallet chain 8453"
+    },
+    {
+      "name": "Sign-in on Arbitrum (chain 42161)",
+      "ok": true,
+      "detail": "wallet chain 42161"
+    },
+    {
+      "name": "Sign-in on Optimism (chain 10)",
+      "ok": true,
+      "detail": "wallet chain 10"
+    },
+    {
+      "name": "Sign-in on Polygon (chain 137)",
+      "ok": true,
+      "detail": "wallet chain 137"
+    },
+    {
+      "name": "Sign-in on BNB Chain (chain 56)",
+      "ok": true,
+      "detail": "wallet chain 56"
+    },
+    {
+      "name": "Sign-in on Avalanche (chain 43114)",
+      "ok": true,
+      "detail": "wallet chain 43114"
+    },
+    {
+      "name": "Sign-in on Gnosis (chain 100)",
+      "ok": true,
+      "detail": "wallet chain 100"
+    },
+    {
+      "name": "Link Solana account via MetaMask Wallet Standard (solana:signMessage)",
+      "ok": true,
+      "detail": "FAYwN5bd8AvxCjUSM9NzJcsd5oABxssuMWQqBUmqjGMK"
+    }
+  ]
+}
