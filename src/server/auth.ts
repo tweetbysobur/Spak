@@ -10,13 +10,17 @@ export const authService = () => (g.__spakAuth ??= getDb().then((db) => new Auth
 
 // ------------------------------------------------------------------ origin and cookies
 
-/** The app's public origin. Set SPAK_APP_ORIGIN in production; otherwise derived from the request. */
+/**
+ * The app's public origin. It goes into every sign-in message, so it must not come from request headers in
+ * production: a phishing site could request a challenge naming its own domain, have the victim sign it there
+ * (the wallet sees a matching domain and shows no warning) and relay the signature here.
+ * Production requires SPAK_APP_ORIGIN. Development uses the Host header.
+ */
 export function appOrigin(req: Request): URL {
   if (process.env.SPAK_APP_ORIGIN) return new URL(process.env.SPAK_APP_ORIGIN);
+  if (process.env.NODE_ENV === "production") throw new Error("SPAK_APP_ORIGIN must be set in production.");
   const u = new URL(req.url);
-  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? u.host;
-  const proto = req.headers.get("x-forwarded-proto") ?? u.protocol.replace(":", "");
-  return new URL(`${proto}://${host}`);
+  return new URL(`${u.protocol}//${req.headers.get("host") ?? u.host}`);
 }
 
 const secureOrigin = (req: Request) => appOrigin(req).protocol === "https:";

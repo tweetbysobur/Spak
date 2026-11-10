@@ -32,9 +32,10 @@ export function buildChallengeMessage(c: ChallengeInput): string {
     });
   }
   // Solana and NEAR: same fields as EIP-4361, plain text (Sign-In With Solana layout).
+  // A NEAR challenge may leave the account open: the wallet picks it and the server binds it at verification.
   return [
     `${c.domain} wants you to sign in with your ${c.family === "solana" ? "Solana" : "NEAR"} account:`,
-    c.address,
+    ...(c.address ? [c.address] : []),
     "",
     statement(c.purpose),
     "",
