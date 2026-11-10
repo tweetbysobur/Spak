@@ -193,22 +193,31 @@ export class ExecutionService {
     return { execution: r, quote: firm, duplicate: false, approval };
   }
 
-  /** Ask NEAR Intents for the current status and move the state machine. */
+  /** Ask NEAR Intents for the current status and move the state machine (user-triggered; rate limited per execution). */
   async refresh(args: { userId: string; executionId: string }) {
     const row = await this.mustGet(args.executionId, args.userId);
+    return (await this.checkProvider(row)).row;
+  }
+
+  /**
+   * One provider status check for an execution row. Used by user refreshes and the background monitor (force).
+   * ok=false means the provider could not be read (timeout, rate limit, outage): nothing about the state changed
+   * except, after a long silence, PROCESSING to UNKNOWN (delayed). A missing status field is not a failure.
+   */
+  async checkProvider(row: ExecutionRow, opts: { force?: boolean } = {}): Promise<{ row: ExecutionRow; ok: boolean; error?: string }> {
     const now = this.clock();
-    if (TERMINAL.has(row.state as ExecutionState) || !row.depositAddress) return row;
-    if (row.lastCheckedAt && now.getTime() - row.lastCheckedAt.getTime() < MIN_STATUS_INTERVAL_MS) return row;
-    let status: string, dest: string[] = [], origin: string[] = [], amountOut: string | null = null, refunded: string | null = null, updatedAt: Date | null = null;
+    if (TERMINAL.has(row.state as ExecutionState) || !row.depositAddress) return { row, ok: true };
+    if (!opts.force && row.lastCheckedAt && now.getTime() - row.lastCheckedAt.getTime() < MIN_STATUS_INTERVAL_MS) return { row, ok: true };
+    let status: string | null, dest: string[] = [], origin: string[] = [], amountOut: string | null = null, refunded: string | null = null, updatedAt: Date | null = null;
     try {
       const s = await this.d.client.status(row.depositAddress, row.depositMemo);
       const firm = row.firmQuoteId ? await this.d.records.getQuote(row.firmQuoteId) : null;
       const sig = s.quoteResponse?.signature;
       if (firm?.providerSignature && sig && sig !== firm.providerSignature) {
         await this.d.records.touch(row.id, { lastCheckedAt: now, lastStatusError: "Status response belongs to a different quote; ignored." });
-        return (await this.d.records.get(row.id))!;
+        return { row: (await this.d.records.get(row.id))!, ok: false, error: "status signature mismatch" };
       }
-      status = s.status;
+      status = s.status ?? null;
       dest = s.swapDetails?.destinationChainTxHashes.map((t) => t.hash) ?? [];
       origin = s.swapDetails?.originChainTxHashes.map((t) => t.hash) ?? [];
       amountOut = s.swapDetails?.amountOut ?? null;
@@ -218,23 +227,35 @@ export class ExecutionService {
       if (e instanceof OneClickError && e.kind === "NOT_FOUND") status = "NOT_FOUND";
       else {
         const lastOk = row.lastSuccessfulCheckAt ?? row.approvedAt ?? row.createdAt;
-        await this.d.records.touch(row.id, { lastCheckedAt: now, lastStatusError: (e as Error).message });
+        const msg = e instanceof OneClickError ? `${e.kind}: ${e.message}` : (e as Error).message;
+        await this.d.records.touch(row.id, { lastCheckedAt: now, lastStatusError: msg.slice(0, 500) });
         if (row.state === "PROCESSING" && now.getTime() - lastOk.getTime() > DELAYED_AFTER_MS) {
-          return (await this.d.records.transition(row.id, "PROCESSING", "UNKNOWN", "No status from NEAR Intents for 30 minutes.")) ?? (await this.d.records.get(row.id))!;
+          const r = await this.d.records.transition(row.id, "PROCESSING", "UNKNOWN", "No status from NEAR Intents for 30 minutes.");
+          return { row: r ?? (await this.d.records.get(row.id))!, ok: false, error: msg };
         }
-        return (await this.d.records.get(row.id))!;
+        return { row: (await this.d.records.get(row.id))!, ok: false, error: msg };
       }
     }
-    const next = stateFromProvider(row.state as ExecutionState, { status, destinationTxHashes: dest, amountOut }, row.depositDeadline, now);
+    const depositConfirmed = await this.d.records.hasConfirmedDeposit(row.id);
+    let next = stateFromProvider(row.state as ExecutionState, { status, destinationTxHashes: dest, amountOut, depositConfirmed }, row.depositDeadline, now);
+    // Delivery already found wrong for these exact destination transactions: stay UNKNOWN until the provider reports new ones.
+    const rec = row.error as { code?: string; destinationTxHashes?: string[] } | null;
+    if (row.state === "UNKNOWN" && next.state === "VERIFYING_DESTINATION" && rec?.code === "NEEDS_RECONCILIATION"
+      && JSON.stringify([...(rec.destinationTxHashes ?? [])].sort()) === JSON.stringify([...dest].sort())) {
+      next = { state: "UNKNOWN", reason: "Needs manual reconciliation." };
+    }
     const patch = {
-      providerStatus: status, providerUpdatedAt: updatedAt, originTxHashes: origin, destinationTxHashes: dest,
-      amountOutSettled: next.state === "COMPLETED" ? amountOut : row.amountOutSettled, refundedAmount: refunded ?? row.refundedAmount,
+      providerStatus: status ?? row.providerStatus, providerUpdatedAt: updatedAt ?? row.providerUpdatedAt,
+      // Keep references already seen: an incomplete response never erases them.
+      originTxHashes: origin.length ? origin : row.originTxHashes, destinationTxHashes: dest.length ? dest : row.destinationTxHashes,
+      // Provider-reported output is informational. The verified amount lives in amountOutVerified.
+      amountOutSettled: amountOut ?? row.amountOutSettled, refundedAmount: refunded ?? row.refundedAmount,
       lastCheckedAt: now, lastSuccessfulCheckAt: now, lastStatusError: null,
     };
     const r = await this.d.records.transition(row.id, row.state as ExecutionState, next.state, next.reason, patch, next.state !== row.state ? { providerStatus: status } : {});
     if (r && next.state === "EXPIRED" && row.firmQuoteId) await this.d.records.setQuoteStatus(row.firmQuoteId, "EXPIRED");
-    if (r && ["COMPLETED", "REFUNDED", "FAILED"].includes(next.state) && row.firmQuoteId) await this.d.records.setQuoteStatus(row.firmQuoteId, "USED");
-    return r ?? (await this.d.records.get(row.id))!;
+    if (r && ["VERIFYING_DESTINATION", "REFUNDED", "FAILED"].includes(next.state) && row.firmQuoteId) await this.d.records.setQuoteStatus(row.firmQuoteId, "USED");
+    return { row: r ?? (await this.d.records.get(row.id))!, ok: true };
   }
 
   /** Cancel before any deposit. A deposit already sent is settled or refunded by the provider. */
@@ -302,7 +323,7 @@ export function toExecutionView(r: ExecutionRow, allQuotes: QuoteRow[], events: 
     id: r.id, state: r.state, provider: r.provider,
     plan: { planId: r.planId, planHash: r.planHash, intentId: r.intentId, revision: r.planRevision },
     source: { network: r.sourceNetwork, assetId: r.sourceAssetId, amountIn: r.amountIn },
-    destination: { network: r.destinationNetwork, assetId: r.destinationAssetId, amountOutSettled: r.amountOutSettled },
+    destination: { network: r.destinationNetwork, assetId: r.destinationAssetId, amountOutSettled: r.amountOutSettled, amountOutVerified: r.amountOutVerified, verifiedAt: r.destinationVerifiedAt?.toISOString() ?? null },
     recipient: { address: r.recipient, kind: r.recipientKind }, refundAddress: r.refundAddress,
     currentQuoteId: r.currentQuoteId, firmQuoteId: r.firmQuoteId, approvedAt: r.approvedAt?.toISOString() ?? null,
     deposit: r.depositAddress && r.state === "AWAITING_DEPOSIT"

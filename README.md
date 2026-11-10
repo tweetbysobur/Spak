@@ -68,3 +68,7 @@ Without `DATABASE_URL`, local development uses an embedded PGlite database in `.
 ## Deposits
 
 Approval and deposit flow: see [docs/SPAK-DEPOSIT-FLOW.md](docs/SPAK-DEPOSIT-FLOW.md).
+
+## Tracking
+
+Background monitoring and destination verification: see [docs/SPAK-TRACKING.md](docs/SPAK-TRACKING.md).

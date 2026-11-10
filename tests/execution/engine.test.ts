@@ -205,14 +205,14 @@ describe("status tracking", () => {
   const setup = async () => { const x = await create(); const a = await approve(x); return { id: x.execution.id, dep: a.execution.depositAddress!, sig: a.quote!.providerSignature! }; };
   const step = async (id: string) => { h.clock.now += 5_000; return h.svc.refresh({ userId: u.userId, executionId: id }); };
 
-  it("404 before deposit keeps waiting; deposit seen -> PROCESSING; SUCCESS with destination tx -> COMPLETED", async () => {
+  it("404 before deposit keeps waiting; deposit seen -> PROCESSING; SUCCESS with destination tx -> VERIFYING_DESTINATION (never COMPLETED from the provider)", async () => {
     const { id, dep, sig } = await setup();
     expect((await step(id)).state).toBe("AWAITING_DEPOSIT");
     h.fake.statuses.set(dep, statusPayload("KNOWN_DEPOSIT_TX", {}, sig));
     expect((await step(id)).state).toBe("PROCESSING");
     h.fake.statuses.set(dep, statusPayload("SUCCESS", { amountOut: "600000000", destinationChainTxHashes: [{ hash: "5xSol", explorerUrl: "x" }] }, sig));
     const done = await step(id);
-    expect(done).toMatchObject({ state: "COMPLETED", amountOutSettled: "600000000", destinationTxHashes: ["5xSol"] });
+    expect(done).toMatchObject({ state: "VERIFYING_DESTINATION", amountOutSettled: "600000000", amountOutVerified: null, destinationTxHashes: ["5xSol"] });
   });
   it("accepts the live PENDING_DEPOSIT shape (200 with null fields, captured 2026-11-10)", async () => {
     const { id, dep, sig } = await setup();
@@ -247,7 +247,7 @@ describe("status tracking", () => {
     h.clock.now += 31 * 60_000;
     expect((await step(id)).state).toBe("UNKNOWN");
     h.fake.statuses.set(dep, statusPayload("SUCCESS", { amountOut: "5", destinationChainTxHashes: [{ hash: "y" }] }, sig));
-    expect((await step(id)).state).toBe("COMPLETED");
+    expect((await step(id)).state).toBe("VERIFYING_DESTINATION");
   });
   it("cancel works before deposit, not after", async () => {
     const a = await setup();

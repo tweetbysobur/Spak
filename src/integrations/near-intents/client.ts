@@ -86,7 +86,7 @@ export const ONECLICK_STATUSES = ["KNOWN_DEPOSIT_TX", "PENDING_DEPOSIT", "INCOMP
 const txs = z.array(z.object({ hash: z.string(), explorerUrl: z.string().nullish() })).default([]);
 export const statusResponseSchema = z.object({
   correlationId: z.string().nullish(),
-  status: z.string(),
+  status: z.string().nullish(), // missing status is kept as "no information", never as failure
   updatedAt: z.string().nullish(),
   quoteResponse: z.object({ signature: z.string().nullish(), quote: z.object({ depositAddress: z.string().nullish() }).passthrough().nullish() }).passthrough().nullish(),
   swapDetails: z.object({

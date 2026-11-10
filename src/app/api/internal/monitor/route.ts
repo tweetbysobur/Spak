@@ -1,0 +1,36 @@
+import { createHash, timingSafeEqual } from "node:crypto";
+import { NextResponse } from "next/server";
+import { spak } from "@/server/spak";
+
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
+/**
+ * Internal monitoring endpoint. Called by Vercel Cron (Authorization: Bearer $CRON_SECRET) or an external scheduler
+ * (Bearer $SPAK_MONITOR_SECRET). No cookies, no browser use. Fails closed when no secret is configured.
+ */
+function authorized(req: Request): boolean | null {
+  const secrets = [process.env.CRON_SECRET, process.env.SPAK_MONITOR_SECRET].filter((s): s is string => !!s && s.length >= 16);
+  if (!secrets.length) return null;
+  const got = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
+  if (!got) return false;
+  const h = (s: string) => createHash("sha256").update(s).digest();
+  return secrets.some((s) => timingSafeEqual(h(s), h(got)));
+}
+
+async function run(req: Request) {
+  const ok = authorized(req);
+  if (ok === null) return NextResponse.json({ error: { code: "MONITOR_NOT_CONFIGURED" } }, { status: 503 });
+  if (!ok) return NextResponse.json({ error: { code: "UNAUTHORIZED" } }, { status: 401 });
+  const trigger = req.headers.get("user-agent")?.includes("vercel-cron") ? "vercel-cron" : "scheduler";
+  try {
+    const summary = await (await spak()).monitor.run({ trigger, limit: 25, budgetMs: 45_000 });
+    return NextResponse.json(summary);
+  } catch (e) {
+    console.error("[spak-monitor] run failed", (e as Error).message);
+    return NextResponse.json({ error: { code: "MONITOR_FAILED" } }, { status: 500 });
+  }
+}
+
+export const GET = run;
+export const POST = run;

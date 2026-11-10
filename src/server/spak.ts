@@ -5,6 +5,7 @@ import { oneClickFromEnv } from "@/integrations/near-intents";
 import { getDb, PgAuditLog, PgIntentLog, PgSessionStore } from "@/database";
 import { ExecutionError, ExecutionRecords, ExecutionService, IntentLogPlanStore } from "@/execution";
 import { DepositRecords, DepositService, httpChainRpc } from "@/deposits";
+import { DestinationVerifier, ExecutionMonitor, TrackingRecords, TrackingService } from "@/tracking";
 import { AuthError } from "@/auth/types";
 import { authService, requireUser, route } from "./auth";
 
@@ -26,8 +27,18 @@ async function build() {
   const audit = new PgAuditLog(db);
   const execution = new ExecutionService({ client, records: executionRecords, plans: new IntentLogPlanStore(db), audit });
   // Deposits extend the same execution engine: same records, same provider client, plus source-chain RPC.
-  const deposits = new DepositService({ records: new DepositRecords(db), executions: executionRecords, executionService: execution, rpc: httpChainRpc(), client, audit });
-  return { engine, execution, deposits };
+  const rpc = httpChainRpc();
+  const depositRecords = new DepositRecords(db);
+  const deposits = new DepositService({ records: depositRecords, executions: executionRecords, executionService: execution, rpc, client, audit });
+  // Tracking: background monitor and destination-chain verification over the same records. Not a second engine.
+  const tracking = new TrackingRecords(db);
+  const destination = new DestinationVerifier({ executions: executionRecords, tracking, rpc, audit });
+  const monitor = new ExecutionMonitor({
+    tracking, executions: executionRecords, execution, deposits, depositRecords, destination,
+    log: (msg, data) => console.warn(`[spak-monitor] ${msg}`, JSON.stringify(data ?? {})),
+  });
+  const trackingService = new TrackingService({ executions: executionRecords, execution, tracking, depositRecords, destination });
+  return { engine, execution, deposits, monitor, tracking: trackingService };
 }
 
 const g = globalThis as unknown as { __spak?: ReturnType<typeof build> };

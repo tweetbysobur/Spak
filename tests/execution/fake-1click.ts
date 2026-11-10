@@ -17,7 +17,7 @@ export type FakeMode =
 export class Fake1Click {
   mode: FakeMode = "ok";
   /** depositAddress -> status payload (or "404"). */
-  statuses = new Map<string, Record<string, unknown> | "404" | "500">();
+  statuses = new Map<string, Record<string, unknown> | "404" | "500" | "429">();
   tokenOverrides: Record<string, Partial<{ decimals: number; blockchain: string; contractAddress: string }>> = {};
   delistedAssets = new Set<string>();
   calls: { path: string; body?: unknown }[] = [];
@@ -51,6 +51,7 @@ export class Fake1Click {
       const s = this.statuses.get(u.searchParams.get("depositAddress") ?? "");
       if (!s || s === "404") return json(404, { message: "Deposit address not found", statusCode: 404 });
       if (s === "500") return json(500, { message: "internal" });
+      if (s === "429") return json(429, { message: "Too many requests" });
       return json(200, s);
     }
     if (u.pathname !== "/v0/quote") return json(404, { message: "not found" });

@@ -176,6 +176,15 @@ export const executions = pgTable("spak_executions", {
   lastSuccessfulCheckAt: timestamp("last_successful_check_at", { withTimezone: true }),
   lastStatusError: text("last_status_error"),
   error: jsonb("error"),
+  /** Destination delivery verified by SPak on the destination chain (sum received by the recipient). */
+  amountOutVerified: text("amount_out_verified"),
+  destinationVerifiedAt: timestamp("destination_verified_at", { withTimezone: true }),
+  /** Background monitor: lease (atomic claim), schedule, consecutive failures, and give-up marker. */
+  monitorLeaseOwner: text("monitor_lease_owner"),
+  monitorLeaseUntil: timestamp("monitor_lease_until", { withTimezone: true }),
+  monitorNextAt: timestamp("monitor_next_at", { withTimezone: true }),
+  monitorFailures: integer("monitor_failures").notNull().default(0),
+  monitorGaveUpAt: timestamp("monitor_gave_up_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 }, (t) => [
@@ -184,6 +193,7 @@ export const executions = pgTable("spak_executions", {
   uniqueIndex("spak_executions_deposit_uq").on(t.depositAddress),
   index("spak_executions_user_idx").on(t.userId, t.createdAt),
   index("spak_executions_fp_idx").on(t.userId, t.fingerprint, t.createdAt),
+  index("spak_executions_monitor_idx").on(t.state, t.monitorNextAt),
 ]);
 
 /** Every quote received from the provider, indicative or firm, with the provider's signature for disputes. */
@@ -302,3 +312,56 @@ export const depositEvents = pgTable("spak_deposit_events", {
   reason: text("reason").notNull(),
   data: jsonb("data").notNull().default({}),
 }, (t) => [index("spak_deposit_events_dep_idx").on(t.depositId, t.at)]);
+
+/**
+ * One row per destination-chain transaction the provider reported for an execution, with SPak's own
+ * verification of it. A destination transaction can belong to one execution only.
+ */
+export const destinationVerifications = pgTable("spak_destination_verifications", {
+  id: text("id").primaryKey(),
+  executionId: text("execution_id").notNull().references(() => executions.id, { onDelete: "cascade" }),
+  network: text("network").notNull(),
+  txHash: text("tx_hash").notNull(),
+  /** CONFIRMED | PENDING | NOT_FOUND | FAILED | NO_TRANSFER | UNVERIFIABLE | ERROR */
+  outcome: text("outcome").notNull(),
+  recipient: text("recipient").notNull(),
+  assetId: text("asset_id").notNull(),
+  tokenContract: text("token_contract"),
+  receivedAmount: text("received_amount"),
+  confirmations: integer("confirmations"),
+  problems: jsonb("problems").notNull().default([]),
+  observed: jsonb("observed").notNull().default({}),
+  attempts: integer("attempts").notNull().default(0),
+  firstCheckedAt: timestamp("first_checked_at", { withTimezone: true }).notNull(),
+  lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }).notNull(),
+  verifiedAt: timestamp("verified_at", { withTimezone: true }),
+}, (t) => [
+  uniqueIndex("spak_dest_verif_tx_uq").on(t.network, t.txHash),
+  index("spak_dest_verif_exec_idx").on(t.executionId),
+]);
+
+/** Every background monitoring attempt, for audit and reconciliation. */
+export const monitorAttempts = pgTable("spak_monitor_attempts", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  executionId: text("execution_id").notNull().references(() => executions.id, { onDelete: "cascade" }),
+  workerId: text("worker_id").notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  /** OK | RETRY | GAVE_UP | ERROR */
+  outcome: text("outcome"),
+  fromState: text("from_state").notNull(),
+  toState: text("to_state"),
+  detail: text("detail"),
+}, (t) => [index("spak_monitor_attempts_exec_idx").on(t.executionId, t.startedAt)]);
+
+/** Monitoring runs (one per cron or worker invocation). */
+export const monitorRuns = pgTable("spak_monitor_runs", {
+  id: text("id").primaryKey(),
+  trigger: text("trigger").notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  claimed: integer("claimed").notNull().default(0),
+  processed: integer("processed").notNull().default(0),
+  failed: integer("failed").notNull().default(0),
+  error: text("error"),
+}, (t) => [index("spak_monitor_runs_started_idx").on(t.startedAt)]);

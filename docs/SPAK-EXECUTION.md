@@ -144,3 +144,7 @@ Live results (2026-11-10, no funds sent): asset resolution against the live toke
 ## Phase 3
 
 Approval now requires the firm quote. Deposits are tracked separately. See SPAK-DEPOSIT-FLOW.md.
+
+## Phase 4
+
+COMPLETED now requires SPak's own destination-chain verification. New state VERIFYING_DESTINATION. Background monitoring. See SPAK-TRACKING.md.

@@ -38,8 +38,11 @@ describe("state machine", () => {
   it("never completes without destination proof", () => {
     const now = new Date();
     expect(stateFromProvider("PROCESSING", { status: "SUCCESS", destinationTxHashes: [], amountOut: "1" }, null, now).state).toBe("PROCESSING");
-    expect(stateFromProvider("PROCESSING", { status: "SUCCESS", destinationTxHashes: ["h"], amountOut: null }, null, now).state).toBe("PROCESSING");
-    expect(stateFromProvider("PROCESSING", { status: "SUCCESS", destinationTxHashes: ["h"], amountOut: "1" }, null, now).state).toBe("COMPLETED");
+    expect(stateFromProvider("PROCESSING", { status: "SUCCESS", destinationTxHashes: ["h"], amountOut: null }, null, now).state).toBe("VERIFYING_DESTINATION");
+    expect(stateFromProvider("PROCESSING", { status: "SUCCESS", destinationTxHashes: ["h"], amountOut: "1" }, null, now).state).toBe("VERIFYING_DESTINATION"); // never COMPLETED from the provider
+    expect(stateFromProvider("AWAITING_DEPOSIT", { status: null, destinationTxHashes: [], amountOut: null }, null, now).state).toBe("AWAITING_DEPOSIT"); // missing status: no change
+    expect(stateFromProvider("AWAITING_DEPOSIT", { status: "PENDING_DEPOSIT", destinationTxHashes: [], amountOut: null, depositConfirmed: true }, new Date(0), now).state).toBe("PROCESSING"); // confirmed deposit never expires
+    expect(stateFromProvider("VERIFYING_DESTINATION", { status: "FAILED", destinationTxHashes: [], amountOut: null }, null, now).state).toBe("VERIFYING_DESTINATION");
     expect(stateFromProvider("AWAITING_DEPOSIT", { status: "SOMETHING_NEW", destinationTxHashes: [], amountOut: null }, null, now).state).toBe("UNKNOWN");
   });
 });

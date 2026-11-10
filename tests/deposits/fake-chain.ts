@@ -14,6 +14,7 @@ export class FakeChain implements ChainRpc {
   evm = new Map<string, { tx: Record<string, unknown>; receipt: Record<string, unknown> | null }>();
   sol = new Map<string, { status: Record<string, unknown> | null; tx: Record<string, unknown> | null }>();
   near = new Map<string, Record<string, unknown>>();
+  nearReceipts = new Map<string, Record<string, unknown>>();
   balances = new Map<string, bigint>(); // key: network|owner|token-or-native
   mintOwner = TOKEN_PROGRAM;
 
@@ -43,6 +44,12 @@ export class FakeChain implements ChainRpc {
       case "tx": {
         const r = this.near.get((params as { tx_hash: string }).tx_hash);
         if (!r) throw new RpcAnswerError("UNKNOWN_TRANSACTION", "Transaction doesn't exist");
+        return r as T;
+      }
+      case "EXPERIMENTAL_tx_status": {
+        const q = params as { tx_hash: string; sender_account_id: string };
+        const r = this.nearReceipts.get(q.tx_hash);
+        if (!r || r.signer !== q.sender_account_id) throw new RpcAnswerError("UNKNOWN_TRANSACTION", "Transaction doesn't exist");
         return r as T;
       }
       case "query": {
@@ -85,6 +92,17 @@ export class FakeChain implements ChainRpc {
       status: o.failure ? { Failure: { ActionError: {} } } : { SuccessValue: "" },
       transaction: { signer_id: o.signer, receiver_id: o.receiver, actions: o.actions },
       receipts_outcome: [{ outcome: { status: o.failure ? { Failure: {} } : { SuccessValue: "" } } }],
+    });
+  }
+
+  /** Register a NEAR transaction with receipts (destination delivery shape). */
+  nearRxTx(hash: string, o: { signer?: string; receipts: { id: string; receiver: string; predecessor?: string; actions: unknown[]; failed?: boolean }[]; final?: boolean; failure?: boolean }) {
+    this.nearReceipts.set(hash, {
+      signer: o.signer ?? "intents.near",
+      final_execution_status: o.final === false ? "EXECUTED_OPTIMISTIC" : "FINAL",
+      status: o.failure ? { Failure: {} } : { SuccessValue: "" },
+      receipts: o.receipts.map((r) => ({ receipt_id: r.id, receiver_id: r.receiver, predecessor_id: r.predecessor ?? "intents.near", receipt: { Action: { actions: r.actions } } })),
+      receipts_outcome: o.receipts.map((r) => ({ id: r.id, outcome: { status: r.failed ? { Failure: {} } : { SuccessValue: "" } } })),
     });
   }
 }

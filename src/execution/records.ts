@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gte, inArray, isNull, lt, max, ne } from "drizzle-orm";
 import type { Db } from "../database/repositories";
-import { approvals, executionEvents, executions, intents, quotes } from "../database/schema";
+import { approvals, deposits, executionEvents, executions, intents, quotes } from "../database/schema";
 import type { IntentResult } from "../spak-in/schemas/result";
 import type { ExecutionPlan } from "../spak-in/schemas/plan";
 import type { IssuedPlan, PlanStore } from "./plan-validator";
@@ -97,6 +97,12 @@ export class ExecutionRecords {
       }
       return r;
     });
+  }
+
+  /** True when SPak verified a source deposit for this execution on chain. */
+  async hasConfirmedDeposit(executionId: string): Promise<boolean> {
+    const [r] = await this.db.select({ id: deposits.id }).from(deposits).where(and(eq(deposits.executionId, executionId), eq(deposits.state, "CONFIRMED"))).limit(1);
+    return !!r;
   }
 
   /** Field updates that do not change state (status-check bookkeeping). */

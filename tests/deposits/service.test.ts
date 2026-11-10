@@ -67,7 +67,8 @@ describe("submit and verify", () => {
     h.clock.now += 10_000;
     const v = await h.deposits.verify({ userId: u.userId, depositId: p.deposit.id });
     expect(v.state).toBe("CONFIRMED");
-    expect(await code(prep(ex))).toBe("DEPOSIT_IN_PROGRESS"); // no double funding
+    // No double funding: the confirmed deposit moved the execution out of AWAITING_DEPOSIT.
+    expect(await code(prep(ex))).toBe("DEPOSIT_NOT_ALLOWED");
   });
   it("rejects wrong amount, wrong address, wrong asset", async () => {
     for (const [i, setup] of [
