@@ -137,8 +137,11 @@ for v in V:
     v['ratio'] = round(cr(v['foreground'], v['background']), 2); v['minimum'] = REQ[v['requirement']]
     v['result'] = 'exempt' if v['expect'] == 'exempt' else ('pass' if v['ratio'] >= v['minimum'] else 'fail')
 
+# Art direction (decorative only, never text or meaningful UI): second band tone for compositions on Forest Green.
+ART = {'bandTone': {'hex': '#1E5640', 'use': 'Second tone for diagonal band compositions on Forest Green. Decorative only; never text, icons or borders',
+                    'contrastWithForest': round(cr('#1E5640', FG), 2)}}
 out = {'version': '1.0.0', 'generatedBy': 'scripts/brand/build_colors.py', 'standard': 'WCAG 2.x contrast (text 4.5:1, large text 3:1, UI components and graphics 3:1)',
-       'brand': BRAND, 'semantic': semantic, 'themes': themes, 'stateRoles': STATE_MAP, 'validation': V}
+       'brand': BRAND, 'semantic': semantic, 'themes': themes, 'art': ART, 'stateRoles': STATE_MAP, 'validation': V}
 p = os.path.join(ROOT, 'src/design/colors.json'); os.makedirs(os.path.dirname(p), exist_ok=True)
 json.dump(out, open(p, 'w'), indent=2); open(p, 'a').write('\n')
 bad = [v for v in V if v['result'] != v['expect'] and v['expect'] != 'exempt']

@@ -1,0 +1,346 @@
+{
+  "version": "1.0.0",
+  "generatedBy": "scripts/brand/build_inventory.py",
+  "assets": [
+    {
+      "path": "public/brand/references/spak-symbol-reference.png",
+      "kind": "reference",
+      "format": "png",
+      "dimensions": "1254x1254",
+      "bytes": 1149259,
+      "sha256": "791134a74d91c035b3f226ee98cae3dd1999b880bbe969474b38960726eb63f0",
+      "purpose": "Approved symbol direction (original upload, uncompressed). Never used in products",
+      "approved": true
+    },
+    {
+      "path": "public/brand/logo/spak-logo-horizontal-dark.svg",
+      "kind": "logo",
+      "format": "svg",
+      "dimensions": "290.87 x 100 (viewBox)",
+      "bytes": 2723,
+      "sha256": "f8d6408949f3911494521af579e032d23f7fb05194b15101a2aad01ef866267e",
+      "purpose": "Primary logo, dark surfaces (Muted Sage symbol, Warm White wordmark)",
+      "approved": true
+    },
+    {
+      "path": "public/brand/logo/spak-logo-horizontal-mono-black.svg",
+      "kind": "logo",
+      "format": "svg",
+      "dimensions": "290.87 x 100 (viewBox)",
+      "bytes": 2723,
+      "sha256": "463ba33bdd85d50d5a4512907aa7337dd8121bc452ee535ac1848bd2fe69702a",
+      "purpose": "Single colour black (print, engraving)",
+      "approved": true
+    },
+    {
+      "path": "public/brand/logo/spak-logo-horizontal-mono-graphite.svg",
+      "kind": "logo",
+      "format": "svg",
+      "dimensions": "290.87 x 100 (viewBox)",
+      "bytes": 2723,
+      "sha256": "d0cc5a2ce9513448cbcf2ca7e9d1a483807b724d781c4a915e16fa81f5f5b8ca",
+      "purpose": "Single colour Graphite",
+      "approved": true
+    },
+    {
+      "path": "public/brand/logo/spak-logo-horizontal-mono-white.svg",
+      "kind": "logo",
+      "format": "svg",
+      "dimensions": "290.87 x 100 (viewBox)",
+      "bytes": 2723,
+      "sha256": "f39aef9d2142841c1c06760be2e887a6cc372b6355dce808cdef6a7df63bf176",
+      "purpose": "Single colour Warm White (Forest Green, Graphite, photos)",
+      "approved": true
+    },
+    {
+      "path": "public/brand/logo/spak-logo-horizontal.svg",
+      "kind": "logo",
+      "format": "svg",
+      "dimensions": "290.87 x 100 (viewBox)",
+      "bytes": 2723,
+      "sha256": "d9c016d322f4508991a7a1c7b4dfd1e380c268075dc29a90e48fb63696455a0b",
+      "purpose": "Primary logo, light surfaces",
+      "approved": true
+    },
+    {
+      "path": "public/brand/logo/spak-logo-stacked-dark.svg",
+      "kind": "logo",
+      "format": "svg",
+      "dimensions": "147.27 x 175.47 (viewBox)",
+      "bytes": 2740,
+      "sha256": "9222bf537852de8c3d861320f6f8a10c82ae8e7ba251f08c186884ac6c703ebe",
+      "purpose": "Stacked lockup, dark surfaces",
+      "approved": true
+    },
+    {
+      "path": "public/brand/logo/spak-logo-stacked.svg",
+      "kind": "logo",
+      "format": "svg",
+      "dimensions": "147.27 x 175.47 (viewBox)",
+      "bytes": 2740,
+      "sha256": "007a749d42957013a25bc08f37cbfb2d0564bc695b91031e687cec1e2cef337e",
+      "purpose": "Stacked lockup, light surfaces",
+      "approved": true
+    },
+    {
+      "path": "public/brand/logo/spak-symbol-dark.svg",
+      "kind": "symbol",
+      "format": "svg",
+      "dimensions": "113.6 x 100 (viewBox)",
+      "bytes": 557,
+      "sha256": "252a40c126d27fdce2cffec8ebf268a8cc8dae3ca9efd5db49691de9b183386c",
+      "purpose": "Symbol, Muted Sage for Graphite surfaces",
+      "approved": true
+    },
+    {
+      "path": "public/brand/logo/spak-symbol-mono-black.svg",
+      "kind": "symbol",
+      "format": "svg",
+      "dimensions": "113.6 x 100 (viewBox)",
+      "bytes": 557,
+      "sha256": "70f052efe21b9dfff14afbc4a85b668a7c88567e0060d144fbb63f40a9d018de",
+      "purpose": "Symbol, black",
+      "approved": true
+    },
+    {
+      "path": "public/brand/logo/spak-symbol-mono-graphite.svg",
+      "kind": "symbol",
+      "format": "svg",
+      "dimensions": "113.6 x 100 (viewBox)",
+      "bytes": 557,
+      "sha256": "de37f52de7a9c8564d2545ad3468fef8fadfb669194e23356856f28daddac62c",
+      "purpose": "Symbol, Graphite",
+      "approved": true
+    },
+    {
+      "path": "public/brand/logo/spak-symbol-small.svg",
+      "kind": "symbol",
+      "format": "svg",
+      "dimensions": "113.6 x 100 (viewBox)",
+      "bytes": 500,
+      "sha256": "8a23e686cdc8c5d0b9ec0c27a21b32f8216908a671296a7d34aa281f32083dd3",
+      "purpose": "Optical-size symbol without the leaf, 16-24 px only",
+      "approved": true
+    },
+    {
+      "path": "public/brand/logo/spak-symbol-white.svg",
+      "kind": "symbol",
+      "format": "svg",
+      "dimensions": "113.6 x 100 (viewBox)",
+      "bytes": 557,
+      "sha256": "768356f95509a7cc5ae653b69d5923982f9f6ed5ed88dbe0f9db27d422ea99d2",
+      "purpose": "Symbol, Warm White for Forest Green surfaces",
+      "approved": true
+    },
+    {
+      "path": "public/brand/logo/spak-symbol.svg",
+      "kind": "symbol",
+      "format": "svg",
+      "dimensions": "113.6 x 100 (viewBox)",
+      "bytes": 557,
+      "sha256": "3bcd4874b43de5ebd33a9e13f3a4ee03ef0b28996fd432286a6188ccab3a2d25",
+      "purpose": "Master symbol, Forest Green",
+      "approved": true
+    },
+    {
+      "path": "public/brand/logo/spak-wordmark-dark.svg",
+      "kind": "wordmark",
+      "format": "svg",
+      "dimensions": "147.27 x 47.47 (viewBox)",
+      "bytes": 2329,
+      "sha256": "5a5c075626f5cfe768c690a187fddc1e0e5ea63add5de1bdbbf59ee5404888ea",
+      "purpose": "Wordmark, Warm White",
+      "approved": true
+    },
+    {
+      "path": "public/brand/logo/spak-wordmark-green.svg",
+      "kind": "wordmark",
+      "format": "svg",
+      "dimensions": "147.27 x 47.47 (viewBox)",
+      "bytes": 2329,
+      "sha256": "157d0697ea7d4220ac6790f4f04a333a54fd48f59e5dc871ecb25cebd2bfa2f3",
+      "purpose": "Wordmark, Forest Green",
+      "approved": true
+    },
+    {
+      "path": "public/brand/logo/spak-wordmark-mono-black.svg",
+      "kind": "wordmark",
+      "format": "svg",
+      "dimensions": "147.27 x 47.47 (viewBox)",
+      "bytes": 2329,
+      "sha256": "ca6884ce28b658f37dd77e18e37c9c51e8a0b87d86915f5e0ba795b8fdb2e166",
+      "purpose": "Wordmark, black",
+      "approved": true
+    },
+    {
+      "path": "public/brand/logo/spak-wordmark.svg",
+      "kind": "wordmark",
+      "format": "svg",
+      "dimensions": "147.27 x 47.47 (viewBox)",
+      "bytes": 2329,
+      "sha256": "da5047d495bafaf622602ab550a407034d657a0a2c6ac984e3b0cdbd3d6a6878",
+      "purpose": "Wordmark, Graphite",
+      "approved": true
+    },
+    {
+      "path": "public/brand/icons/apple-touch-icon.png",
+      "kind": "icon",
+      "format": "png",
+      "dimensions": "180x180",
+      "bytes": 2802,
+      "sha256": "1d28b89b9380b71241c5cc1d7cf43532f75b53f2ca3b9b0c8711f83b5d18ebdf",
+      "purpose": "Apple touch icon 180",
+      "approved": true
+    },
+    {
+      "path": "public/brand/icons/favicon-full.svg",
+      "kind": "icon",
+      "format": "svg",
+      "dimensions": "512 x 512 (viewBox)",
+      "bytes": 690,
+      "sha256": "135fb2269750ab15bd4e4b2810ccf6ecbabcdef767c9bcfb732bd8256d6794bc",
+      "purpose": "Favicon with leaf, 32 px and up",
+      "approved": true
+    },
+    {
+      "path": "public/brand/icons/favicon.ico",
+      "kind": "icon",
+      "format": "ico",
+      "dimensions": "16x16, 32x32, 48x48",
+      "bytes": 2925,
+      "sha256": "19b31b0d7430aa90ec52cd2c8c94def4a3f187476d067c7b2472577035e4a2ca",
+      "purpose": "Favicon 16/32/48",
+      "approved": true
+    },
+    {
+      "path": "public/brand/icons/favicon.svg",
+      "kind": "icon",
+      "format": "svg",
+      "dimensions": "512 x 512 (viewBox)",
+      "bytes": 595,
+      "sha256": "cac8fc17cb74eec4c81c8451a1cbcd6301ee4e23740f449bb56de21cab7bb93f",
+      "purpose": "Favicon, small-size symbol",
+      "approved": true
+    },
+    {
+      "path": "public/brand/icons/icon-192.png",
+      "kind": "icon",
+      "format": "png",
+      "dimensions": "192x192",
+      "bytes": 2998,
+      "sha256": "e65203deb207d0e4714871afae9b8245da2f2bf5e9d471d54e7ef9b7fbc2a4eb",
+      "purpose": "Web app manifest 192",
+      "approved": true
+    },
+    {
+      "path": "public/brand/icons/icon-512.png",
+      "kind": "icon",
+      "format": "png",
+      "dimensions": "512x512",
+      "bytes": 8051,
+      "sha256": "5df8f3d13e49b1ddcc251a52e4df4fba39c49b02b17127ea509e14ad73e68bd2",
+      "purpose": "Web app manifest 512",
+      "approved": true
+    },
+    {
+      "path": "public/brand/icons/spak-app-icon-1024.png",
+      "kind": "icon",
+      "format": "png",
+      "dimensions": "1024x1024",
+      "bytes": 32793,
+      "sha256": "84561af71eeb20090ed6c008fced1dd07cc503bb17b9f8fca0fd54fe1592c752",
+      "purpose": "App icon raster 1024 (store listings)",
+      "approved": true
+    },
+    {
+      "path": "public/brand/icons/spak-app-icon-512.png",
+      "kind": "icon",
+      "format": "png",
+      "dimensions": "512x512",
+      "bytes": 13974,
+      "sha256": "3090778ccb73a11bfe25f0e88a34e0b81d3f1a3335e7cf3fb39bc04e590ad0c1",
+      "purpose": "App icon raster 512",
+      "approved": true
+    },
+    {
+      "path": "public/brand/icons/spak-app-icon-square.svg",
+      "kind": "icon",
+      "format": "svg",
+      "dimensions": "512 x 512 (viewBox)",
+      "bytes": 673,
+      "sha256": "478671a66db6539fbf8d21c9f96aa8397b4070db27d1b9b90852e95ce39b79ce",
+      "purpose": "App icon, full-bleed square (platform masks)",
+      "approved": true
+    },
+    {
+      "path": "public/brand/icons/spak-app-icon.svg",
+      "kind": "icon",
+      "format": "svg",
+      "dimensions": "512 x 512 (viewBox)",
+      "bytes": 701,
+      "sha256": "998edc37dd0ea2e0a64c500d378b9b4109c4abc8955bb1c9120a0fa03e8280b9",
+      "purpose": "App icon, rounded tile",
+      "approved": true
+    },
+    {
+      "path": "public/brand/board/spak-brand-board.html",
+      "kind": "board",
+      "format": "html",
+      "dimensions": null,
+      "bytes": 73063,
+      "sha256": "3003f7ee95b06bf9976ca699f7541cf22a47ecd5cd5c2a7ef8fa98ce881a5f5a",
+      "purpose": "Brand reference board (generated by scripts/brand/build_board.py)",
+      "approved": false
+    },
+    {
+      "path": "public/brand/previews/spak-brand-board.png",
+      "kind": "preview",
+      "format": "png",
+      "dimensions": "2880x8880",
+      "bytes": 1319745,
+      "sha256": "539183d5b1db087108d5d30a924ea7abc77975707d1b492489d5baee8cf8055d",
+      "purpose": "Brand reference board render (2x)",
+      "approved": false
+    },
+    {
+      "path": "public/brand/previews/spak-logo-horizontal-1200.png",
+      "kind": "preview",
+      "format": "png",
+      "dimensions": "1200x413",
+      "bytes": 30066,
+      "sha256": "11e200391cbc8fa867253f48eb211d415b695023c5f25748b7a2897bc6ca4195",
+      "purpose": "Preview only",
+      "approved": false
+    },
+    {
+      "path": "public/brand/previews/spak-logo-horizontal-dark-1200.png",
+      "kind": "preview",
+      "format": "png",
+      "dimensions": "1200x413",
+      "bytes": 29702,
+      "sha256": "d8c0a5a21d3b302728d49d79c6938cdd63d2fb3e93b96bb99b6a9b7930f0513f",
+      "purpose": "Preview only",
+      "approved": false
+    },
+    {
+      "path": "public/brand/previews/spak-logo-stacked-800.png",
+      "kind": "preview",
+      "format": "png",
+      "dimensions": "800x953",
+      "bytes": 40274,
+      "sha256": "ff1362217959a7861ab6e51b3258eb696211d1904d94f40b9726098430c64e37",
+      "purpose": "Preview only",
+      "approved": false
+    },
+    {
+      "path": "public/brand/previews/spak-symbol-1024.png",
+      "kind": "preview",
+      "format": "png",
+      "dimensions": "1024x901",
+      "bytes": 31586,
+      "sha256": "2142fc475cb038d3a2abee424b0effc9d0c824529e6f135d861653b14e5b2c71",
+      "purpose": "Preview only",
+      "approved": false
+    }
+  ]
+}

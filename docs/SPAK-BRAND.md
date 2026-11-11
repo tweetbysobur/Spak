@@ -1,5 +1,9 @@
 # SPak Brand Identity Board V1.0
 
+> **The authoritative reference is `docs/SPAK-BRAND-GUIDELINES.md`.** This file keeps the original identity board.
+> Detailed sources: `docs/SPAK-LOGO-GUIDELINES.md` · `docs/SPAK-COLOUR-SYSTEM.md` · `docs/SPAK-TYPOGRAPHY.md` · `docs/SPAK-BRAND-ASSETS.md`.
+> Visual board: `public/brand/board/spak-brand-board.html` (render: `public/brand/previews/spak-brand-board.png`).
+
 ## 1. Brand overview
 
 - Brand name: SPak
@@ -113,4 +117,4 @@ SPak must not look like a generic Web3 template. Every major design decision has
 
 ## Current state of the app
 
-The app does not follow this board yet. It uses a dark theme with white, sky, amber and emerald accents and the default font stack. Applying the brand is separate work.
+The identity is defined and its assets are produced (Phases 6.2 to 6.5). The app does not use it yet: it still has its earlier dark theme, sky, amber and emerald accents, and the system font stack. Applying the brand is separate work.

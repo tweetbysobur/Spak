@@ -179,6 +179,13 @@
       "decorativeAccent": "#A7B7A9"
     }
   },
+  "art": {
+    "bandTone": {
+      "hex": "#1E5640",
+      "use": "Second tone for diagonal band compositions on Forest Green. Decorative only; never text, icons or borders",
+      "contrastWithForest": 1.24
+    }
+  },
   "stateRoles": {
     "execution": {
       "DRAFT": "neutral",
