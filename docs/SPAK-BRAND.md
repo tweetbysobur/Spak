@@ -87,6 +87,8 @@ Variations: primary combination mark, standalone symbol, horizontal wordmark, li
 
 Avoid: generic blockchain nodes, predictable network globes, excessive gradients, forced letter combinations.
 
+Status: symbol selected and reconstructed as vector. Files, usage rules and small-size handling are in `docs/SPAK-LOGO-GUIDELINES.md`. Assets live in `public/brand/logo` and `public/brand/icons`.
+
 ## 6. Imagery and illustration
 
 Themes: cross-chain movement, connected ecosystems, transaction pathways, intelligent coordination, digital infrastructure, execution and verification.

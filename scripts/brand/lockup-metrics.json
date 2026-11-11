@@ -1,0 +1,15 @@
+{
+ "symbolHeight": 100.0,
+ "symbolWidth": 113.6,
+ "capHeight": 45.0,
+ "gap": 30.0,
+ "wordmarkWidth": 147.27,
+ "horizontalWidth": 290.87,
+ "tracking": -20,
+ "kerning": {
+  "SP": -6,
+  "Pa": -38,
+  "ak": -4
+ },
+ "font": "Sora SemiBold 600 (SIL OFL 1.1), outlined"
+}
