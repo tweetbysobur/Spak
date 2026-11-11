@@ -37,31 +37,21 @@ Philosophy:
 - Graphite provides strong contrast.
 - Sage and soft green support secondary elements.
 
-### Contrast validation (WCAG 2.x, computed)
+### Completed colour system (Phase 6.3)
 
-AA needs 4.5:1 for body text and 3:1 for large text and interface components. AAA needs 7:1.
+The full system is in `docs/SPAK-COLOUR-SYSTEM.md`. The tokens are in `src/design/colors.json` and tested by `tests/brand/contrast.test.ts`.
 
-| Foreground | Background | Ratio | Result |
-|---|---|---|---|
-| Graphite | Warm White | 14.02 | AAA |
-| Graphite | Soft Green | 12.98 | AAA |
-| Forest Green | Warm White | 9.76 | AAA |
-| Warm White | Forest Green | 9.76 | AAA |
-| Forest Green | Soft Green | 9.03 | AAA |
-| Warm White | Graphite | 14.02 | AAA |
-| Muted Sage | Graphite | 7.22 | AAA |
-| Graphite | Muted Sage | 7.22 | AAA |
-| Muted Sage | Forest Green | 5.03 | AA |
-| Forest Green | Muted Sage | 5.03 | AA |
-| Muted Sage | Warm White | 1.94 | Fails |
-| Muted Sage | Soft Green | 1.80 | Fails |
-
-Rules that follow:
-
-- Muted Sage is never used for text, icons, borders of inputs or any meaningful element on Warm White or Soft Green. On light backgrounds it is decoration only.
-- Muted Sage works as text or accents on Graphite and Forest Green.
-- A darker sage is needed if a secondary text colour is wanted on light backgrounds. To be chosen and validated.
-- Status colours (success, warning, error, pending) are not defined yet. They need their own validated tokens; execution states must not rely on colour alone.
+- The brand palette is unchanged.
+- Added:
+  - Deep Sage #5A6D5C for secondary text: 5.14:1 on Warm White, 4.75:1 on Soft Green.
+  - Mid Sage #708974 for large text, secondary icons and control borders: 3:1 or better.
+  - Light Forest #9CD7BF as the dark-theme primary.
+- Eight semantic roles: success, refunded, error, warning, pending, processing, info, neutral. Each has foreground, background, border and icon values for light and dark themes.
+- Every approved pairing passes WCAG 2.x. The only failing pairs are documented restrictions:
+  - Muted Sage on Warm White or Soft Green, for text or icons.
+  - Forest Green on Graphite.
+  - A focus ring touching the primary button directly, which needs a 2 px offset.
+- Status is never shown by colour alone. Every status has a label, plus an icon wherever space allows.
 
 ## 4. Typography
 
