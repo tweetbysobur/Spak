@@ -32,7 +32,7 @@ export class FailureService {
       refundReason: row.refundReason, quoteStatus: quote?.status ?? null,
       deposits: deps.map((x) => ({ state: x.state, reason: x.reason, txHash: x.txHash })),
       destinations: dest.map((x: DestinationVerificationRow) => ({ outcome: x.outcome, problems: x.problems })),
-      refund: refund ? { state: refund.state, verifiedAmount: refund.verifiedAmount, associatedAmount: refund.associatedAmount, depositedAmount: refund.depositedAmount, providerRefundedAmount: refund.providerRefundedAmount } : null,
+      refund: refund ? { state: refund.state, reconciliation: refund.reconciliation, verifiedAmount: refund.verifiedAmount, associatedAmount: refund.associatedAmount, depositedAmount: refund.depositedAmount, providerRefundedAmount: refund.providerRefundedAmount } : null,
       reviewOpen: !!review, lastErrorCode,
     });
   }
@@ -153,6 +153,9 @@ export function refundView(r: RefundRow) {
     outstandingAmount: r.outstandingAmount,
     providerListedAmount: r.providerListedAmount, // verified transfers NEAR Intents listed; counted only when evidence is CONFIRMED
     evidenceCapability: r.evidenceCapability,
+    quotedRefundFee: r.quotedRefundFee, // from the firm quote; how it relates to refundedAmount is not documented
+    reconciliation: r.reconciliation, reconciliationCheckedAt: r.reconciliationCheckedAt?.toISOString() ?? null, watchUntil: r.watchUntil?.toISOString() ?? null,
+    completionSnapshot: r.completionSnapshot,
     depositTxTimestamp: r.depositTxTimestamp?.toISOString() ?? null,
     partial, reason: r.providerRefundReason, openedAt: r.openedAt.toISOString(), updatedAt: r.updatedAt.toISOString(), completedAt: r.completedAt?.toISOString() ?? null,
   };

@@ -20,7 +20,7 @@ import type { FailureRecords, RefundRow, RefundState, RefundTxRow } from "./reco
  * - No reliable timestamp: TIMING_UNKNOWN. Not counted until the time is known.
  * Timing never associates a transaction with an execution.
  */
-export const REFUND_TIMING = { delayedAfterMs: 6 * 3600_000, reviewAfterMs: 72 * 3600_000, windowAfterDeadlineMs: 7 * 24 * 3600_000 };
+export const REFUND_TIMING = { delayedAfterMs: 6 * 3600_000, reviewAfterMs: 72 * 3600_000, windowAfterDeadlineMs: 7 * 24 * 3600_000, watchAfterCompletionMs: 30 * 24 * 3600_000 };
 export type RefundTiming = "EXPECTED_WINDOW" | "LATE_TRANSACTION" | "EARLY_TRANSACTION" | "TIMING_UNKNOWN";
 
 /**
@@ -92,6 +92,9 @@ export class RefundVerifier {
       executionId: row.id, userId: row.userId, state: row.state === "REFUNDING" ? "INITIATED" : "PENDING_PROVIDER",
       network: row.sourceNetwork, assetId: row.sourceAssetId, refundTo: row.refundAddress, refundType: "ORIGIN_CHAIN", depositedAmount: confirmed?.amount ?? null,
     });
+    const firm = row.firmQuoteId ? await this.d.executions.getQuote(row.firmQuoteId) : null;
+    const fee = (firm?.fees as { kind: string; amount?: string }[] | undefined)?.find((f) => f.kind === "REFUND")?.amount ?? null;
+    if (fee) await this.d.failures.setRefund(row.id, r.state, { quotedRefundFee: fee });
     await this.d.audit?.record({ at: this.now().toISOString(), actor: "spak", event: "REFUND_OPENED", ref: row.id, data: { state: r.state } });
     return r;
   }
@@ -228,7 +231,11 @@ export class RefundVerifier {
     }
     // Completion: provider confirmation + provider-listed + chain-verified + in window, covering the provider's amount.
     if (providerSays && claimed !== null && associated > 0n && associated === claimed && !pendingProvider && row.state === "REFUNDING") {
-      refund = await move("COMPLETED", "REFUND_COMPLETED", { completedAt: now });
+      const snapshot = {
+        at: now.toISOString(), capability, providerStatus: row.providerStatus, providerRefundedAmount: claimed.toString(), associatedAmount: associated.toString(),
+        transactions: all.filter(counted).map((t) => ({ txHash: t.txHash, amount: t.receivedAmount, timing: t.timing })), providerOriginTxHashes: [...providerListed],
+      };
+      refund = await move("COMPLETED", "REFUND_COMPLETED", { completedAt: now, completionSnapshot: snapshot, watchUntil: new Date(now.getTime() + REFUND_TIMING.watchAfterCompletionMs), reconciliation: "CONSISTENT", reconciliationCheckedAt: now });
       const r = await this.d.executions.transition(row.id, "REFUNDING", "REFUNDED", `Refund verified on ${net.name}: ${associated} returned to ${row.refundAddress} in provider-listed transaction(s).`,
         { refundVerifiedAmount: associated.toString(), refundVerifiedAt: now }, { refundVerifiedAmount: associated.toString(), providerRefundedAmount: claimed.toString() });
       await this.d.audit?.record({ at: now.toISOString(), actor: "spak", event: "REFUND_VERIFIED", ref: row.id, data: { amount: associated.toString(), txs: all.filter(counted).map((t) => t.txHash) } });
@@ -247,5 +254,44 @@ export class RefundVerifier {
     if (all.length && all.every((t) => FINAL.has(t.outcome))) return { row, refund: await move("FAILED", "REFUND_FAILED"), ok: true, needsReview: review("Submitted refund transactions show no return of the deposited asset to the refund address.") };
     if (age > REFUND_TIMING.delayedAfterMs && refund.state !== "DELAYED") refund = await move("DELAYED", "REFUND_DELAYED");
     return { row, refund, ok: true, needsReview: review(age > REFUND_TIMING.reviewAfterMs ? "No refund transaction found 72 hours after the refund was expected." : undefined) };
+  }
+
+  /** True while a completed refund is still compared against the provider after completion. */
+  async watchActive(row: ExecutionRow): Promise<boolean> {
+    const r = await this.d.failures.refund(row.id);
+    return !!(r && r.state === "COMPLETED" && r.watchUntil && r.watchUntil.getTime() > this.now().getTime());
+  }
+
+  /**
+   * Post-completion reconciliation. Compares a fresh, read-only provider observation with the completion snapshot.
+   * Discrepancies (status no longer REFUNDED, a different refunded amount, new origin-chain transactions) are logged
+   * and sent to review. The completion record, the counted transactions and the execution state are never changed.
+   */
+  async reconcileCompleted(row: ExecutionRow, obs: { ok: boolean; status: string | null; refundedAmount: string | null; originTxHashes: string[]; error?: string }): Promise<{ ok: boolean; error?: string; needsReview?: string }> {
+    const refund = await this.d.failures.refund(row.id);
+    if (!refund || refund.state !== "COMPLETED") return { ok: true };
+    if (!obs.ok) return { ok: false, error: obs.error };
+    const snap = (refund.completionSnapshot ?? {}) as { providerRefundedAmount?: string; providerOriginTxHashes?: string[] };
+    const net = getNetwork(row.sourceNetwork)!;
+    const known = new Set([...(snap.providerOriginTxHashes ?? []), ...(row.originTxHashes as string[]).map((h) => normalizeTx(net.family, h))]);
+    const deposits = new Set((await this.d.depositRecords.forExecution(row.id)).map((x) => normalizeTx(net.family, x.txHash ?? "")));
+    const problems: string[] = [];
+    if (obs.status && obs.status !== "REFUNDED") problems.push(`provider status is now ${obs.status}, not REFUNDED`);
+    if (obs.refundedAmount && /^\d+$/.test(obs.refundedAmount) && BigInt(obs.refundedAmount) > 0n && snap.providerRefundedAmount && obs.refundedAmount !== snap.providerRefundedAmount) {
+      problems.push(`provider refunded amount is now ${obs.refundedAmount}, was ${snap.providerRefundedAmount} at completion`);
+    }
+    const fresh = obs.originTxHashes.map((h) => normalizeTx(net.family, h)).filter((h) => !known.has(h) && !deposits.has(h));
+    if (fresh.length) problems.push(`provider lists new origin-chain transaction(s) after completion: ${fresh.join(", ")}`);
+    const now = this.now();
+    const next = problems.length ? "DISCREPANCY" : (refund.reconciliation === "DISCREPANCY" ? "DISCREPANCY" : "CONSISTENT"); // a discrepancy stays until a person reviews it
+    const changed = next !== refund.reconciliation || (problems.length > 0 && JSON.stringify(problems) !== JSON.stringify((refund.completionSnapshot as { lastProblems?: string[] } | null)?.lastProblems ?? []));
+    await this.d.failures.setRefund(row.id, "COMPLETED", { reconciliation: next, reconciliationCheckedAt: now,
+      ...(problems.length ? { completionSnapshot: { ...(refund.completionSnapshot as object), lastProblems: problems } } : {}) });
+    if (problems.length && changed) {
+      await this.d.failures.recordEvent(row.id, "REFUND", "REFUND_RECONCILIATION_DISCREPANCY", { problems });
+      await this.d.audit?.record({ at: now.toISOString(), actor: "spak", event: "REFUND_DISCREPANCY", ref: row.id, data: { problems } });
+      return { ok: true, needsReview: `Completed refund no longer matches provider data: ${problems.join("; ")}. The completion record is unchanged.` };
+    }
+    return { ok: true };
   }
 }

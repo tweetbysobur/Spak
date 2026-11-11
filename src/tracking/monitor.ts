@@ -63,6 +63,7 @@ export class ExecutionMonitor {
   /** One monitoring attempt for an execution this worker holds. Always releases the lease. */
   async processClaimed(row: ExecutionRow, worker: string): Promise<"OK" | "RETRY" | "GAVE_UP"> {
     const attempt = await this.d.tracking.startAttempt({ executionId: row.id, workerId: worker, fromState: row.state });
+    if (row.state === "REFUNDED") return this.watchCompletedRefund(row, worker, attempt);
     let current = row, ok = true;
     const errors: string[] = [];
     try {
@@ -128,5 +129,23 @@ export class ExecutionMonitor {
     await this.d.tracking.finishAttempt(attempt, { outcome, toState: current.state, detail: errors.length ? errors.join(" | ") : null });
     if (!ok) this.d.log?.("monitor attempt failed", { executionId: row.id, failures, errors });
     return outcome;
+  }
+
+  /** Read-only post-completion check of a refunded execution. Never changes its state or completion record. */
+  private async watchCompletedRefund(row: ExecutionRow, worker: string, attempt: number): Promise<"OK" | "RETRY" | "GAVE_UP"> {
+    const now = this.now();
+    if (!this.d.refunds || !(await this.d.refunds.watchActive(row))) {
+      await this.d.tracking.release(row.id, worker, { monitorNextAt: null, monitorFailures: 0, monitorGaveUpAt: now }); // watch over: stop scheduling
+      await this.d.tracking.finishAttempt(attempt, { outcome: "OK", toState: row.state, detail: "post-completion watch ended" });
+      return "OK";
+    }
+    const obs = await this.d.execution.observeProvider(row);
+    const r = await this.d.refunds.reconcileCompleted(row, obs);
+    if (r.needsReview) await this.d.failures?.flagForReview(row.id, r.needsReview, "spak");
+    const failures = r.ok ? 0 : (row.monitorFailures ?? 0) + 1;
+    const delay = r.ok ? MONITOR.lateRefundIntervalMs : Math.min(MONITOR.baseRetryMs * 2 ** Math.min(failures - 1, 20), MONITOR.maxRetryMs);
+    await this.d.tracking.release(row.id, worker, { monitorNextAt: new Date(now.getTime() + delay), monitorFailures: failures });
+    await this.d.tracking.finishAttempt(attempt, { outcome: r.ok ? "OK" : "RETRY", toState: row.state, detail: r.error ?? r.needsReview ?? null });
+    return r.ok ? "OK" : "RETRY";
   }
 }

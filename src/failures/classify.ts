@@ -27,7 +27,7 @@ export interface FailureFacts {
   quoteStatus: string | null;
   deposits: { state: string; reason: string | null; txHash: string | null }[];
   destinations: { outcome: string; problems: unknown }[];
-  refund: { state: string; verifiedAmount: string | null; associatedAmount?: string | null; depositedAmount: string | null; providerRefundedAmount: string | null } | null;
+  refund: { state: string; reconciliation?: string | null; verifiedAmount: string | null; associatedAmount?: string | null; depositedAmount: string | null; providerRefundedAmount: string | null } | null;
   reviewOpen: boolean;
   /** An API error the user just hit before any deposit (e.g. INSUFFICIENT_BALANCE). */
   lastErrorCode?: string | null;
@@ -46,6 +46,10 @@ export function classify(f: FailureFacts): Classification {
     const r = f.refund;
     const got = r.associatedAmount ?? r.verifiedAmount;
     const partial = got && r.depositedAmount && BigInt(got) < BigInt(r.depositedAmount);
+    if (r.state === "COMPLETED" && r.reconciliation === "DISCREPANCY") {
+      return c("REFUND", "REFUND_RECONCILIATION_DISCREPANCY", false, "Refund verified, then provider data changed",
+        "SPak verified this refund on chain. NEAR Intents' data has since changed, so the case is open for review. The verified refund record is kept unchanged." + reviewNote, "REFUND_ADDRESS", ["MANUAL_REVIEW", "CONTACT_SUPPORT"]);
+    }
     switch (r.state) {
       case "COMPLETED": return c("REFUND", partial ? "REFUND_COMPLETED_PARTIAL" : "REFUND_COMPLETED", false, "Refund completed",
         partial ? "SPak verified the refund on chain. It is less than the deposit, which can happen when fees or a partial swap apply." : "SPak verified on chain that the funds are back at your refund address.", "REFUND_ADDRESS", ["NONE"]);

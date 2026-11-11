@@ -6,7 +6,8 @@ export type DestinationVerificationRow = typeof destinationVerifications.$inferS
 export type MonitorAttemptRow = typeof monitorAttempts.$inferSelect;
 
 /** States the background monitor follows. Terminal states and approvals in progress are never claimed. */
-export const MONITORED_STATES = ["AWAITING_DEPOSIT", "PROCESSING", "VERIFYING_DESTINATION", "FAILED", "REFUNDING", "UNKNOWN"] as const;
+/** REFUNDED is watched read-only for a while after completion (post-completion reconciliation), then stopped. */
+export const MONITORED_STATES = ["AWAITING_DEPOSIT", "PROCESSING", "VERIFYING_DESTINATION", "FAILED", "REFUNDING", "UNKNOWN", "REFUNDED"] as const;
 
 export class TrackingRecords {
   constructor(private readonly db: Db, private readonly clock: () => Date = () => new Date()) {}

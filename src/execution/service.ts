@@ -259,6 +259,23 @@ export class ExecutionService {
     return { row: r ?? (await this.d.records.get(row.id))!, ok: true };
   }
 
+  /**
+   * Read-only provider observation, used after a refund completed: no state change, no bookkeeping beyond the
+   * caller's. ok=false when the provider could not be read or the response belongs to another quote.
+   */
+  async observeProvider(row: ExecutionRow): Promise<{ ok: boolean; status: string | null; refundedAmount: string | null; originTxHashes: string[]; error?: string }> {
+    if (!row.depositAddress) return { ok: false, status: null, refundedAmount: null, originTxHashes: [], error: "no deposit address" };
+    try {
+      const s = await this.d.client.status(row.depositAddress, row.depositMemo);
+      const firm = row.firmQuoteId ? await this.d.records.getQuote(row.firmQuoteId) : null;
+      const sig = s.quoteResponse?.signature;
+      if (firm?.providerSignature && sig && sig !== firm.providerSignature) return { ok: false, status: null, refundedAmount: null, originTxHashes: [], error: "status signature mismatch" };
+      return { ok: true, status: s.status ?? null, refundedAmount: s.swapDetails?.refundedAmount ?? null, originTxHashes: s.swapDetails?.originChainTxHashes.map((t) => t.hash) ?? [] };
+    } catch (e) {
+      return { ok: false, status: null, refundedAmount: null, originTxHashes: [], error: (e as Error).message };
+    }
+  }
+
   /** Cancel before any deposit. A deposit already sent is settled or refunded by the provider. */
   async cancel(args: { userId: string; executionId: string }) {
     let row = await this.mustGet(args.executionId, args.userId);

@@ -58,6 +58,9 @@ export class FailureRecords {
       await tx.insert(failureEvents).values({ executionId, at: now, category: cls.category, code: cls.code, temporary: cls.temporary ? 1 : 0, detail: { title: cls.title, message: cls.message } });
     });
   }
+  async recordEvent(executionId: string, category: string, code: string, detail: Record<string, unknown>) {
+    await this.db.insert(failureEvents).values({ executionId, at: this.clock(), category, code, temporary: 0, detail });
+  }
   async failureEvents(executionId: string) {
     return this.db.select().from(failureEvents).where(eq(failureEvents.executionId, executionId)).orderBy(asc(failureEvents.at), asc(failureEvents.id));
   }

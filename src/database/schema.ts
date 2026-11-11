@@ -432,6 +432,15 @@ export const refunds = pgTable("spak_refunds", {
   providerListedAmount: text("provider_listed_amount"),
   /** Refund-evidence capability in force at the last check: CONFIRMED | UNCONFIRMED | UNSUPPORTED. */
   evidenceCapability: text("evidence_capability"),
+  /** Snapshot taken when the refund completed: provider amount and counted transactions. Never rewritten. */
+  completionSnapshot: jsonb("completion_snapshot"),
+  /** After completion SPak keeps comparing provider facts against the snapshot until this time. */
+  watchUntil: timestamp("watch_until", { withTimezone: true }),
+  /** CONSISTENT | DISCREPANCY (set by post-completion checks; never reverses COMPLETED). */
+  reconciliation: text("reconciliation"),
+  reconciliationCheckedAt: timestamp("reconciliation_checked_at", { withTimezone: true }),
+  /** refundFee from the approved firm quote (documented on Quote). Displayed only; never used in arithmetic. */
+  quotedRefundFee: text("quoted_refund_fee"),
   depositTxTimestamp: timestamp("deposit_tx_timestamp", { withTimezone: true }),
   openedAt: timestamp("opened_at", { withTimezone: true }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),

@@ -230,7 +230,7 @@ The others (CRON_SECRET, SPAK_MONITOR_SECRET, SPAK_RPC_*) are unchanged.
 - The REFUNDED response shape comes from the OpenAPI spec, not a live response.
 - The 7-day expected window is SPak policy. Late refunds are still counted and get reviewed.
 - Automatic REFUNDED is off until refund evidence is CONFIRMED. Every real refund currently needs manual review.
-- A refund already COMPLETED is not re-opened if the provider later changes its amount.
+- A completed refund is watched for 30 days. Provider changes open a review but never rewrite the completion (Phase 5.3, see SPAK-REFUND-RESOLUTION.md).
 - The refund fee formula is not documented by the provider.
 - Native EVM refunds through an internal call cannot be verified without trace RPC. They stay UNVERIFIABLE.
 - There is no admin web screen yet, only the API.

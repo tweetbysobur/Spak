@@ -52,6 +52,12 @@ export function RecoveryPanel({ executionId, view, onChange }: { executionId: st
       {r?.evidenceCapability && r.evidenceCapability !== "CONFIRMED" && r.providerListedAmount && r.providerListedAmount !== "0" && (
         <p className="mt-2 text-xs text-amber-200">NEAR Intents lists {formatUnits(r.providerListedAmount, asset)} in transactions for this transfer, but does not say they are the refund. SPak keeps the refund open until that is confirmed and a person has checked it.</p>
       )}
+      {r?.quotedRefundFee && <Row k="Refund fee in the quote (not subtracted by SPak)" v={formatUnits(r.quotedRefundFee, asset)} />}
+      {r?.evidenceCapability && <Row k="Automatic refund verification" v={r.evidenceCapability === "CONFIRMED" ? "Available" : "Unavailable: NEAR Intents does not identify refund transactions"} />}
+      {r?.reconciliation && <Row k="Post-refund check" v={r.reconciliation === "DISCREPANCY" ? "Provider data changed after the refund; under review" : `Consistent${r.reconciliationCheckedAt ? ` (checked ${new Date(r.reconciliationCheckedAt).toLocaleString()})` : ""}`} />}
+      {r?.evidenceCapability && r.evidenceCapability !== "CONFIRMED" && r.state !== "COMPLETED" && (
+        <p className="mt-2 text-xs text-white/60">NEAR Intents reports refund amounts but not which transaction carried the refund. SPak checks every transfer on chain but cannot prove one is your refund, so a person reviews it. Nothing is marked returned until then.</p>
+      )}
       {view.refund?.transactions.some((t) => t.timing === "LATE_TRANSACTION") && <p className="mt-2 text-xs text-white/60">A refund transaction arrived later than usual. Late refunds still count once verified and linked; this is not a failure.</p>}
       {view.refund?.transactions.map((t) => (
         <div key={t.txHash} className="mt-2 rounded-lg border border-white/10 p-2 text-xs">
