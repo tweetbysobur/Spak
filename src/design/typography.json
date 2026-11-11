@@ -1,0 +1,672 @@
+{
+  "version": "1.0.0",
+  "generatedBy": "scripts/brand/build_typography.py",
+  "rootSize": 16,
+  "breakpoints": {
+    "mobile": "0-767px",
+    "tablet": "768-1199px",
+    "desktop": "1200px+",
+    "fluidRange": [
+      360,
+      1280
+    ],
+    "narrowestSupported": 320
+  },
+  "families": {
+    "display": {
+      "family": "Sora",
+      "cssVar": "--font-sora",
+      "stack": "var(--font-sora), 'Inter', ui-sans-serif, system-ui, sans-serif",
+      "weights": [
+        600
+      ],
+      "use": "Marketing display and section headings only"
+    },
+    "sans": {
+      "family": "Inter",
+      "cssVar": "--font-inter",
+      "stack": "var(--font-inter), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+      "weights": "variable 400-700",
+      "use": "Application, navigation, body, numbers"
+    },
+    "mono": {
+      "family": "JetBrains Mono",
+      "cssVar": "--font-jetbrains-mono",
+      "stack": "var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+      "weights": "variable 400-500",
+      "use": "Hashes, addresses, identifiers, code"
+    },
+    "editorial": {
+      "family": "Instrument Serif",
+      "cssVar": "--font-instrument-serif",
+      "stack": "var(--font-instrument-serif), Georgia, 'Times New Roman', serif",
+      "weights": [
+        400
+      ],
+      "styles": [
+        "normal",
+        "italic"
+      ],
+      "use": "Optional editorial accent, marketing only, never numbers"
+    }
+  },
+  "roles": {
+    "display-xl": {
+      "group": "marketing",
+      "family": "display",
+      "weight": 600,
+      "size": {
+        "desktop": 72,
+        "tablet": 56,
+        "mobile": 40
+      },
+      "lineHeight": 1.05,
+      "letterSpacing": -0.03,
+      "textWrap": "balance",
+      "use": "Hero headline, one per page",
+      "fluid": "clamp(2.5rem, 1.7174rem + 3.4783vw, 4.5rem)"
+    },
+    "display-lg": {
+      "group": "marketing",
+      "family": "display",
+      "weight": 600,
+      "size": {
+        "desktop": 56,
+        "tablet": 44,
+        "mobile": 34
+      },
+      "lineHeight": 1.08,
+      "letterSpacing": -0.025,
+      "textWrap": "balance",
+      "use": "Large statements, closing CTA band",
+      "fluid": "clamp(2.125rem, 1.5870rem + 2.3913vw, 3.5rem)"
+    },
+    "heading-section": {
+      "group": "marketing",
+      "family": "display",
+      "weight": 600,
+      "size": {
+        "desktop": 40,
+        "tablet": 34,
+        "mobile": 28
+      },
+      "lineHeight": 1.12,
+      "letterSpacing": -0.02,
+      "textWrap": "balance",
+      "use": "Marketing section headings",
+      "fluid": "clamp(1.75rem, 1.4565rem + 1.3043vw, 2.5rem)"
+    },
+    "heading-feature": {
+      "group": "marketing",
+      "family": "display",
+      "weight": 600,
+      "size": {
+        "desktop": 24,
+        "tablet": 22,
+        "mobile": 20
+      },
+      "lineHeight": 1.25,
+      "letterSpacing": -0.01,
+      "textWrap": "balance",
+      "use": "Feature titles, card titles",
+      "fluid": "clamp(1.25rem, 1.1522rem + 0.4348vw, 1.5rem)"
+    },
+    "lead": {
+      "group": "marketing",
+      "family": "sans",
+      "weight": 400,
+      "size": {
+        "desktop": 20,
+        "tablet": 19,
+        "mobile": 18
+      },
+      "lineHeight": 1.55,
+      "letterSpacing": -0.005,
+      "textWrap": "pretty",
+      "maxWidth": "38rem",
+      "use": "Hero and section supporting paragraphs",
+      "fluid": "clamp(1.125rem, 1.0761rem + 0.2174vw, 1.25rem)"
+    },
+    "body-marketing": {
+      "group": "marketing",
+      "family": "sans",
+      "weight": 400,
+      "size": {
+        "desktop": 18,
+        "tablet": 17,
+        "mobile": 16
+      },
+      "lineHeight": 1.6,
+      "letterSpacing": 0,
+      "textWrap": "pretty",
+      "maxWidth": "40rem",
+      "use": "Feature descriptions, long-form marketing copy",
+      "fluid": "clamp(1rem, 0.9511rem + 0.2174vw, 1.125rem)"
+    },
+    "cta": {
+      "group": "marketing",
+      "family": "sans",
+      "weight": 600,
+      "size": {
+        "desktop": 17,
+        "tablet": 16,
+        "mobile": 16
+      },
+      "lineHeight": 1.2,
+      "letterSpacing": 0,
+      "use": "Primary marketing buttons",
+      "fluid": "clamp(1rem, 0.9755rem + 0.1087vw, 1.0625rem)"
+    },
+    "eyebrow": {
+      "group": "marketing",
+      "family": "sans",
+      "weight": 600,
+      "size": {
+        "desktop": 13,
+        "tablet": 13,
+        "mobile": 12
+      },
+      "lineHeight": 1.3,
+      "letterSpacing": 0.08,
+      "textTransform": "uppercase",
+      "use": "Short kicker above a section heading; max 4 words",
+      "fluid": "clamp(0.75rem, 0.7255rem + 0.1087vw, 0.8125rem)"
+    },
+    "demo-label": {
+      "group": "marketing",
+      "family": "mono",
+      "weight": 500,
+      "size": {
+        "desktop": 13,
+        "tablet": 13,
+        "mobile": 12
+      },
+      "lineHeight": 1.4,
+      "letterSpacing": 0,
+      "use": "Labels inside product demonstrations (state names, network names)",
+      "fluid": "clamp(0.75rem, 0.7255rem + 0.1087vw, 0.8125rem)"
+    },
+    "editorial-accent": {
+      "group": "marketing",
+      "family": "editorial",
+      "weight": 400,
+      "size": {
+        "desktop": null,
+        "tablet": null,
+        "mobile": null
+      },
+      "lineHeight": null,
+      "letterSpacing": -0.01,
+      "fontStyle": "italic",
+      "sizeAdjust": 1.047,
+      "use": "One emphasised phrase inside a display headline; inherits the headline size x sizeAdjust (x-height match)"
+    },
+    "app-title": {
+      "group": "app",
+      "family": "sans",
+      "weight": 600,
+      "size": {
+        "desktop": 28,
+        "tablet": 26,
+        "mobile": 24
+      },
+      "lineHeight": 1.25,
+      "letterSpacing": -0.015,
+      "use": "Page title",
+      "fluid": "clamp(1.5rem, 1.4022rem + 0.4348vw, 1.75rem)"
+    },
+    "app-heading": {
+      "group": "app",
+      "family": "sans",
+      "weight": 600,
+      "size": {
+        "desktop": 20,
+        "tablet": 20,
+        "mobile": 18
+      },
+      "lineHeight": 1.35,
+      "letterSpacing": -0.01,
+      "use": "Card and panel headings",
+      "fluid": "clamp(1.125rem, 1.0761rem + 0.2174vw, 1.25rem)"
+    },
+    "app-subheading": {
+      "group": "app",
+      "family": "sans",
+      "weight": 600,
+      "size": {
+        "desktop": 16,
+        "tablet": 16,
+        "mobile": 16
+      },
+      "lineHeight": 1.4,
+      "letterSpacing": 0,
+      "use": "Group headings inside cards",
+      "fluid": "1rem"
+    },
+    "body": {
+      "group": "app",
+      "family": "sans",
+      "weight": 400,
+      "size": {
+        "desktop": 16,
+        "tablet": 16,
+        "mobile": 16
+      },
+      "lineHeight": 1.55,
+      "letterSpacing": 0,
+      "use": "Default application text; 16 px everywhere (no iOS input zoom)",
+      "fluid": "1rem"
+    },
+    "body-sm": {
+      "group": "app",
+      "family": "sans",
+      "weight": 400,
+      "size": {
+        "desktop": 14,
+        "tablet": 14,
+        "mobile": 14
+      },
+      "lineHeight": 1.5,
+      "letterSpacing": 0,
+      "use": "Secondary text, descriptions (textSecondary colour)",
+      "fluid": "0.875rem"
+    },
+    "caption": {
+      "group": "app",
+      "family": "sans",
+      "weight": 400,
+      "size": {
+        "desktop": 12,
+        "tablet": 12,
+        "mobile": 12
+      },
+      "lineHeight": 1.45,
+      "letterSpacing": 0.005,
+      "use": "Timestamps, footnotes; never for essential information alone",
+      "fluid": "0.75rem"
+    },
+    "label": {
+      "group": "app",
+      "family": "sans",
+      "weight": 500,
+      "size": {
+        "desktop": 13,
+        "tablet": 13,
+        "mobile": 13
+      },
+      "lineHeight": 1.35,
+      "letterSpacing": 0.005,
+      "use": "Form labels, key in key/value rows",
+      "fluid": "0.8125rem"
+    },
+    "button": {
+      "group": "app",
+      "family": "sans",
+      "weight": 600,
+      "size": {
+        "desktop": 15,
+        "tablet": 15,
+        "mobile": 16
+      },
+      "lineHeight": 1.2,
+      "letterSpacing": 0,
+      "use": "Buttons (16 px on mobile)",
+      "responsive": "stepped"
+    },
+    "button-sm": {
+      "group": "app",
+      "family": "sans",
+      "weight": 600,
+      "size": {
+        "desktop": 13,
+        "tablet": 13,
+        "mobile": 14
+      },
+      "lineHeight": 1.2,
+      "letterSpacing": 0.005,
+      "use": "Compact buttons",
+      "responsive": "stepped"
+    },
+    "nav": {
+      "group": "app",
+      "family": "sans",
+      "weight": 500,
+      "size": {
+        "desktop": 14,
+        "tablet": 14,
+        "mobile": 16
+      },
+      "lineHeight": 1.3,
+      "letterSpacing": 0,
+      "use": "Navigation items (16 px on mobile menus)",
+      "responsive": "stepped"
+    },
+    "status": {
+      "group": "app",
+      "family": "sans",
+      "weight": 600,
+      "size": {
+        "desktop": 13,
+        "tablet": 13,
+        "mobile": 13
+      },
+      "lineHeight": 1.2,
+      "letterSpacing": 0.01,
+      "use": "Execution, deposit and refund status labels; colour from colors.json semanticRoles; never uppercase",
+      "fluid": "0.8125rem"
+    },
+    "error-title": {
+      "group": "app",
+      "family": "sans",
+      "weight": 600,
+      "size": {
+        "desktop": 15,
+        "tablet": 15,
+        "mobile": 15
+      },
+      "lineHeight": 1.4,
+      "letterSpacing": 0,
+      "use": "First line of an error: what happened",
+      "fluid": "0.9375rem"
+    },
+    "error-body": {
+      "group": "app",
+      "family": "sans",
+      "weight": 400,
+      "size": {
+        "desktop": 14,
+        "tablet": 14,
+        "mobile": 14
+      },
+      "lineHeight": 1.5,
+      "letterSpacing": 0,
+      "use": "What to do next",
+      "fluid": "0.875rem"
+    },
+    "amount-display": {
+      "group": "app",
+      "family": "sans",
+      "weight": 600,
+      "size": {
+        "desktop": 36,
+        "tablet": 34,
+        "mobile": 30
+      },
+      "lineHeight": 1.1,
+      "letterSpacing": -0.02,
+      "fontVariantNumeric": "tabular-nums",
+      "fontFeatureSettings": "'tnum' 1",
+      "use": "Wallet balance, hero amount on review screen",
+      "fluid": "clamp(1.875rem, 1.7283rem + 0.6522vw, 2.25rem)"
+    },
+    "amount-total": {
+      "group": "app",
+      "family": "sans",
+      "weight": 600,
+      "size": {
+        "desktop": 18,
+        "tablet": 18,
+        "mobile": 18
+      },
+      "lineHeight": 1.3,
+      "letterSpacing": -0.005,
+      "fontVariantNumeric": "tabular-nums",
+      "fontFeatureSettings": "'tnum' 1",
+      "use": "Total cost, amount to receive (approval summary)",
+      "fluid": "1.125rem"
+    },
+    "amount": {
+      "group": "app",
+      "family": "sans",
+      "weight": 500,
+      "size": {
+        "desktop": 16,
+        "tablet": 16,
+        "mobile": 16
+      },
+      "lineHeight": 1.4,
+      "letterSpacing": 0,
+      "fontVariantNumeric": "tabular-nums",
+      "fontFeatureSettings": "'tnum' 1",
+      "use": "Transaction amounts in rows and tables; right-aligned in columns",
+      "fluid": "1rem"
+    },
+    "amount-fee": {
+      "group": "app",
+      "family": "sans",
+      "weight": 400,
+      "size": {
+        "desktop": 14,
+        "tablet": 14,
+        "mobile": 14
+      },
+      "lineHeight": 1.4,
+      "letterSpacing": 0,
+      "fontVariantNumeric": "tabular-nums",
+      "fontFeatureSettings": "'tnum' 1",
+      "use": "Network and protocol fees; textSecondary colour",
+      "fluid": "0.875rem"
+    },
+    "token-symbol": {
+      "group": "app",
+      "family": "sans",
+      "weight": 500,
+      "size": {
+        "desktop": "inherit",
+        "tablet": "inherit",
+        "mobile": "inherit"
+      },
+      "lineHeight": null,
+      "letterSpacing": 0.02,
+      "use": "Ticker after an amount (USDC, SOL): same size as the amount, textSecondary colour, never uppercase-transformed"
+    },
+    "address": {
+      "group": "app",
+      "family": "mono",
+      "weight": 400,
+      "size": {
+        "desktop": 13,
+        "tablet": 13,
+        "mobile": 13
+      },
+      "lineHeight": 1.5,
+      "letterSpacing": 0,
+      "overflowWrap": "anywhere",
+      "fontVariantLigatures": "none",
+      "truncate": "middle 6+4",
+      "use": "Recipient and wallet addresses",
+      "fluid": "0.8125rem"
+    },
+    "hash": {
+      "group": "app",
+      "family": "mono",
+      "weight": 400,
+      "size": {
+        "desktop": 13,
+        "tablet": 13,
+        "mobile": 13
+      },
+      "lineHeight": 1.5,
+      "letterSpacing": 0,
+      "overflowWrap": "anywhere",
+      "fontVariantLigatures": "none",
+      "truncate": "middle 6+4",
+      "use": "Transaction hashes and explorer references",
+      "fluid": "0.8125rem"
+    },
+    "identifier": {
+      "group": "app",
+      "family": "mono",
+      "weight": 400,
+      "size": {
+        "desktop": 12,
+        "tablet": 12,
+        "mobile": 12
+      },
+      "lineHeight": 1.45,
+      "letterSpacing": 0,
+      "overflowWrap": "anywhere",
+      "fontVariantLigatures": "none",
+      "use": "Execution, quote and deposit IDs, plan hashes",
+      "fluid": "0.75rem"
+    },
+    "code-inline": {
+      "group": "app",
+      "family": "mono",
+      "weight": 400,
+      "size": {
+        "desktop": "0.9em",
+        "tablet": "0.9em",
+        "mobile": "0.9em"
+      },
+      "lineHeight": null,
+      "letterSpacing": 0,
+      "use": "Inline code in prose"
+    },
+    "code-block": {
+      "group": "app",
+      "family": "mono",
+      "weight": 400,
+      "size": {
+        "desktop": 14,
+        "tablet": 14,
+        "mobile": 13
+      },
+      "lineHeight": 1.6,
+      "letterSpacing": 0,
+      "whiteSpace": "pre",
+      "overflowX": "auto",
+      "tabSize": 2,
+      "fontVariantLigatures": "none",
+      "use": "Code samples and API examples; scroll, do not wrap",
+      "fluid": "clamp(0.8125rem, 0.7880rem + 0.1087vw, 0.875rem)"
+    },
+    "api-endpoint": {
+      "group": "app",
+      "family": "mono",
+      "weight": 500,
+      "size": {
+        "desktop": 14,
+        "tablet": 14,
+        "mobile": 13
+      },
+      "lineHeight": 1.5,
+      "letterSpacing": 0,
+      "overflowWrap": "anywhere",
+      "use": "HTTP method + path in API references",
+      "fluid": "clamp(0.8125rem, 0.7880rem + 0.1087vw, 0.875rem)"
+    }
+  },
+  "validation": [
+    {
+      "check": "display-xl: longest word fits a 320px screen",
+      "pass": true,
+      "detail": "\"infrastructure\" 269px at 40px vs 288px available"
+    },
+    {
+      "check": "display-lg: longest word fits a 320px screen",
+      "pass": true,
+      "detail": "\"infrastructure\" 231px at 34px vs 288px available"
+    },
+    {
+      "check": "heading-section: longest word fits a 320px screen",
+      "pass": true,
+      "detail": "\"infrastructure\" 192px at 28px vs 288px available"
+    },
+    {
+      "check": "display-xl tagline on desktop",
+      "pass": true,
+      "detail": "1233px in 1200px: about 2 line(s); text-wrap: balance evens them"
+    },
+    {
+      "check": "display-xl tagline on tablet",
+      "pass": true,
+      "detail": "959px in 720px: about 2 line(s); text-wrap: balance evens them"
+    },
+    {
+      "check": "display-xl tagline on mobile",
+      "pass": true,
+      "detail": "685px in 328px: about 3 line(s); text-wrap: balance evens them"
+    },
+    {
+      "check": "Inter has tnum (financial roles)",
+      "pass": true,
+      "detail": "features: calt ccmp dnom frac locl numr pnum tnum"
+    },
+    {
+      "check": "Sora has tnum (numbers in display copy)",
+      "pass": true,
+      "detail": "features: ccmp dnom frac liga locl numr tnum"
+    },
+    {
+      "check": "Instrument Serif has no tnum, so it is never used for numbers",
+      "pass": true,
+      "detail": "rule enforced in tokens"
+    },
+    {
+      "check": "Inter tabular digits share one width",
+      "pass": true,
+      "detail": "51 tabular glyphs"
+    },
+    {
+      "check": "JetBrains Mono: every character the same width",
+      "pass": true,
+      "detail": "hashes and addresses align in columns"
+    },
+    {
+      "check": "JetBrains Mono zero is marked (distinct from O)",
+      "pass": true,
+      "detail": "0: 3 contours, O: 2"
+    },
+    {
+      "check": "EVM tx hash at 13px",
+      "pass": true,
+      "detail": "66 chars = 515px full; wraps (overflow-wrap:anywhere) or truncates on mobile"
+    },
+    {
+      "check": "Solana signature at 13px",
+      "pass": true,
+      "detail": "88 chars = 686px full; wraps (overflow-wrap:anywhere) or truncates on mobile"
+    },
+    {
+      "check": "EVM address at 13px",
+      "pass": true,
+      "detail": "42 chars = 328px full; wraps (overflow-wrap:anywhere) or truncates on mobile"
+    },
+    {
+      "check": "NEAR account at 13px",
+      "pass": true,
+      "detail": "14 chars = 109px full; fits on one line on mobile"
+    },
+    {
+      "check": "Truncated hash (6+4) fits a mobile row",
+      "pass": true,
+      "detail": "101px"
+    },
+    {
+      "check": "Body text is at least 16px on every breakpoint",
+      "pass": true,
+      "detail": "prevents iOS input zoom; WCAG 1.4.4 resize friendly"
+    },
+    {
+      "check": "No text role below 12px",
+      "pass": true,
+      "detail": "caption floor 12px"
+    },
+    {
+      "check": "Paragraph roles have line height >= 1.5",
+      "pass": true,
+      "detail": "WCAG 1.4.8 recommendation for blocks of text"
+    },
+    {
+      "check": "Mono x-height vs Inter (optical size match)",
+      "pass": true,
+      "detail": "JetBrains Mono 0.550 vs Inter 0.546: 13px mono next to 14px Inter sit close (7.2 vs 7.6px x-height)"
+    },
+    {
+      "check": "Editorial accent x-height match",
+      "pass": true,
+      "detail": "Sora 0.534, Instrument Serif 0.510 x 1.047"
+    }
+  ]
+}

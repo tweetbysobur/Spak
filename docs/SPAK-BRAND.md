@@ -55,10 +55,13 @@ The full system is in `docs/SPAK-COLOUR-SYSTEM.md`. The tokens are in `src/desig
 
 ## 4. Typography
 
-- Sora: expressive marketing headlines.
-- Inter: product interfaces, body text and navigation.
-- JetBrains Mono: transaction hashes, technical identifiers and code.
-- Instrument Serif (optional): occasional editorial treatments.
+Full system in `docs/SPAK-TYPOGRAPHY.md`. Tokens are in `src/design/typography.json`, font loading in `src/design/fonts.ts` (not applied to the app yet).
+
+- **Sora 600:** marketing display and section headings only. The wordmark is drawn from it.
+- **Inter (variable):** application, navigation, body text and every number. Amounts always use tabular numerals.
+- **JetBrains Mono (variable):** hashes, addresses, identifiers and code. Identifiers truncate in the middle (6 + 4 characters) in lists, and show in full with wrapping where users must verify them.
+- **Instrument Serif 400 italic:** optional, at most one phrase in a marketing headline, x-height matched to Sora. Never in the app, never for numbers.
+- **Sizes:** body 16 px on every device, nothing below 12 px. Marketing headings scale fluidly from 320 px screens to desktop (hero 40 to 72 px); buttons and navigation step up to 16 px on mobile.
 
 ## 5. Logo direction
 
