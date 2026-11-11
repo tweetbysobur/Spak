@@ -6,7 +6,7 @@ import type { DepositRecords } from "../deposits/records";
 import type { DestinationVerificationRow, TrackingRecords } from "../tracking/records";
 import { txExplorerUrl } from "../tracking/explorers";
 import { classify, type Classification } from "./classify";
-import type { FailureRecords, RefundRow } from "./records";
+import type { FailureRecords, RefundRow, RefundTxRow } from "./records";
 import type { RefundVerifier } from "./refunds";
 
 const USER_RECOVERY_LIMIT = { perHour: 10 };
@@ -32,7 +32,7 @@ export class FailureService {
       refundReason: row.refundReason, quoteStatus: quote?.status ?? null,
       deposits: deps.map((x) => ({ state: x.state, reason: x.reason, txHash: x.txHash })),
       destinations: dest.map((x: DestinationVerificationRow) => ({ outcome: x.outcome, problems: x.problems })),
-      refund: refund ? { state: refund.state, verifiedAmount: refund.verifiedAmount, depositedAmount: refund.depositedAmount, providerRefundedAmount: refund.providerRefundedAmount } : null,
+      refund: refund ? { state: refund.state, verifiedAmount: refund.verifiedAmount, associatedAmount: refund.associatedAmount, depositedAmount: refund.depositedAmount, providerRefundedAmount: refund.providerRefundedAmount } : null,
       reviewOpen: !!review, lastErrorCode,
     });
   }
@@ -84,7 +84,7 @@ export class FailureService {
         refundTo: row.refundAddress, network: row.sourceNetwork, assetId: row.sourceAssetId, refundType: "ORIGIN_CHAIN",
       },
       refund: refund ? refundView(refund) : null,
-      transactions: txs.map((t) => ({ txHash: t.txHash, source: t.source, outcome: t.outcome, receivedAmount: t.receivedAmount, confirmations: t.confirmations, explorerUrl: txExplorerUrl(t.network, t.txHash), problems: t.problems, verifiedAt: t.verifiedAt?.toISOString() ?? null })),
+      transactions: txs.map(refundTxView),
       original: { network: row.sourceNetwork, assetId: row.sourceAssetId, amountIn: row.amountIn, depositedAmount: refund?.depositedAmount ?? null },
     };
   }
@@ -127,13 +127,30 @@ export class FailureService {
   }
 }
 
+const ASSOCIATION_TEXT: Record<string, string> = {
+  PROVIDER_LISTED: "NEAR Intents listed this transaction for this transfer's deposit address.",
+  PENDING_ASSOCIATION: "Not linked to this transfer by NEAR Intents. A matching recipient, asset, amount or time does not prove it is this refund.",
+  REJECTED: "Rejected: outside the time this refund could have happened.",
+};
+export function refundTxView(t: RefundTxRow) {
+  return {
+    txHash: t.txHash, source: t.source, submitted: t.source !== "PROVIDER", outcome: t.outcome,
+    chainVerified: t.outcome === "CONFIRMED", association: t.association, associationExplanation: ASSOCIATION_TEXT[t.association] ?? t.association,
+    checks: t.checks, receivedAmount: t.receivedAmount, confirmations: t.confirmations, sender: t.sender, txTimestamp: t.txTimestamp?.toISOString() ?? null,
+    rejectedReason: t.rejectedReason, explorerUrl: txExplorerUrl(t.network, t.txHash), problems: t.problems, verifiedAt: t.verifiedAt?.toISOString() ?? null,
+  };
+}
+
 export function refundView(r: RefundRow) {
-  const partial = !!(r.verifiedAmount && r.depositedAmount && BigInt(r.verifiedAmount) < BigInt(r.depositedAmount));
+  const partial = !!(r.associatedAmount && r.depositedAmount && BigInt(r.associatedAmount) < BigInt(r.depositedAmount));
   return {
     state: r.state, refundTo: r.refundTo, network: r.network, assetId: r.assetId,
     depositedAmount: r.depositedAmount, // original deposit SPak verified
     expectedAmount: r.providerRefundedAmount, // what NEAR Intents says it refunded; not proof
-    verifiedAmount: r.verifiedAmount, // what SPak saw arrive on chain
+    verifiedAmount: r.verifiedAmount, // transfers to the refund address SPak saw on chain (any association)
+    associatedAmount: r.associatedAmount, // verified AND linked to this execution; the only amount called returned
+    outstandingAmount: r.outstandingAmount,
+    depositTxTimestamp: r.depositTxTimestamp?.toISOString() ?? null,
     partial, reason: r.providerRefundReason, openedAt: r.openedAt.toISOString(), updatedAt: r.updatedAt.toISOString(), completedAt: r.completedAt?.toISOString() ?? null,
   };
 }

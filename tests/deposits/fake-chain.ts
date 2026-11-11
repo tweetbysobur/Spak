@@ -11,12 +11,16 @@ export class FakeChain implements ChainRpc {
   down = new Set<string>();
   calls: { network: string; method: string }[] = [];
   evmHead = 1000;
-  evm = new Map<string, { tx: Record<string, unknown>; receipt: Record<string, unknown> | null }>();
+  evm = new Map<string, { tx: Record<string, unknown>; receipt: Record<string, unknown> | null; network?: string }>();
   sol = new Map<string, { status: Record<string, unknown> | null; tx: Record<string, unknown> | null }>();
   near = new Map<string, Record<string, unknown>>();
   nearReceipts = new Map<string, Record<string, unknown>>();
   balances = new Map<string, bigint>(); // key: network|owner|token-or-native
   mintOwner = TOKEN_PROGRAM;
+  /** Chain time (unix seconds). EVM: base + 2 s per block from block 1000. Solana and NEAR: per transaction, default base. */
+  timeBase = Math.floor(Date.parse("2026-11-10T10:00:00Z") / 1000);
+  nearBlockTimes = new Map<string, number>();
+  evmBlockTime(n: number) { return this.timeBase + (n - 1000) * 2; }
 
   async call<T>(network: string, method: string, params: unknown): Promise<T> {
     this.calls.push({ network, method });
@@ -24,8 +28,13 @@ export class FakeChain implements ChainRpc {
     const p = params as unknown[];
     const bal = (owner: string, token = "native") => this.balances.get(`${network}|${owner.toLowerCase()}|${token.toLowerCase()}`) ?? 0n;
     switch (method) {
-      case "eth_getTransactionByHash": return (this.evm.get(String(p[0]).toLowerCase())?.tx ?? null) as T;
-      case "eth_getTransactionReceipt": return (this.evm.get(String(p[0]).toLowerCase())?.receipt ?? null) as T;
+      case "eth_getTransactionByHash": { const e = this.evm.get(String(p[0]).toLowerCase()); return ((e && (!e.network || e.network === network)) ? e.tx : null) as T; }
+      case "eth_getTransactionReceipt": { const e = this.evm.get(String(p[0]).toLowerCase()); return ((e && (!e.network || e.network === network)) ? e.receipt : null) as T; }
+      case "eth_getBlockByNumber": return { number: p[0], timestamp: `0x${this.evmBlockTime(parseInt(String(p[0]), 16)).toString(16)}`, transactions: [] } as T;
+      case "block": {
+        const bh = (params as { block_id: string }).block_id;
+        return { header: { hash: bh, timestamp: String(BigInt(this.nearBlockTimes.get(bh) ?? this.timeBase) * 1_000_000_000n) } } as T;
+      }
       case "eth_blockNumber": return `0x${this.evmHead.toString(16)}` as T;
       case "eth_getBalance": return `0x${bal(String(p[0])).toString(16)}` as T;
       case "eth_call": {
@@ -65,9 +74,10 @@ export class FakeChain implements ChainRpc {
   setBalance(network: string, owner: string, amount: bigint, token = "native") { this.balances.set(`${network}|${owner.toLowerCase()}|${token.toLowerCase()}`, amount); }
 
   /** Register an EVM transaction. Defaults describe a correct deposit; override fields to break it. */
-  evmTx(hash: string, o: { from: string; to: string; value?: bigint; status?: "0x1" | "0x0"; block?: number | null; chainId?: number; logs?: { address: string; from: string; to: string; amount: bigint }[] }) {
+  evmTx(hash: string, o: { network?: string; from: string; to: string; value?: bigint; status?: "0x1" | "0x0"; block?: number | null; chainId?: number; logs?: { address: string; from: string; to: string; amount: bigint }[] }) {
     const block = o.block === undefined ? this.evmHead - 10 : o.block;
     this.evm.set(hash.toLowerCase(), {
+      network: o.network,
       tx: { hash, from: o.from, to: o.to, value: `0x${(o.value ?? 0n).toString(16)}`, chainId: o.chainId ? `0x${o.chainId.toString(16)}` : undefined, blockNumber: block === null ? null : `0x${block.toString(16)}`, input: "0x" },
       receipt: block === null ? null : {
         status: o.status ?? "0x1", blockNumber: `0x${block.toString(16)}`,
@@ -77,11 +87,11 @@ export class FakeChain implements ChainRpc {
   }
 
   /** Register a Solana transaction (jsonParsed shape). */
-  solTx(sig: string, o: { feePayer: string; keys?: string[]; pre?: number[]; post?: number[]; preToken?: unknown[]; postToken?: unknown[]; err?: unknown; status?: "finalized" | "confirmed" | null }) {
+  solTx(sig: string, o: { feePayer: string; keys?: string[]; pre?: number[]; post?: number[]; preToken?: unknown[]; postToken?: unknown[]; err?: unknown; status?: "finalized" | "confirmed" | null; blockTime?: number }) {
     const keys = o.keys ?? [o.feePayer];
     this.sol.set(sig, {
       status: o.status === null ? null : { confirmationStatus: o.status ?? "finalized", err: o.err ?? null },
-      tx: { meta: { err: o.err ?? null, preBalances: o.pre ?? keys.map(() => 0), postBalances: o.post ?? keys.map(() => 0), preTokenBalances: o.preToken ?? [], postTokenBalances: o.postToken ?? [] },
+      tx: { blockTime: o.blockTime ?? this.timeBase, meta: { err: o.err ?? null, preBalances: o.pre ?? keys.map(() => 0), postBalances: o.post ?? keys.map(() => 0), preTokenBalances: o.preToken ?? [], postTokenBalances: o.postToken ?? [] },
         transaction: { message: { accountKeys: keys.map((k, i) => ({ pubkey: k, signer: i === 0 })) } } },
     });
   }
@@ -96,9 +106,12 @@ export class FakeChain implements ChainRpc {
   }
 
   /** Register a NEAR transaction with receipts (destination delivery shape). */
-  nearRxTx(hash: string, o: { signer?: string; receipts: { id: string; receiver: string; predecessor?: string; actions: unknown[]; failed?: boolean }[]; final?: boolean; failure?: boolean }) {
+  nearRxTx(hash: string, o: { signer?: string; receipts: { id: string; receiver: string; predecessor?: string; actions: unknown[]; failed?: boolean }[]; final?: boolean; failure?: boolean; time?: number }) {
+    if (o.time !== undefined) this.nearBlockTimes.set(`blk-${hash}`, o.time);
     this.nearReceipts.set(hash, {
       signer: o.signer ?? "intents.near",
+      transaction: { signer_id: o.signer ?? "intents.near", hash },
+      transaction_outcome: { block_hash: `blk-${hash}` },
       final_execution_status: o.final === false ? "EXECUTED_OPTIMISTIC" : "FINAL",
       status: o.failure ? { Failure: {} } : { SuccessValue: "" },
       receipts: o.receipts.map((r) => ({ receipt_id: r.id, receiver_id: r.receiver, predecessor_id: r.predecessor ?? "intents.near", receipt: { Action: { actions: r.actions } } })),

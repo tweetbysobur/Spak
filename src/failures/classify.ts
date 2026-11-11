@@ -27,7 +27,7 @@ export interface FailureFacts {
   quoteStatus: string | null;
   deposits: { state: string; reason: string | null; txHash: string | null }[];
   destinations: { outcome: string; problems: unknown }[];
-  refund: { state: string; verifiedAmount: string | null; depositedAmount: string | null; providerRefundedAmount: string | null } | null;
+  refund: { state: string; verifiedAmount: string | null; associatedAmount?: string | null; depositedAmount: string | null; providerRefundedAmount: string | null } | null;
   reviewOpen: boolean;
   /** An API error the user just hit before any deposit (e.g. INSUFFICIENT_BALANCE). */
   lastErrorCode?: string | null;
@@ -44,12 +44,15 @@ export function classify(f: FailureFacts): Classification {
   // E. Refunds (checked first: once a refund exists it is the main story).
   if (f.refund) {
     const r = f.refund;
-    const partial = r.verifiedAmount && r.depositedAmount && BigInt(r.verifiedAmount) < BigInt(r.depositedAmount);
+    const got = r.associatedAmount ?? r.verifiedAmount;
+    const partial = got && r.depositedAmount && BigInt(got) < BigInt(r.depositedAmount);
     switch (r.state) {
       case "COMPLETED": return c("REFUND", partial ? "REFUND_COMPLETED_PARTIAL" : "REFUND_COMPLETED", false, "Refund completed",
         partial ? "SPak verified the refund on chain. It is less than the deposit, which can happen when fees or a partial swap apply." : "SPak verified on chain that the funds are back at your refund address.", "REFUND_ADDRESS", ["NONE"]);
       case "PENDING_PROVIDER": return c("REFUND", "REFUND_EXPECTED", true, "Waiting for refund", "The swap did not complete. NEAR Intents returns funds automatically to your refund address. No action is needed yet." + reviewNote, "IN_TRANSIT", ["WAIT", "CHECK_AGAIN"]);
       case "INITIATED": return c("REFUND", "REFUND_INITIATED", true, "Refund started", "NEAR Intents reports a refund. SPak has not found the refund transaction on chain yet. If you see it in your wallet, you can submit it." + reviewNote, "IN_TRANSIT", ["WAIT", "CHECK_AGAIN", "SUBMIT_REFUND_TX"]);
+      case "ASSOCIATION_PENDING": return c("REFUND", "REFUND_ASSOCIATION_PENDING", true, "Refund transfer found, not yet linked", "A transfer reached your refund address, but NEAR Intents has not linked it to this transfer. SPak does not count it as your refund until that is established. A manual check is open.", "UNKNOWN", ["MANUAL_REVIEW", "CONTACT_SUPPORT"]);
+      case "PARTIAL": return c("REFUND", "REFUND_PARTIAL", true, "Part of the refund verified", "Part of the refund NEAR Intents reported has been verified. The rest is not verified yet." + reviewNote, "IN_TRANSIT", ["WAIT", "CHECK_AGAIN", "CONTACT_SUPPORT"]);
       case "TX_DETECTED": case "VERIFICATION_PENDING": return c("REFUND", "REFUND_VERIFICATION_PENDING", true, "Refund being verified", "A refund transaction was found. SPak is waiting for it to be final on chain before confirming it.", "IN_TRANSIT", ["WAIT", "CHECK_AGAIN"]);
       case "DELAYED": return c("REFUND", "REFUND_DELAYED", true, "Refund delayed", "The refund is taking longer than usual. Your deposit is recorded and SPak keeps checking." + reviewNote, "IN_TRANSIT", ["WAIT", "SUBMIT_REFUND_TX", "CONTACT_SUPPORT"]);
       case "FAILED": return c("REFUND", "REFUND_FAILED", false, "Refund could not be verified", "The refund transaction did not return the funds as expected. This needs a manual check." + reviewNote, "UNKNOWN", ["MANUAL_REVIEW", "CONTACT_SUPPORT"]);

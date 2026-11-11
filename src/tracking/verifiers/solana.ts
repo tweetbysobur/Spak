@@ -15,7 +15,7 @@ interface ParsedTx {
 export async function verifySolanaDelivery(rpc: ChainRpc, e: DeliveryExpectation): Promise<DeliveryResult> {
   const st = (await rpc.call<{ value: ({ confirmationStatus?: string; err: unknown } | null)[] }>(e.network, "getSignatureStatuses", [[e.txHash], { searchTransactionHistory: true }])).value[0];
   if (!st) return { outcome: "NOT_FOUND", received: "0", confirmations: null, problems: [], observed: {} };
-  const tx = await rpc.call<ParsedTx | null>(e.network, "getTransaction", [e.txHash, { encoding: "jsonParsed", commitment: "confirmed", maxSupportedTransactionVersion: 0 }]);
+  const tx = await rpc.call<ParsedTx | null>(e.network, "getTransaction", [e.txHash, { encoding: "jsonParsed", commitment: "confirmed", maxSupportedTransactionVersion: 1 }]);
   if (!tx?.meta) return { outcome: "PENDING", received: "0", confirmations: null, problems: [], observed: { confirmationStatus: st.confirmationStatus } };
   const observed: Record<string, unknown> = { confirmationStatus: st.confirmationStatus };
   if (tx.meta.err || st.err) return { outcome: "FAILED", received: "0", confirmations: null, problems: ["the destination transaction failed"], observed };

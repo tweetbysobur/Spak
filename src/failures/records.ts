@@ -1,13 +1,13 @@
 import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
 import type { Db } from "../database/repositories";
-import { executions, failureEvents, recoveryAttempts, refundTxs, refunds, reviewNotes, reviews } from "../database/schema";
+import { adminAudit, executions, failureEvents, recoveryAttempts, refundTxs, refunds, reviewNotes, reviews } from "../database/schema";
 
 export type RefundRow = typeof refunds.$inferSelect;
 export type RefundTxRow = typeof refundTxs.$inferSelect;
 export type ReviewRow = typeof reviews.$inferSelect;
 
 /** Refund lifecycle (SPak's view; separate from execution and deposit states). */
-export const REFUND_STATES = ["PENDING_PROVIDER", "INITIATED", "TX_DETECTED", "VERIFICATION_PENDING", "COMPLETED", "FAILED", "DELAYED", "UNKNOWN"] as const;
+export const REFUND_STATES = ["PENDING_PROVIDER", "INITIATED", "TX_DETECTED", "VERIFICATION_PENDING", "ASSOCIATION_PENDING", "PARTIAL", "COMPLETED", "FAILED", "DELAYED", "UNKNOWN"] as const;
 export type RefundState = (typeof REFUND_STATES)[number];
 
 export class FailureRecords {
@@ -35,7 +35,7 @@ export class FailureRecords {
     });
   }
 
-  async registerRefundTx(v: { id: string; executionId: string; network: string; txHash: string; source: string; recipient: string; assetId: string; tokenContract: string | null }) {
+  async registerRefundTx(v: { id: string; executionId: string; refundId: string; network: string; txHash: string; source: string; recipient: string; assetId: string; tokenContract: string | null }) {
     const now = this.clock();
     await this.db.insert(refundTxs).values({ ...v, outcome: "PENDING", firstCheckedAt: now, lastCheckedAt: now }).onConflictDoNothing();
     const [r] = await this.db.select().from(refundTxs).where(and(eq(refundTxs.network, v.network), eq(refundTxs.txHash, v.txHash))).limit(1);
@@ -106,5 +106,13 @@ export class FailureRecords {
     const now = this.clock();
     const [r] = await this.db.update(reviews).set({ status: "RESOLVED", resolution, resolvedAt: now, updatedAt: now }).where(and(eq(reviews.id, id), ne(reviews.status, "RESOLVED"))).returning();
     return r ?? null;
+  }
+
+  // ------------------------------------------------------------------ reviewer audit (append-only)
+  async adminAudit(a: { reviewerId: string; credentialRef: string; action: string; executionId?: string | null; reviewId?: string | null; reason?: string | null; evidence?: Record<string, unknown>; outcome: string }) {
+    await this.db.insert(adminAudit).values({ ...a, executionId: a.executionId ?? null, reviewId: a.reviewId ?? null, reason: a.reason?.slice(0, 1000) ?? null, evidence: a.evidence ?? {}, at: this.clock() });
+  }
+  async adminAuditFor(reviewId: string) {
+    return this.db.select().from(adminAudit).where(eq(adminAudit.reviewId, reviewId)).orderBy(asc(adminAudit.at), asc(adminAudit.id));
   }
 }

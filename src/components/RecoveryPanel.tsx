@@ -7,7 +7,8 @@ import { Button, inputCls, Row } from "./ui";
 
 const REFUND_LABEL: Record<string, string> = {
   PENDING_PROVIDER: "Waiting for NEAR Intents to send the refund", INITIATED: "Refund started by NEAR Intents", TX_DETECTED: "Refund transaction found",
-  VERIFICATION_PENDING: "Verifying the refund on chain", COMPLETED: "Refund verified on chain", FAILED: "Refund could not be verified",
+  VERIFICATION_PENDING: "Verifying the refund on chain", ASSOCIATION_PENDING: "Transfer found, not linked to this refund yet (under review)",
+  PARTIAL: "Part of the reported refund verified", COMPLETED: "Refund fully verified and linked to this transfer", FAILED: "Refund could not be verified",
   DELAYED: "Refund delayed", UNKNOWN: "Refund status unknown",
 };
 const ACTION: Record<string, string> = {
@@ -41,20 +42,30 @@ export function RecoveryPanel({ executionId, view, onChange }: { executionId: st
       <Row k="Refund address" v={view.refund?.instructions.refundTo ?? view.refundAddress} mono />
       {r && <Row k="Refund status" v={REFUND_LABEL[r.state] ?? r.state} />}
       {r?.depositedAmount && <Row k="Deposit received" v={formatUnits(r.depositedAmount, asset)} />}
-      {r?.expectedAmount && <Row k="Refund reported by NEAR Intents (not verified)" v={formatUnits(r.expectedAmount, asset)} />}
-      <Row k="Refund verified on chain" v={r?.verifiedAmount ? `${formatUnits(r.verifiedAmount, asset)}${r.partial ? " (partial)" : ""}` : "Not yet"} />
+      <Row k="1. Refund reported by NEAR Intents (not proof)" v={r?.expectedAmount ? formatUnits(r.expectedAmount, asset) : "Not reported"} />
+      <Row k="2. Transfers to your refund address seen on chain" v={r?.verifiedAmount && r.verifiedAmount !== "0" ? formatUnits(r.verifiedAmount, asset) : "None yet"} />
+      <Row k="3. Refund verified and linked to this transfer" v={r?.associatedAmount && r.associatedAmount !== "0" ? `${formatUnits(r.associatedAmount, asset)}${r.partial ? " (less than the deposit)" : ""}` : "Not yet"} />
+      {r?.outstandingAmount && r.outstandingAmount !== "0" && <Row k="Reported but not yet verified" v={formatUnits(r.outstandingAmount, asset)} />}
       {view.refund?.transactions.map((t) => (
-        <Row key={t.txHash} k={`Refund transaction (${t.outcome.toLowerCase().replaceAll("_", " ")})`}
-          v={t.explorerUrl ? <a className="font-mono text-sky-300 underline" href={t.explorerUrl} target="_blank" rel="noreferrer noopener">{t.txHash.slice(0, 10)}…{t.txHash.slice(-8)}</a> : t.txHash} />
+        <div key={t.txHash} className="mt-2 rounded-lg border border-white/10 p-2 text-xs">
+          <div className="flex justify-between gap-2">
+            <span>{t.submitted ? "Submitted transaction (a candidate, not a confirmed refund)" : "Transaction listed by NEAR Intents"}</span>
+            {t.explorerUrl ? <a className="font-mono text-sky-300 underline" href={t.explorerUrl} target="_blank" rel="noreferrer noopener">{t.txHash.slice(0, 10)}…{t.txHash.slice(-8)}</a> : <span className="font-mono">{t.txHash}</span>}
+          </div>
+          <p className="mt-1 text-white/60">On chain: {t.chainVerified ? `verified, ${t.receivedAmount ? formatUnits(t.receivedAmount, asset) : ""} to your refund address` : t.outcome.toLowerCase().replaceAll("_", " ")}</p>
+          <p className={t.association === "PROVIDER_LISTED" ? "text-emerald-300" : "text-amber-300"}>{t.associationExplanation}</p>
+          {t.rejectedReason && <p className="text-red-300">{t.rejectedReason}</p>}
+        </div>
       ))}
       {view.review && <Row k="Manual review" v={`${view.review.status === "OPEN" ? "Opened" : "In progress"} ${new Date(view.review.openedAt).toLocaleString()}`} />}
       <Row k="Last updated" v={new Date(view.updatedAt).toLocaleString()} />
 
       <ul className="mt-3 list-disc pl-4 text-xs text-white/70">{f.actions.filter((a) => a !== "NONE").map((a) => <li key={a}>{ACTION[a] ?? a}</li>)}</ul>
+      {f.actions.includes("SUBMIT_REFUND_TX") && <p className="mt-3 text-xs text-white/50">Submitting a hash does not confirm your refund. SPak checks it on chain and counts it only if NEAR Intents links it to this transfer.</p>}
       {f.actions.includes("SUBMIT_REFUND_TX") && (
         <div className="mt-3 flex gap-2">
           <input className={`${inputCls} flex-1 font-mono`} placeholder="Refund transaction hash" value={hash} onChange={(e) => setHash(e.target.value)} />
-          <Button variant="ghost" disabled={busy || hash.trim().length < 10} onClick={() => act(() => api(`/api/executions/${executionId}/refund/transactions`, { txHash: hash.trim() }))}>Submit</Button>
+          <Button variant="ghost" title="Submitting a hash does not confirm the refund. SPak checks it and needs NEAR Intents to link it to this transfer." disabled={busy || hash.trim().length < 10} onClick={() => act(() => api(`/api/executions/${executionId}/refund/transactions`, { txHash: hash.trim() }))}>Submit</Button>
         </div>
       )}
       {(f.actions.includes("CHECK_AGAIN") || f.actions.includes("VERIFY_REFUND")) && r && (

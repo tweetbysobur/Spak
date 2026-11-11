@@ -9,8 +9,8 @@ const body = z.object({ resolution: z.enum(REVIEW_RESOLUTIONS), note: z.string()
 
 /** POST /api/admin/reviews/:id/resolve  Close a case with a documented reason. Never changes the execution state. */
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  return adminHandle(req, async (reviewer) => {
+  return adminHandle(req, async (actor) => {
     const b = body.parse(await req.json());
-    return NextResponse.json(await (await spak()).reviews.resolve(idSchema("rev").parse((await ctx.params).id), reviewer, b.resolution, b.note, b.evidence));
+    return NextResponse.json(await (await spak()).reviews.resolve(actor, idSchema("rev").parse((await ctx.params).id), b.resolution, b.note, b.evidence));
   });
 }

@@ -382,7 +382,17 @@ export const refundTxs = pgTable("spak_refund_txs", {
   network: text("network").notNull(),
   txHash: text("tx_hash").notNull(),
   source: text("source").notNull(), // PROVIDER | USER | ADMIN
+  /** Refund record this candidate belongs to (spak_refunds is keyed by execution id). */
+  refundId: text("refund_id"),
   outcome: text("outcome").notNull(),
+  /** PROVIDER_LISTED (verified association) | PENDING_ASSOCIATION (candidate, relationship unproven) | REJECTED. */
+  association: text("association").notNull().default("PENDING_ASSOCIATION"),
+  associationEvidence: jsonb("association_evidence").notNull().default({}),
+  /** Separate results: exists, success, network, recipient, asset, amount, finality, time, association, provider. */
+  checks: jsonb("checks").notNull().default({}),
+  sender: text("sender"),
+  txTimestamp: timestamp("tx_timestamp", { withTimezone: true }),
+  rejectedReason: text("rejected_reason"),
   recipient: text("recipient").notNull(),
   assetId: text("asset_id").notNull(),
   tokenContract: text("token_contract"),
@@ -412,6 +422,11 @@ export const refunds = pgTable("spak_refunds", {
   providerRefundedAmount: text("provider_refunded_amount"),
   providerRefundReason: text("provider_refund_reason"),
   verifiedAmount: text("verified_amount"),
+  /** Verified on chain AND reliably associated with this execution (only this counts toward completion). */
+  associatedAmount: text("associated_amount"),
+  /** Provider-reported refund minus associated amount, when the provider stated an amount. */
+  outstandingAmount: text("outstanding_amount"),
+  depositTxTimestamp: timestamp("deposit_tx_timestamp", { withTimezone: true }),
   openedAt: timestamp("opened_at", { withTimezone: true }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
   completedAt: timestamp("completed_at", { withTimezone: true }),
@@ -463,3 +478,18 @@ export const reviewNotes = pgTable("spak_review_notes", {
   note: text("note").notNull(),
   evidence: jsonb("evidence").notNull().default({}),
 }, (t) => [index("spak_review_notes_review_idx").on(t.reviewId, t.at)]);
+
+/** Every reviewer action, with the reviewer identity resolved from server-side credentials. Append-only. */
+export const adminAudit = pgTable("spak_admin_audit", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  at: timestamp("at", { withTimezone: true }).notNull(),
+  reviewerId: text("reviewer_id").notNull(),
+  /** Short fingerprint of the credential used (hash prefix), never the credential. */
+  credentialRef: text("credential_ref").notNull(),
+  action: text("action").notNull(),
+  executionId: text("execution_id"),
+  reviewId: text("review_id"),
+  reason: text("reason"),
+  evidence: jsonb("evidence").notNull().default({}),
+  outcome: text("outcome").notNull(),
+}, (t) => [index("spak_admin_audit_review_idx").on(t.reviewId, t.at), index("spak_admin_audit_reviewer_idx").on(t.reviewerId, t.at)]);

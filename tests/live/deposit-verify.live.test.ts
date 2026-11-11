@@ -20,7 +20,7 @@ describe("verifiers on real mainnet transactions", () => {
     for (let b = head - 20; b > head - 60 && (!native || !token); b--) {
       const block = await rpc.call<{ transactions: Tx[] }>("base", "eth_getBlockByNumber", [`0x${b.toString(16)}`, true]);
       native ??= block.transactions.find((t) => t.input === "0x" && BigInt(t.value) > 0n && t.to);
-      token ??= block.transactions.find((t) => t.to?.toLowerCase() === USDC_BASE && t.input.startsWith("0xa9059cbb"));
+      token ??= block.transactions.find((t) => t.to?.toLowerCase() === USDC_BASE && t.input.startsWith("0xa9059cbb") && BigInt(`0x${t.input.slice(74, 138) || "0"}`) > 0n);
     }
     expect(native).toBeTruthy();
     const e = { network: "base", kind: "NATIVE" as const, txHash: native!.hash, sender: native!.from, depositAddress: native!.to!, amount: BigInt(native!.value).toString(), tokenContract: null, chainId: 8453, decimals: 18 };

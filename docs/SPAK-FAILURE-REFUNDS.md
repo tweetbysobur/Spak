@@ -33,7 +33,7 @@ New: REFUNDING. Changed: FAILED is no longer final. It is monitored and can move
 
 Rules:
 
-- REFUNDED needs both the provider reporting REFUNDED and the source chain showing at least the provider's `refundedAmount` arriving at the refund address, in the exact source asset, at final commitment.
+- REFUNDED needs the provider reporting REFUNDED, a provider refunded amount, and transfers that are verified on the source chain, in the time window, and associated with this execution (provider-listed). Together they must cover that amount. See "Refund transaction association" below.
 - COMPLETED still needs SPak's destination verification (Phase 4).
 - A COMPLETED execution never moves to REFUNDED.
 - Timeouts, rate limits and outages never change the state to FAILED.
@@ -71,15 +71,71 @@ Recovery actions: WAIT, CHECK_AGAIN, SUBMIT_REFUND_TX, VERIFY_REFUND, START_NEW_
 
 The latest classification is stored on `spak_executions.failure`. Changes are logged to `spak_failure_events`.
 
-## Refund verification (src/failures/refunds.ts)
+## Refund transaction association (Phase 5.1)
 
-- Candidates come from three places: provider origin-chain hashes that are not deposit transactions, hashes the user submits, and hashes a reviewer attaches.
-- A deposit transaction is refused as a refund. A hash linked to another execution is refused (unique network and tx_hash).
-- Each candidate is checked with the Phase 4 chain verifiers on the source network:
-  - EVM: receipt status, Transfer logs of the exact token to the refund address (or a direct native transfer), confirmations.
-  - Solana: the refund owner's balance change for the exact mint, or lamports for SOL, at finalized.
-  - NEAR: receipts, at FINAL.
-- Amounts are summed across verified candidates and compared with the provider's `refundedAmount`.
+### Why a matching transfer is not proof
+
+A transfer to the refund address in the right token, for the right amount, at a plausible time proves only that some transfer happened. Anyone can send the user tokens, and the user can point at any incoming transfer. None of these facts says NEAR Intents sent it as this execution's refund:
+
+- refund address
+- token contract or mint
+- amount
+- timestamp
+- success
+- finality
+
+### Two separate questions
+
+1. Chain verification. Each check is stored separately in `spak_refund_txs.checks`:
+   - exists
+   - success
+   - network: queried on the source network only
+   - recipient: the refund address
+   - asset: the exact contract or mint
+   - amount
+   - finality: EVM confirmations, Solana finalized, NEAR FINAL
+   - time: at or after the deposit transaction, and no later than the deposit deadline + 7 days
+   - provider: NEAR Intents reports REFUNDED
+2. Association: does the transfer belong to this execution's refund. Stored in `association`, with `association_evidence`:
+   - PROVIDER_LISTED: NEAR Intents returned the hash in `originChainTxHashes` of the status response for this execution's unique deposit address, under this execution's firm quote signature. This is the only evidence SPak accepts. NEAR Intents does not say which origin transaction is the refund and has no refund reference field, so SPak claims nothing more.
+   - PENDING_ASSOCIATION: a candidate. It was submitted by the user or a reviewer, or seen but not linked. It is checked on chain and never counted. A confirmed but unlinked candidate puts the refund in ASSOCIATION_PENDING and opens a review.
+   - REJECTED: the time check failed. Shown with `rejected_reason`, and it opens a review.
+
+The time check is supplementary. Passing it never associates a transfer. The time window is SPak policy, because NEAR Intents documents no refund timing.
+
+### Completion rules
+
+The refund is COMPLETED, and the execution REFUNDED, only when all of these hold:
+
+- The provider status is REFUNDED.
+- The provider stated `refundedAmount`.
+- No provider-listed transaction is still pending.
+- The sum of PROVIDER_LISTED, CONFIRMED, time-PASS transfers is at least `refundedAmount`.
+
+Otherwise:
+
+| Situation | Refund state |
+|---|---|
+| Associated amount below the provider's figure | PARTIAL (outstanding amount stored) |
+| Associated transfer, but the provider has not reported REFUNDED | VERIFICATION_PENDING |
+| Provider reported REFUNDED with no amount | VERIFICATION_PENDING, review opened |
+| Only unlinked candidates verified | ASSOCIATION_PENDING, review opened |
+| Linked transfers show nothing reaching the refund address | FAILED, review opened |
+| No transaction after 6 hours | DELAYED (review after 72 hours) |
+
+Three amounts are kept and shown separately:
+
+1. `providerRefundedAmount`: what NEAR Intents reports, not proof.
+2. `verifiedAmount`: any confirmed transfers to the refund address, associated or not.
+3. `associatedAmount`: verified and linked. This is the only amount ever called returned.
+
+`outstandingAmount` is the provider figure minus the associated amount. SPak calculates no refund fees. A refund below the deposit is shown as "less than the deposit" without guessing why.
+
+### Duplicate protection
+
+- `spak_refund_txs` has a unique (network, tx_hash) index. EVM hashes are stored lowercase so case variants collide.
+- Refused as refunds: the execution's deposit transaction (any case), its destination transactions, and hashes linked to another execution.
+- Concurrent submissions resolve in the database. Refused attempts stay in `spak_recovery_attempts` with the error code.
 
 ## Background worker
 
@@ -89,9 +145,18 @@ FAILED and REFUNDING are now monitored states. Each attempt runs the deposit che
 
 - `spak_reviews`: at most one open case per execution. `spak_review_notes` is append-only, with an author and evidence JSON.
 - Opened by SPak: give-up, NEEDS_RECONCILIATION, failed refund verification, refund missing after 72 hours, a refund reference that belongs to another execution.
-- Reviewers can read all evidence, add notes, attach a refund transaction (which SPak verifies), and resolve with NO_ACTION_NEEDED, USER_CONTACTED, REFERRED_TO_PROVIDER or RESOLVED_BY_VERIFICATION. The last is allowed only when SPak already verified COMPLETED or REFUNDED. Resolving needs a note and evidence.
-- Reviewers cannot set execution states.
-- Auth is `Authorization: Bearer $SPAK_ADMIN_TOKEN` (32+ characters) plus `X-SPak-Reviewer: <name>`. It is separate from user sessions and fails closed (503) when the token is not set.
+- Reviewers see the execution, the original deposit transaction, the provider's references and refunded amount, every candidate with its separate checks, association and evidence, time and asset and recipient comparisons, outstanding amount, refund state, previous notes and the audit trail.
+- Reviewers can add notes and evidence, attach a candidate transaction (checked on chain, but it stays PENDING_ASSOCIATION), request another verification, and resolve with NO_ACTION_NEEDED, USER_CONTACTED, REFERRED_TO_PROVIDER or RESOLVED_BY_VERIFICATION. The last is allowed only when SPak already verified COMPLETED or REFUNDED. Resolving needs a note and evidence.
+- Reviewers cannot mark a refund verified, associate a transaction, mark an execution refunded or completed, or skip chain checks. There is no override path. A reviewer can close an investigation but cannot manufacture proof.
+
+### Reviewer authentication
+
+- `SPAK_REVIEWERS=alice:<sha256 hex of alice's token>,bob:<sha256 hex of bob's token>`. Each person has their own token. Only hashes are configured.
+- Requests send `Authorization: Bearer <own token>`. The server hashes it, compares in constant time against every entry, and takes the identity from the matching entry. Any name in headers or bodies is ignored, and the strict body schemas reject unknown fields.
+- Legacy `SPAK_ADMIN_TOKEN` (raw, 32+ characters) maps to `shared-admin`, a shared identity that does not identify a person.
+- Every reviewer action, including reads and refused actions, goes to `spak_admin_audit` with reviewer id, credential fingerprint (hash prefix), action, execution, review, time, reason, evidence and outcome.
+- Unknown, missing and malformed credentials get 401. No configuration gets 503. User session cookies never grant access.
+- To create a token: `openssl rand -hex 32`. Hash it with `printf %s "$TOKEN" | sha256sum`.
 
 ## API
 
@@ -121,7 +186,8 @@ Migration `0005_failure_refund.sql`, additive:
 
 | Name | Purpose |
 |---|---|
-| SPAK_ADMIN_TOKEN | Reviewer bearer token, 32+ random characters. Server only |
+| SPAK_REVIEWERS | `id:sha256hex` entries, one per reviewer. Server only. Preferred |
+| SPAK_ADMIN_TOKEN | Legacy single shared reviewer token, identity `shared-admin`. Avoid when there is more than one reviewer |
 
 The others (CRON_SECRET, SPAK_MONITOR_SECRET, SPAK_RPC_*) are unchanged.
 
@@ -131,15 +197,25 @@ The others (CRON_SECRET, SPAK_MONITOR_SECRET, SPAK_RPC_*) are unchanged.
 |---|---|
 | Classification rules (pure) | tests/failures/classify.test.ts |
 | Mocked provider and chain, real SQL: refund lifecycle, partial, delayed, wrong recipient, wrong asset, failed tx, confirmations, idempotency, concurrency, tampered and duplicate refs, cross-user, rate limit, cancel guard, manual review | tests/failures/refunds.test.ts |
-| Routes: auth, ownership, origin, validation, admin token separation | tests/failures/routes.test.ts |
+| Routes: auth, ownership, origin, validation, reviewer credentials | tests/failures/routes.test.ts |
+| Association: provider-listed vs candidates, time window, wrong chain, provider not confirming, amount missing, uniqueness, concurrency, reviewer identity | tests/failures/association.test.ts |
+| Real chain: block time and sender for the time check | tests/live/refund-facts.live.test.ts |
 | Real chain and provider (LIVE=1) | tests/live/tracking.live.test.ts. The refund verifier uses these same chain verifiers |
 
 ## Known limitations
 
-- No real refund was observed. Triggering one needs a funded failed swap, which was not done.
-- The REFUNDED provider response shape comes from the OpenAPI spec, not from a live response.
-- NEAR Intents gives no refund transaction field. If the refund transaction is not in `originChainTxHashes`, SPak needs the user or a reviewer to supply it. Until then the refund stays INITIATED or DELAYED.
-- A user can submit any transfer to their own refund address as a refund candidate. It completes a refund only if the provider reports REFUNDED and the amount covers the provider's figure. Block time is not yet checked against the deposit time.
-- The refund fee formula is not documented by the provider. A refund below the deposit is shown as partial, with no breakdown.
+- No real refund was observed. Triggering one needs a funded swap that fails. Not done.
+- Association relies on NEAR Intents listing the refund transaction in `originChainTxHashes`. The docs do not promise refunds are listed there. If they are not, every real refund ends in ASSOCIATION_PENDING or DELAYED and needs manual handling with the provider. Fail-closed behaviour; check this before production.
+- The REFUNDED response shape comes from the OpenAPI spec, not a live response.
+- The refund time window (deadline + 7 days) is SPak policy.
+- The refund fee formula is not documented by the provider.
+- Native EVM refunds through an internal call cannot be verified without trace RPC. They stay UNVERIFIABLE.
 - There is no admin web screen yet, only the API.
-- Native EVM refunds sent through an internal call cannot be verified without trace RPC.
+
+## Before production
+
+1. Run one small funded swap that NEAR Intents refunds (for example, deposit below the quoted amount). Confirm the REFUNDED response fields and whether the refund hash appears in `originChainTxHashes`.
+2. Confirm the time window against the observed refund timing.
+3. Configure `SPAK_REVIEWERS` with one token per person. Do not use `SPAK_ADMIN_TOKEN` for more than one person.
+4. Use paid RPC endpoints (`SPAK_RPC_<NETWORK>`).
+5. Run `npm test` and `LIVE=1 npm run test:live`.

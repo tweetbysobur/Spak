@@ -4,7 +4,7 @@
  */
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { refundTxs, failureEvents, reviews } from "@/database/schema";
+import { refundTxs, failureEvents, reviews, recoveryAttempts } from "@/database/schema";
 import { REFUND_TIMING } from "@/failures";
 import type { ExecutionError } from "@/execution";
 import { approval, harness } from "../execution/harness";
@@ -94,7 +94,7 @@ describe("refund lifecycle (mocked provider and chain)", () => {
     provider(ex.depositAddress!, sig, "REFUNDED", { refundedAmount: "50000000", originChainTxHashes: [{ hash: short, explorerUrl: "x" }] });
     await tick();
     expect((await get(ex.id)).state).toBe("REFUNDING");
-    expect(await refund(ex.id)).toMatchObject({ state: "VERIFICATION_PENDING", verifiedAmount: "10000000" });
+    expect(await refund(ex.id)).toMatchObject({ state: "PARTIAL", associatedAmount: "10000000", outstandingAmount: "40000000" });
   });
 
   it("insufficient confirmations stay pending; partial refund completes as partial", async () => {
@@ -140,38 +140,49 @@ describe("refund lifecycle (mocked provider and chain)", () => {
 });
 
 describe("recovery actions and security", () => {
-  it("user-submitted refund tx: verified, idempotent, deposit tx and other transfers' txs refused, cross-user refused", async () => {
+  it("user-submitted refund tx is only a candidate: checked on chain, never counted until NEAR Intents lists it", async () => {
     const a = await deposited();
     provider(a.ex.depositAddress!, a.sig, "REFUNDED", { refundedAmount: "50000000" });
     await tick();
     const t = refundTx(a.refundTo, 50_000_000n);
     const r1 = await h.failures.submitRefundTx(u.userId, a.ex.id, t);
-    expect(r1.refund).toMatchObject({ state: "COMPLETED" });
+    expect(r1.refund).toMatchObject({ state: "ASSOCIATION_PENDING", verifiedAmount: "50000000", associatedAmount: "0" });
+    expect(r1.transactions[0]).toMatchObject({ submitted: true, chainVerified: true, association: "PENDING_ASSOCIATION" });
+    expect((await get(a.ex.id)).state).toBe("REFUNDING");
+    expect(await h.failureRecords.openReviewFor(a.ex.id)).not.toBeNull();
+    expect((await h.failures.refund(u.userId, a.ex.id)).transactions).toHaveLength(1); // idempotent
+    await h.failures.submitRefundTx(u.userId, a.ex.id, t.toUpperCase().replace("0X", "0x"));
+    expect((await h.failures.refund(u.userId, a.ex.id)).transactions).toHaveLength(1); // case variants are the same tx
+    // NEAR Intents now lists it for this deposit address: association established, refund completes.
+    provider(a.ex.depositAddress!, a.sig, "REFUNDED", { refundedAmount: "50000000", originChainTxHashes: [{ hash: a.depTx, explorerUrl: "x" }, { hash: t, explorerUrl: "x" }] });
+    await tick();
     expect((await get(a.ex.id)).state).toBe("REFUNDED");
-    const again = await h.failures.refund(u.userId, a.ex.id);
-    expect(again.transactions).toHaveLength(1);
 
     const b = await deposited();
     provider(b.ex.depositAddress!, b.sig, "REFUNDED", { refundedAmount: "50000000" });
     await tick();
-    expect(await code(h.failures.submitRefundTx(u.userId, b.ex.id, b.depTx))).toBe("INVALID_TX_REFERENCE"); // tampered: the deposit
-    expect(await code(h.failures.submitRefundTx(u.userId, b.ex.id, t))).toBe("DUPLICATE_TX"); // tampered: another transfer's refund
+    expect(await code(h.failures.submitRefundTx(u.userId, b.ex.id, b.depTx))).toBe("INVALID_TX_REFERENCE"); // the deposit
+    expect(await code(h.failures.submitRefundTx(u.userId, b.ex.id, t))).toBe("DUPLICATE_TX"); // another transfer's refund
     expect(await code(h.failures.submitRefundTx(u.userId, b.ex.id, "0x1234"))).toBe("INVALID_TX_REFERENCE");
     const bob = await h.newUser();
     expect(await code(h.failures.submitRefundTx(bob.userId, b.ex.id, refundTx(b.refundTo, 1n)))).toBe("EXECUTION_NOT_FOUND");
     expect(await code(h.failures.refund(bob.userId, b.ex.id))).toBe("EXECUTION_NOT_FOUND");
     expect(await code(h.failures.failure(bob.userId, b.ex.id))).toBe("EXECUTION_NOT_FOUND");
+    const rejected = await h.db.select().from(recoveryAttempts).where(eq(recoveryAttempts.executionId, b.ex.id));
+    expect(rejected.map((x) => x.outcome)).toEqual(expect.arrayContaining(["INVALID_TX_REFERENCE", "DUPLICATE_TX"])); // refused attempts kept
   });
 
-  it("concurrent refund submissions and verifications create one record and one completion", async () => {
+  it("concurrent submissions and verifications create one record and one completion", async () => {
     const a = await deposited();
-    provider(a.ex.depositAddress!, a.sig, "REFUNDED", { refundedAmount: "50000000" });
-    await tick();
     const t = refundTx(a.refundTo, 50_000_000n);
-    await Promise.all([h.failures.submitRefundTx(u.userId, a.ex.id, t), h.failures.submitRefundTx(u.userId, a.ex.id, t), h.monitor.run({ trigger: "x" })]);
+    provider(a.ex.depositAddress!, a.sig, "REFUNDED", { refundedAmount: "50000000", originChainTxHashes: [{ hash: t, explorerUrl: "x" }] });
+    h.clock.now += 5 * 60_000;
+    await Promise.all([h.failures.submitRefundTx(u.userId, a.ex.id, t).catch(() => null), h.failures.submitRefundTx(u.userId, a.ex.id, t).catch(() => null), h.monitor.run({ trigger: "x" }), h.monitor.run({ trigger: "y" })]);
+    await tick();
     expect((await h.db.select().from(refundTxs).where(eq(refundTxs.executionId, a.ex.id))).length).toBe(1);
+    expect((await get(a.ex.id)).state).toBe("REFUNDED");
     const evs = await h.db.select().from(failureEvents).where(eq(failureEvents.executionId, a.ex.id));
-    expect(evs.filter((e) => (e.detail as { to?: string }).to === "COMPLETED")).toHaveLength(1); // one refund state change
+    expect(evs.filter((e) => (e.detail as { to?: string }).to === "COMPLETED")).toHaveLength(1);
   });
 
   it("recovery actions are rate limited per execution", async () => {
@@ -196,25 +207,31 @@ describe("recovery actions and security", () => {
 });
 
 describe("manual review", () => {
-  it("reviewers add notes and attach evidence; they cannot mark refunded or completed; history is kept", async () => {
+  const ALICE = { reviewerId: "alice", credentialRef: "aaaaaaaaaaaa" };
+  it("reviewers add notes and candidates; they cannot associate, verify or mark refunded; audit names the reviewer", async () => {
     const a = await deposited();
     provider(a.ex.depositAddress!, a.sig, "REFUNDED", { refundedAmount: "50000000", originChainTxHashes: [{ hash: refundTx(OTHER, 50_000_000n), explorerUrl: "x" }] });
     await tick();
     const rv = (await h.failureRecords.openReviewFor(a.ex.id))!;
     expect(rv.status).toBe("OPEN");
-    await h.reviews.note(rv.id, "ops-alice", "Checked provider dashboard.", { link: "internal" });
-    expect(await code(h.reviews.resolve(rv.id, "ops-alice", "RESOLVED_BY_VERIFICATION", "done", { x: 1 }))).toBe("INVALID_STATE");
-    expect(await code(h.reviews.resolve(rv.id, "ops-alice", "NO_ACTION_NEEDED", "", {}))).toBe("EVIDENCE_REQUIRED");
-    expect((await get(a.ex.id)).state).toBe("REFUNDING");
-    // Reviewer finds the real refund: SPak verifies it; the state moves only because the chain shows it.
+    await h.reviews.note(ALICE, rv.id, "Checked provider dashboard.", { link: "internal" });
+    expect(await code(h.reviews.resolve(ALICE, rv.id, "RESOLVED_BY_VERIFICATION", "done", { x: 1 }))).toBe("INVALID_STATE");
+    expect(await code(h.reviews.resolve(ALICE, rv.id, "NO_ACTION_NEEDED", "", {}))).toBe("EVIDENCE_REQUIRED");
     const real = refundTx(a.refundTo, 50_000_000n);
-    const after = await h.reviews.attachRefundTx(rv.id, "ops-alice", real, "Found the refund on Basescan.");
-    expect(after.execution.state).toBe("REFUNDED");
-    const done = await h.reviews.resolve(rv.id, "ops-alice", "RESOLVED_BY_VERIFICATION", "Refund verified by SPak.", { refundTx: real });
+    const after = await h.reviews.attachRefundTx(ALICE, rv.id, real, "Found a transfer on Basescan.");
+    expect(after.execution.state).toBe("REFUNDING"); // a reviewer's candidate is not proof
+    expect(after.refundTransactions.find((t) => t.txHash === real)).toMatchObject({ association: "PENDING_ASSOCIATION", chainVerified: true });
+    await h.reviews.requestVerification(ALICE, rv.id, "re-check after provider update");
+    expect((await get(a.ex.id)).state).toBe("REFUNDING");
+    const ev = await h.reviews.get(ALICE, rv.id);
+    expect(ev.audit.map((x) => [x.reviewer, x.action, x.outcome])).toEqual(expect.arrayContaining([
+      ["alice", "ADD_NOTE", "OK"], ["alice", "RESOLVE_REVIEW", "INVALID_STATE"], ["alice", "RESOLVE_REVIEW", "EVIDENCE_REQUIRED"], ["alice", "ATTACH_REFUND_CANDIDATE", "OK"], ["alice", "REQUEST_VERIFICATION", "OK"],
+    ]));
+    expect(ev.notes.every((n) => n.author === "alice")).toBe(true);
+    const notes = ev.notes.length;
+    const done = await h.reviews.resolve(ALICE, rv.id, "REFERRED_TO_PROVIDER", "Asked NEAR Intents to confirm the refund tx.", { ticket: "NI-1" });
     expect(done.review.status).toBe("RESOLVED");
-    expect(done.notes.length).toBe(3);
-    expect(done.events.map((e) => e.to)).toContain("REFUNDED");
-    // One open case at most; a new one can open later.
+    expect(done.notes.length).toBe(notes + 1); // append-only
     expect((await h.db.select().from(reviews).where(eq(reviews.executionId, a.ex.id))).length).toBe(1);
   });
 });

@@ -5,5 +5,5 @@ import { spak } from "@/server/spak";
 
 /** GET /api/admin/reviews/:id  Full evidence for a case. Reviewer token only. */
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  return adminHandle(req, async () => NextResponse.json(await (await spak()).reviews.get(idSchema("rev").parse((await ctx.params).id))));
+  return adminHandle(req, async (actor) => NextResponse.json(await (await spak()).reviews.get(actor, idSchema("rev").parse((await ctx.params).id))));
 }

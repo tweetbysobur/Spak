@@ -19,7 +19,8 @@ describe("destination verification on real chain data", () => {
     let found: { hash: string; to: string; amount: bigint } | undefined;
     for (let b = head - 20; b > head - 80 && !found; b--) {
       const block = await rpc.call<{ transactions: { hash: string; to: string | null; input: string }[] }>("base", "eth_getBlockByNumber", [`0x${b.toString(16)}`, true]);
-      const t = block.transactions.find((x) => x.to?.toLowerCase() === USDC_BASE && x.input.startsWith("0xa9059cbb"));
+      // Skip zero-value transfers (common spam); the verifier correctly reports those as no delivery.
+      const t = block.transactions.find((x) => x.to?.toLowerCase() === USDC_BASE && x.input.startsWith("0xa9059cbb") && BigInt(`0x${x.input.slice(74, 138) || "0"}`) > 0n);
       if (!t) continue;
       const rc = await rpc.call<{ status: string }>("base", "eth_getTransactionReceipt", [t.hash]);
       if (rc.status === "0x1") found = { hash: t.hash, to: `0x${t.input.slice(34, 74)}`, amount: BigInt(`0x${t.input.slice(74, 138)}`) };
@@ -41,7 +42,7 @@ describe("destination verification on real chain data", () => {
     let found: { sig: string; owner: string; delta: bigint } | undefined;
     for (const { signature, err } of sigs) {
       if (err || found) continue;
-      const t = await rpc.call<{ meta: { err: unknown; preTokenBalances?: TB[]; postTokenBalances?: TB[] } | null } | null>("solana", "getTransaction", [signature, { encoding: "jsonParsed", commitment: "finalized", maxSupportedTransactionVersion: 0 }]);
+      const t = await rpc.call<{ meta: { err: unknown; preTokenBalances?: TB[]; postTokenBalances?: TB[] } | null } | null>("solana", "getTransaction", [signature, { encoding: "jsonParsed", commitment: "finalized", maxSupportedTransactionVersion: 1 }]);
       for (const owner of new Set((t?.meta?.postTokenBalances ?? []).filter((x) => x.mint === USDC_SOL && x.owner).map((x) => x.owner!))) {
         const d = sum(t!.meta!.postTokenBalances, owner) - sum(t!.meta!.preTokenBalances, owner);
         if (d > 0n) { found = { sig: signature, owner, delta: d }; break; }

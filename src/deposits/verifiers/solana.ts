@@ -16,7 +16,7 @@ export async function verifySolanaDeposit(rpc: ChainRpc, e: DepositExpectation):
   const statuses = await rpc.call<{ value: ({ confirmationStatus?: string; err: unknown } | null)[] }>(e.network, "getSignatureStatuses", [[e.txHash], { searchTransactionHistory: true }]);
   const st = statuses.value[0];
   if (!st) return { outcome: "NOT_FOUND", confirmations: null, problems: [], observed: {} };
-  const tx = await rpc.call<ParsedTx | null>(e.network, "getTransaction", [e.txHash, { encoding: "jsonParsed", commitment: "confirmed", maxSupportedTransactionVersion: 0 }]);
+  const tx = await rpc.call<ParsedTx | null>(e.network, "getTransaction", [e.txHash, { encoding: "jsonParsed", commitment: "confirmed", maxSupportedTransactionVersion: 1 }]);
   if (!tx?.meta) return { outcome: "PENDING", confirmations: null, problems: [], observed: { confirmationStatus: st.confirmationStatus } };
   const keys = tx.transaction.message.accountKeys.map((k) => k.pubkey);
   const observed: Record<string, unknown> = { feePayer: keys[0], confirmationStatus: st.confirmationStatus };

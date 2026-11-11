@@ -64,18 +64,24 @@ describe("user failure and refund API", () => {
 });
 
 describe("admin review API", () => {
-  it("fails closed without a token; user sessions and wrong tokens are refused; a reviewer name is required", async () => {
-    delete process.env.SPAK_ADMIN_TOKEN;
+  const sha = async (t: string) => (await import("node:crypto")).createHash("sha256").update(t).digest("hex");
+  const ALICE = "alice-token-" + "a".repeat(40), BOB = "bob-token-" + "b".repeat(40);
+  const auth = (t: string, extra: Record<string, string> = {}) => ({ authorization: `Bearer ${t}`, ...extra });
+  it("fails closed; per-reviewer credentials resolve identity on the server; client-sent names are ignored", async () => {
+    delete process.env.SPAK_ADMIN_TOKEN; delete process.env.SPAK_REVIEWERS;
     expect((await adminList(req("/api/admin/reviews", { method: "GET" }))).status).toBe(503);
-    process.env.SPAK_ADMIN_TOKEN = "a".repeat(40);
-    expect((await adminList(req("/api/admin/reviews", { method: "GET", cookie: alice.cookie }))).status).toBe(401);
-    expect((await adminList(req("/api/admin/reviews", { method: "GET", headers: { authorization: `Bearer ${"b".repeat(40)}` } }))).status).toBe(401);
-    expect((await adminList(req("/api/admin/reviews", { method: "GET", headers: { authorization: `Bearer ${"a".repeat(40)}` } }))).status).toBe(400);
-    const ok = await j(await adminList(req("/api/admin/reviews?status=OPEN", { method: "GET", headers: { authorization: `Bearer ${"a".repeat(40)}`, "x-spak-reviewer": "ops" } })));
+    process.env.SPAK_REVIEWERS = `alice:${await sha(ALICE)},bob:${await sha(BOB)}`;
+    expect((await adminList(req("/api/admin/reviews", { method: "GET" }))).status).toBe(401); // missing
+    expect((await adminList(req("/api/admin/reviews", { method: "GET", cookie: alice.cookie }))).status).toBe(401); // user session
+    expect((await adminList(req("/api/admin/reviews", { method: "GET", headers: auth("x".repeat(48)) }))).status).toBe(401); // unknown
+    expect((await adminList(req("/api/admin/reviews", { method: "GET", headers: auth(await sha(ALICE)) }))).status).toBe(401); // the hash is not the credential
+    const ok = await j(await adminList(req("/api/admin/reviews?status=OPEN", { method: "GET", headers: auth(ALICE, { "x-spak-reviewer": "bob" }) })));
     expect(ok.status).toBe(200);
     expect(ok.body.reviews).toEqual([]);
     const rid = `rev_${"0".repeat(24)}`;
-    const bad = await adminResolve(req(`/api/admin/reviews/${rid}/resolve`, { headers: { authorization: `Bearer ${"a".repeat(40)}`, "x-spak-reviewer": "ops" }, body: { resolution: "MARK_COMPLETED", note: "x", evidence: {} } }), p(rid));
+    const bad = await adminResolve(req(`/api/admin/reviews/${rid}/resolve`, { headers: auth(BOB), body: { resolution: "MARK_COMPLETED", note: "x", evidence: {} } }), p(rid));
     expect(bad.status).toBe(400); // no such resolution: reviewers cannot set outcomes
+    const spoof = await adminResolve(req(`/api/admin/reviews/${rid}/resolve`, { headers: auth(BOB), body: { resolution: "NO_ACTION_NEEDED", note: "x", evidence: { a: 1 }, reviewer: "alice" } }), p(rid));
+    expect(spoof.status).toBe(400); // identity fields in bodies are refused by the strict schema
   });
 });
