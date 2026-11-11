@@ -393,6 +393,8 @@ export const refundTxs = pgTable("spak_refund_txs", {
   sender: text("sender"),
   txTimestamp: timestamp("tx_timestamp", { withTimezone: true }),
   rejectedReason: text("rejected_reason"),
+  /** EXPECTED_WINDOW | LATE_TRANSACTION | EARLY_TRANSACTION | TIMING_UNKNOWN. Timing never associates. */
+  timing: text("timing").notNull().default("TIMING_UNKNOWN"),
   recipient: text("recipient").notNull(),
   assetId: text("asset_id").notNull(),
   tokenContract: text("token_contract"),
@@ -426,6 +428,10 @@ export const refunds = pgTable("spak_refunds", {
   associatedAmount: text("associated_amount"),
   /** Provider-reported refund minus associated amount, when the provider stated an amount. */
   outstandingAmount: text("outstanding_amount"),
+  /** Verified, in-time transfers NEAR Intents listed for this execution, counted only when the capability is CONFIRMED. */
+  providerListedAmount: text("provider_listed_amount"),
+  /** Refund-evidence capability in force at the last check: CONFIRMED | UNCONFIRMED | UNSUPPORTED. */
+  evidenceCapability: text("evidence_capability"),
   depositTxTimestamp: timestamp("deposit_tx_timestamp", { withTimezone: true }),
   openedAt: timestamp("opened_at", { withTimezone: true }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),

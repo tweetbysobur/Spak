@@ -129,15 +129,16 @@ export class FailureService {
 
 const ASSOCIATION_TEXT: Record<string, string> = {
   PROVIDER_LISTED: "NEAR Intents listed this transaction for this transfer's deposit address.",
+  PROVIDER_LISTED_UNCONFIRMED: "NEAR Intents lists this transaction for this transfer's deposit address, but does not document it as the refund. SPak does not count it until that is confirmed; a manual check is open.",
   PENDING_ASSOCIATION: "Not linked to this transfer by NEAR Intents. A matching recipient, asset, amount or time does not prove it is this refund.",
-  REJECTED: "Rejected: outside the time this refund could have happened.",
+  REJECTED: "Rejected: it happened before your deposit, or it is a different asset or network.",
 };
 export function refundTxView(t: RefundTxRow) {
   return {
     txHash: t.txHash, source: t.source, submitted: t.source !== "PROVIDER", outcome: t.outcome,
     chainVerified: t.outcome === "CONFIRMED", association: t.association, associationExplanation: ASSOCIATION_TEXT[t.association] ?? t.association,
     checks: t.checks, receivedAmount: t.receivedAmount, confirmations: t.confirmations, sender: t.sender, txTimestamp: t.txTimestamp?.toISOString() ?? null,
-    rejectedReason: t.rejectedReason, explorerUrl: txExplorerUrl(t.network, t.txHash), problems: t.problems, verifiedAt: t.verifiedAt?.toISOString() ?? null,
+    timing: t.timing, rejectedReason: t.rejectedReason, explorerUrl: txExplorerUrl(t.network, t.txHash), problems: t.problems, verifiedAt: t.verifiedAt?.toISOString() ?? null,
   };
 }
 
@@ -150,6 +151,8 @@ export function refundView(r: RefundRow) {
     verifiedAmount: r.verifiedAmount, // transfers to the refund address SPak saw on chain (any association)
     associatedAmount: r.associatedAmount, // verified AND linked to this execution; the only amount called returned
     outstandingAmount: r.outstandingAmount,
+    providerListedAmount: r.providerListedAmount, // verified transfers NEAR Intents listed; counted only when evidence is CONFIRMED
+    evidenceCapability: r.evidenceCapability,
     depositTxTimestamp: r.depositTxTimestamp?.toISOString() ?? null,
     partial, reason: r.providerRefundReason, openedAt: r.openedAt.toISOString(), updatedAt: r.updatedAt.toISOString(), completedAt: r.completedAt?.toISOString() ?? null,
   };

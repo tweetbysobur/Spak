@@ -50,6 +50,13 @@
       "when": 1794376327361,
       "tag": "0006_refund_association",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794377696351,
+      "tag": "0007_refund_timing_capability",
+      "breakpoints": true
     }
   ]
 }

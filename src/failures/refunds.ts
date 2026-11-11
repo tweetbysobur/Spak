@@ -13,10 +13,27 @@ import { txChainFacts } from "./chain-facts";
 import type { FailureRecords, RefundRow, RefundState, RefundTxRow } from "./records";
 
 /**
- * SPak policy, not provider-documented: NEAR Intents documents no refund timing. A refund transaction must be at or
- * after the deposit transaction (same chain clock) and no later than the deposit deadline (or deposit time) + 7 days.
+ * Timing is SPak policy, not provider-documented: NEAR Intents documents no refund timing.
+ * - Before the deposit transaction (same chain clock): EARLY_TRANSACTION, never a refund.
+ * - Up to the deposit deadline (or deposit time) + 7 days: EXPECTED_WINDOW.
+ * - Later: LATE_TRANSACTION. Still verified and still counted when associated, but flagged for review.
+ * - No reliable timestamp: TIMING_UNKNOWN. Not counted until the time is known.
+ * Timing never associates a transaction with an execution.
  */
 export const REFUND_TIMING = { delayedAfterMs: 6 * 3600_000, reviewAfterMs: 72 * 3600_000, windowAfterDeadlineMs: 7 * 24 * 3600_000 };
+export type RefundTiming = "EXPECTED_WINDOW" | "LATE_TRANSACTION" | "EARLY_TRANSACTION" | "TIMING_UNKNOWN";
+
+/**
+ * What NEAR Intents exposes as evidence that an origin-chain transaction is this execution's refund.
+ * See docs/NEAR-INTENTS-REFUND-EVIDENCE.md. As of 1Click API 0.1.x and SDK 0.1.26 the status response has no refund
+ * transaction field; originChainTxHashes is documented only as "all transactions on the origin chain". That is
+ * UNCONFIRMED: provider-listed hashes are recorded and verified on chain, but never counted toward REFUNDED.
+ * Set SPAK_REFUND_EVIDENCE_CAPABILITY=CONFIRMED only after a documented or observed real refund establishes the meaning.
+ */
+export type EvidenceCapability = "CONFIRMED" | "UNCONFIRMED" | "UNSUPPORTED";
+export function refundEvidenceCapability(v = process.env.SPAK_REFUND_EVIDENCE_CAPABILITY): EvidenceCapability {
+  return v === "CONFIRMED" || v === "UNSUPPORTED" ? v : "UNCONFIRMED";
+}
 export const TX_FORMAT: Record<string, RegExp> = {
   evm: /^0x[0-9a-fA-F]{64}$/, solana: /^[1-9A-HJ-NP-Za-km-z]{64,90}$/, near: /^[1-9A-HJ-NP-Za-km-z]{43,44}$/,
 };
@@ -60,7 +77,8 @@ function chainChecks(r: DeliveryResult): Omit<RefundChecks, "time" | "associatio
  * in-window transfers to the refund address totalling at least that amount.
  */
 export class RefundVerifier {
-  constructor(private readonly d: { executions: ExecutionRecords; failures: FailureRecords; depositRecords: DepositRecords; tracking?: TrackingRecords; rpc: ChainRpc; audit?: AuditLog; clock?: () => Date }) {}
+  constructor(private readonly d: { executions: ExecutionRecords; failures: FailureRecords; depositRecords: DepositRecords; tracking?: TrackingRecords; rpc: ChainRpc; audit?: AuditLog; clock?: () => Date; capability?: () => EvidenceCapability }) {}
+  private capability(): EvidenceCapability { return (this.d.capability ?? refundEvidenceCapability)(); }
   private now() { return (this.d.clock ?? (() => new Date()))(); }
 
   async ensure(row: ExecutionRow): Promise<RefundRow | null> {
@@ -131,59 +149,85 @@ export class RefundVerifier {
     try { depositAt = await this.depositTime(row, refund, net.family); } catch (e) { rpcError = (e as Error).message; }
     const windowEnd = new Date((row.depositDeadline ?? depositAt ?? refund.openedAt).getTime() + REFUND_TIMING.windowAfterDeadlineMs);
 
+    const capability = this.capability();
     const txs = await this.d.failures.refundTxsFor(row.id);
     for (const t of txs) {
-      if (t.association === "PROVIDER_LISTED" && t.outcome === "CONFIRMED" && (t.checks as RefundChecks).time === "PASS" && (t.checks as RefundChecks).provider === (providerSays ? "PASS" : "PENDING")) continue; // final, nothing new
       let r: DeliveryResult;
       let when: { timestamp: Date | null; sender: string | null } = { timestamp: t.txTimestamp, sender: t.sender };
-      try {
-        r = await verifyDelivery(this.d.rpc, net.family, { network: t.network, txHash: t.txHash, recipient: row.refundAddress, kind: t.tokenContract ? "TOKEN" : "NATIVE", tokenContract: t.tokenContract });
-        if (r.outcome !== "NOT_FOUND" && !when.timestamp) when = await txChainFacts(this.d.rpc, net.family, t.network, t.txHash);
-      } catch (e) {
-        rpcError = e instanceof RpcUnavailable ? e.message : `Chain check failed: ${(e as Error).message}`;
-        continue;
+      if (t.outcome === "CONFIRMED" && t.txTimestamp) {
+        // Chain facts are final; reuse them. Association and timing are re-assessed every pass.
+        r = { outcome: "CONFIRMED", received: t.receivedAmount ?? "0", confirmations: t.confirmations, problems: (t.problems as string[]) ?? [], observed: (t.observed as Record<string, unknown>) ?? {} };
+      } else {
+        try {
+          r = await verifyDelivery(this.d.rpc, net.family, { network: t.network, txHash: t.txHash, recipient: row.refundAddress, kind: t.tokenContract ? "TOKEN" : "NATIVE", tokenContract: t.tokenContract });
+          if (r.outcome !== "NOT_FOUND" && !when.timestamp) when = await txChainFacts(this.d.rpc, net.family, t.network, t.txHash);
+        } catch (e) {
+          rpcError = e instanceof RpcUnavailable ? e.message : `Chain check failed: ${(e as Error).message}`;
+          continue;
+        }
       }
       const checks: RefundChecks = { ...chainChecks(r), time: "PENDING", association: "PENDING", provider: providerSays ? "PASS" : "PENDING", notes: [...r.problems] };
+      let timing: RefundTiming = "TIMING_UNKNOWN";
       if (when.timestamp && depositAt) {
-        if (when.timestamp.getTime() < depositAt.getTime()) { checks.time = "FAIL"; checks.notes.push(`transaction time ${when.timestamp.toISOString()} is before the deposit ${depositAt.toISOString()}`); }
-        else if (when.timestamp.getTime() > windowEnd.getTime()) { checks.time = "FAIL"; checks.notes.push(`transaction time ${when.timestamp.toISOString()} is after the refund window ${windowEnd.toISOString()}`); }
-        else checks.time = "PASS";
+        if (when.timestamp.getTime() < depositAt.getTime()) { timing = "EARLY_TRANSACTION"; checks.time = "FAIL"; checks.notes.push(`transaction time ${when.timestamp.toISOString()} is before the deposit ${depositAt.toISOString()}`); }
+        else if (when.timestamp.getTime() > windowEnd.getTime()) { timing = "LATE_TRANSACTION"; checks.time = "PASS"; checks.notes.push(`transaction time ${when.timestamp.toISOString()} is after the expected refund window ${windowEnd.toISOString()} (late, still eligible)`); }
+        else { timing = "EXPECTED_WINDOW"; checks.time = "PASS"; }
       }
-      let association = "PENDING_ASSOCIATION", evidence: Record<string, unknown> = { source: t.source };
-      if (checks.time === "FAIL") { association = "REJECTED"; checks.association = "FAIL"; }
-      else if (providerListed.has(t.txHash)) {
-        association = "PROVIDER_LISTED"; checks.association = "PASS";
-        evidence = { source: t.source, type: "PROVIDER_STATUS_ORIGIN_TX", depositAddress: row.depositAddress, depositMemo: row.depositMemo, firmQuoteId: row.firmQuoteId,
-          note: "Listed by NEAR Intents in originChainTxHashes for this execution's deposit address. The provider does not label which origin transaction is the refund." };
+      const sameAsset = t.network === refund.network && t.assetId === refund.assetId;
+      if (!sameAsset) { checks.asset = "FAIL"; checks.notes.push("different network or asset than the refund record"); }
+      let association = "PENDING_ASSOCIATION", evidence: Record<string, unknown> = { source: t.source, capability };
+      if (timing === "EARLY_TRANSACTION" || !sameAsset) { association = "REJECTED"; checks.association = "FAIL"; }
+      else if (providerListed.has(t.txHash) && capability !== "UNSUPPORTED") {
+        association = capability === "CONFIRMED" ? "PROVIDER_LISTED" : "PROVIDER_LISTED_UNCONFIRMED";
+        checks.association = capability === "CONFIRMED" ? "PASS" : "PENDING";
+        evidence = { source: t.source, capability, type: "PROVIDER_STATUS_ORIGIN_TX", depositAddress: row.depositAddress, depositMemo: row.depositMemo, firmQuoteId: row.firmQuoteId,
+          note: "Listed by NEAR Intents in originChainTxHashes for this execution's deposit address. The provider documents this field as all origin-chain transactions and does not label refunds." };
+        if (capability !== "CONFIRMED") checks.notes.push("NEAR Intents lists this hash for the deposit address, but does not document it as the refund; association unconfirmed");
       } else {
         checks.association = r.outcome === "CONFIRMED" ? "FAIL" : "PENDING";
-        checks.notes.push("not listed by NEAR Intents for this execution; recipient, asset, amount and time alone do not prove it is this refund");
+        checks.notes.push("not linked to this execution by NEAR Intents; recipient, asset, amount and time alone do not prove it is this refund");
       }
       await this.d.failures.updateRefundTx(t.id, {
-        outcome: r.outcome, receivedAmount: r.received, confirmations: r.confirmations, problems: r.problems, observed: r.observed, verifiedAt: r.outcome === "CONFIRMED" ? now : null,
-        association, associationEvidence: evidence, checks, sender: when.sender, txTimestamp: when.timestamp, rejectedReason: association === "REJECTED" ? checks.notes.join("; ").slice(0, 500) : null,
+        outcome: r.outcome, receivedAmount: r.received, confirmations: r.confirmations, problems: r.problems, observed: r.observed, verifiedAt: r.outcome === "CONFIRMED" ? (t.verifiedAt ?? now) : null,
+        association, associationEvidence: evidence, checks, sender: when.sender, txTimestamp: when.timestamp, timing,
+        rejectedReason: association === "REJECTED" ? checks.notes.join("; ").slice(0, 500) : null,
       });
     }
     if (rpcError) return { row, refund, ok: false, error: rpcError };
 
-    const all = await this.d.failures.refundTxsFor(row.id);
-    const counted = (t: RefundTxRow) => t.association === "PROVIDER_LISTED" && t.outcome === "CONFIRMED" && (t.checks as RefundChecks).time === "PASS";
-    const associated = all.filter(counted).reduce((s, t) => s + BigInt(t.receivedAmount ?? "0"), 0n);
+    // Aggregation: exact bigint sums over distinct rows (unique network + tx_hash), this execution only, same asset only.
+    const all = (await this.d.failures.refundTxsFor(row.id)).filter((t) => t.executionId === row.id);
+    const usable = (t: RefundTxRow) => t.outcome === "CONFIRMED" && t.association !== "REJECTED" && (t.timing === "EXPECTED_WINDOW" || t.timing === "LATE_TRANSACTION");
+    const counted = (t: RefundTxRow) => usable(t) && t.association === "PROVIDER_LISTED";
+    const listedOk = (t: RefundTxRow) => usable(t) && (t.association === "PROVIDER_LISTED" || t.association === "PROVIDER_LISTED_UNCONFIRMED");
+    const sum = (f: (t: RefundTxRow) => boolean) => all.filter(f).reduce((s, t) => s + BigInt(t.receivedAmount ?? "0"), 0n);
+    const associated = sum(counted), listedTotal = sum(listedOk), verified = sum(usable);
     const chainOnly = all.filter((t) => t.outcome === "CONFIRMED" && !counted(t));
-    const verified = all.filter((t) => t.outcome === "CONFIRMED").reduce((s, t) => s + BigInt(t.receivedAmount ?? "0"), 0n);
-    const pendingProvider = all.some((t) => t.association === "PROVIDER_LISTED" && !FINAL.has(t.outcome));
-    const claimed = refund.providerRefundedAmount && /^\d+$/.test(refund.providerRefundedAmount) ? BigInt(refund.providerRefundedAmount) : null;
-    const amounts = { verifiedAmount: verified.toString(), associatedAmount: associated.toString(), outstandingAmount: claimed !== null ? (claimed > associated ? claimed - associated : 0n).toString() : null };
-    for (const t of chainOnly) reviews.push(t.association === "REJECTED"
-      ? `Refund candidate ${t.txHash} rejected: ${t.rejectedReason ?? "outside the refund window"}.`
-      : `Refund candidate ${t.txHash} is a real transfer to the refund address but NEAR Intents has not linked it to this execution.`);
+    const pendingProvider = all.some((t) => providerListed.has(t.txHash) && !FINAL.has(t.outcome));
+    // Observed live: refundedAmount is "0" before any refund. A refunded amount only means something once the provider
+    // reports REFUNDED and it is a positive integer; otherwise it is unknown.
+    const claimed = providerSays && refund.providerRefundedAmount && /^\d+$/.test(refund.providerRefundedAmount) && BigInt(refund.providerRefundedAmount) > 0n ? BigInt(refund.providerRefundedAmount) : null;
+    const amounts = {
+      verifiedAmount: verified.toString(), associatedAmount: associated.toString(), providerListedAmount: listedTotal.toString(), evidenceCapability: capability,
+      outstandingAmount: claimed !== null ? (claimed > associated ? claimed - associated : 0n).toString() : null,
+    };
+    for (const t of all.filter((x) => x.timing === "LATE_TRANSACTION" && x.outcome === "CONFIRMED")) reviews.push(`Refund transaction ${t.txHash} arrived after the expected window (late, still counted if associated).`);
+    for (const t of chainOnly) {
+      if (t.association === "REJECTED") reviews.push(`Refund candidate ${t.txHash} rejected: ${t.rejectedReason ?? "not eligible"}.`);
+      else if (t.association === "PROVIDER_LISTED_UNCONFIRMED") reviews.push(`NEAR Intents lists ${t.txHash} for this deposit address, but its refund evidence capability is ${capability}; SPak cannot confirm it is the refund.`);
+      else if (usable(t) || t.timing === "TIMING_UNKNOWN") reviews.push(`Refund candidate ${t.txHash} is a real transfer to the refund address but NEAR Intents has not linked it to this execution.`);
+    }
     const age = now.getTime() - refund.openedAt.getTime();
     const move = async (to: RefundState, code: string, extra: Record<string, unknown> = {}) =>
       (await this.d.failures.setRefund(row.id, refund!.state, { state: to, ...amounts, ...extra }, refund!.state !== to ? { code } : undefined)) ?? refund!;
     const review = (extra?: string) => [...reviews, ...(extra ? [extra] : [])].join(" ") || undefined;
 
+    if (claimed !== null && associated > claimed) {
+      // Never treat more than the reported refund as completed: keep every row as evidence and ask a person.
+      return { row, refund: await move("VERIFICATION_PENDING", "REFUND_EXCESS"), ok: true, needsReview: review(`Associated refund transfers total ${associated}, more than the ${claimed} NEAR Intents reports.`) };
+    }
     // Completion: provider confirmation + provider-listed + chain-verified + in window, covering the provider's amount.
-    if (providerSays && claimed !== null && associated > 0n && associated >= claimed && !pendingProvider && row.state === "REFUNDING") {
+    if (providerSays && claimed !== null && associated > 0n && associated === claimed && !pendingProvider && row.state === "REFUNDING") {
       refund = await move("COMPLETED", "REFUND_COMPLETED", { completedAt: now });
       const r = await this.d.executions.transition(row.id, "REFUNDING", "REFUNDED", `Refund verified on ${net.name}: ${associated} returned to ${row.refundAddress} in provider-listed transaction(s).`,
         { refundVerifiedAmount: associated.toString(), refundVerifiedAt: now }, { refundVerifiedAmount: associated.toString(), providerRefundedAmount: claimed.toString() });
@@ -196,8 +240,8 @@ export class RefundVerifier {
       if (claimed === null) return { row, refund: await move("VERIFICATION_PENDING", "REFUND_AMOUNT_UNKNOWN"), ok: true, needsReview: review("NEAR Intents reported REFUNDED without a refunded amount.") };
       return { row, refund: await move("PARTIAL", "REFUND_PARTIAL"), ok: true, needsReview: review(age > REFUND_TIMING.reviewAfterMs ? `Only ${associated} of the reported ${claimed} is verified and associated.` : undefined) };
     }
-    if (chainOnly.length) return { row, refund: await move("ASSOCIATION_PENDING", "REFUND_ASSOCIATION_PENDING"), ok: true, needsReview: review() };
-    const listedFinal = all.filter((t) => t.association === "PROVIDER_LISTED");
+    if (chainOnly.length) return { row, refund: await move("ASSOCIATION_PENDING", capability === "CONFIRMED" ? "REFUND_ASSOCIATION_PENDING" : "REFUND_EVIDENCE_UNCONFIRMED"), ok: true, needsReview: review() };
+    const listedFinal = all.filter((t) => providerListed.has(t.txHash));
     if (listedFinal.length && listedFinal.every((t) => FINAL.has(t.outcome))) return { row, refund: await move("FAILED", "REFUND_FAILED"), ok: true, needsReview: review("Provider-listed refund transactions show no return of the deposited asset to the refund address.") };
     if (all.some((t) => !FINAL.has(t.outcome))) return { row, refund: await move(refund.state === "PENDING_PROVIDER" ? "PENDING_PROVIDER" : "TX_DETECTED", "REFUND_TX_DETECTED"), ok: true, needsReview: review() };
     if (all.length && all.every((t) => FINAL.has(t.outcome))) return { row, refund: await move("FAILED", "REFUND_FAILED"), ok: true, needsReview: review("Submitted refund transactions show no return of the deposited asset to the refund address.") };

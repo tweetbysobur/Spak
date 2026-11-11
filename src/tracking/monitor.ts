@@ -14,7 +14,8 @@ export const MONITOR = {
   baseRetryMs: 30_000,
   maxRetryMs: 30 * 60_000,
   maxFailures: 24, // consecutive failed attempts before monitoring stops and asks for reconciliation
-  maxAgeMs: 7 * 24 * 3600_000, // in-flight executions older than this stop being polled
+  maxAgeMs: 7 * 24 * 3600_000, // in-flight executions older than this stop being polled (refund cases slow down instead)
+  lateRefundIntervalMs: 6 * 3600_000,
   interval: { AWAITING_DEPOSIT: 60_000, PROCESSING: 30_000, VERIFYING_DESTINATION: 30_000, FAILED: 2 * 60_000, REFUNDING: 60_000, UNKNOWN: 5 * 60_000 } as Record<string, number>,
 };
 
@@ -101,7 +102,12 @@ export class ExecutionMonitor {
     const tooOld = now.getTime() - (current.approvedAt ?? current.createdAt).getTime() > MONITOR.maxAgeMs;
     let outcome: "OK" | "RETRY" | "GAVE_UP" = ok ? "OK" : "RETRY";
     let gaveUpAt: Date | null = null;
-    if (!terminal && (failures >= MONITOR.maxFailures || tooOld || reconcile)) {
+    // Refunds are never abandoned: a refund can arrive late and the provider may update much later. Failed swaps and
+    // refunds keep being checked (slower when old or failing) and get a review case instead of a give-up.
+    const refundCase = current.state === "FAILED" || current.state === "REFUNDING";
+    if (refundCase && !terminal && (failures >= MONITOR.maxFailures || tooOld)) {
+      await this.d.failures?.flagForReview(current.id, tooOld ? "Refund still open after 7 days; monitoring continues." : `${failures} consecutive refund checks failed; monitoring continues.`, "spak");
+    } else if (!terminal && (failures >= MONITOR.maxFailures || tooOld || reconcile)) {
       outcome = "GAVE_UP";
       gaveUpAt = now;
       if (!reconcile && current.state !== "UNKNOWN") {
@@ -114,7 +120,8 @@ export class ExecutionMonitor {
     }
     // 5. Classification (history is written only when it changes).
     try { await this.d.failures?.record(current); } catch (e) { errors.push(`classify: ${(e as Error).message}`); }
-    const delay = ok ? (MONITOR.interval[current.state] ?? 60_000) : Math.min(MONITOR.baseRetryMs * 2 ** (failures - 1), MONITOR.maxRetryMs);
+    const base = ok ? (MONITOR.interval[current.state] ?? 60_000) : Math.min(MONITOR.baseRetryMs * 2 ** Math.min(failures - 1, 20), MONITOR.maxRetryMs);
+    const delay = refundCase && tooOld ? Math.max(base, MONITOR.lateRefundIntervalMs) : base;
     await this.d.tracking.release(row.id, worker, {
       monitorNextAt: terminal || gaveUpAt ? null : new Date(now.getTime() + delay), monitorFailures: failures, ...(gaveUpAt ? { monitorGaveUpAt: gaveUpAt } : {}),
     });

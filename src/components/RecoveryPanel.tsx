@@ -42,18 +42,26 @@ export function RecoveryPanel({ executionId, view, onChange }: { executionId: st
       <Row k="Refund address" v={view.refund?.instructions.refundTo ?? view.refundAddress} mono />
       {r && <Row k="Refund status" v={REFUND_LABEL[r.state] ?? r.state} />}
       {r?.depositedAmount && <Row k="Deposit received" v={formatUnits(r.depositedAmount, asset)} />}
+      {view.refund?.transactions.length ? <Row k="Refund transactions" v={String(view.refund.transactions.length)} /> : null}
       <Row k="1. Refund reported by NEAR Intents (not proof)" v={r?.expectedAmount ? formatUnits(r.expectedAmount, asset) : "Not reported"} />
       <Row k="2. Transfers to your refund address seen on chain" v={r?.verifiedAmount && r.verifiedAmount !== "0" ? formatUnits(r.verifiedAmount, asset) : "None yet"} />
       <Row k="3. Refund verified and linked to this transfer" v={r?.associatedAmount && r.associatedAmount !== "0" ? `${formatUnits(r.associatedAmount, asset)}${r.partial ? " (less than the deposit)" : ""}` : "Not yet"} />
-      {r?.outstandingAmount && r.outstandingAmount !== "0" && <Row k="Reported but not yet verified" v={formatUnits(r.outstandingAmount, asset)} />}
+      {r?.outstandingAmount && r.outstandingAmount !== "0" && <Row k="Outstanding (reported, not yet verified and linked)" v={formatUnits(r.outstandingAmount, asset)} />}
+      {r?.state === "PARTIAL" && <p className="mt-2 text-xs text-amber-200">Part of the reported refund is verified. The rest has not been seen on chain yet. Refunds can arrive in more than one transaction.</p>}
+      {(view.refund?.transactions.length ?? 0) > 1 && <p className="mt-2 text-xs text-white/60">This refund has several transactions. Each is checked on its own; only verified, linked ones are added up.</p>}
+      {r?.evidenceCapability && r.evidenceCapability !== "CONFIRMED" && r.providerListedAmount && r.providerListedAmount !== "0" && (
+        <p className="mt-2 text-xs text-amber-200">NEAR Intents lists {formatUnits(r.providerListedAmount, asset)} in transactions for this transfer, but does not say they are the refund. SPak keeps the refund open until that is confirmed and a person has checked it.</p>
+      )}
+      {view.refund?.transactions.some((t) => t.timing === "LATE_TRANSACTION") && <p className="mt-2 text-xs text-white/60">A refund transaction arrived later than usual. Late refunds still count once verified and linked; this is not a failure.</p>}
       {view.refund?.transactions.map((t) => (
         <div key={t.txHash} className="mt-2 rounded-lg border border-white/10 p-2 text-xs">
           <div className="flex justify-between gap-2">
             <span>{t.submitted ? "Submitted transaction (a candidate, not a confirmed refund)" : "Transaction listed by NEAR Intents"}</span>
             {t.explorerUrl ? <a className="font-mono text-sky-300 underline" href={t.explorerUrl} target="_blank" rel="noreferrer noopener">{t.txHash.slice(0, 10)}…{t.txHash.slice(-8)}</a> : <span className="font-mono">{t.txHash}</span>}
           </div>
+          <p className="mt-1 text-white/50">Timing: {({ EXPECTED_WINDOW: "within the expected time", LATE_TRANSACTION: "late (still eligible)", EARLY_TRANSACTION: "before your deposit (not a refund)", TIMING_UNKNOWN: "time not known yet" } as Record<string, string>)[t.timing] ?? t.timing}</p>
           <p className="mt-1 text-white/60">On chain: {t.chainVerified ? `verified, ${t.receivedAmount ? formatUnits(t.receivedAmount, asset) : ""} to your refund address` : t.outcome.toLowerCase().replaceAll("_", " ")}</p>
-          <p className={t.association === "PROVIDER_LISTED" ? "text-emerald-300" : "text-amber-300"}>{t.associationExplanation}</p>
+          <p className={t.association === "PROVIDER_LISTED" ? "text-emerald-300" : t.association === "REJECTED" ? "text-red-300" : "text-amber-300"}>{t.associationExplanation}</p>
           {t.rejectedReason && <p className="text-red-300">{t.rejectedReason}</p>}
         </div>
       ))}

@@ -103,10 +103,30 @@ A transfer to the refund address in the right token, for the right amount, at a 
 
 The time check is supplementary. Passing it never associates a transfer. The time window is SPak policy, because NEAR Intents documents no refund timing.
 
+### Phase 5.2: timing, capability, aggregation
+
+- Timing is assessed per transaction (column `timing`) and never associates:
+  - EXPECTED_WINDOW: up to the deposit deadline + 7 days.
+  - LATE_TRANSACTION: later. Still verified and still counted when associated, and opens a review. Never rejected for age.
+  - EARLY_TRANSACTION: before the deposit transaction. Rejected.
+  - TIMING_UNKNOWN: not counted until the time is known.
+- Provider evidence capability (`SPAK_REFUND_EVIDENCE_CAPABILITY`, default UNCONFIRMED, see NEAR-INTENTS-REFUND-EVIDENCE.md):
+  - Provider-listed hashes become PROVIDER_LISTED (counted) only when the capability is CONFIRMED.
+  - Under UNCONFIRMED they are PROVIDER_LISTED_UNCONFIRMED: verified and shown, but not counted.
+  - Under UNSUPPORTED they are plain candidates.
+- Aggregation is exact bigint over distinct rows (unique network and tx_hash, EVM hashes lowercased), for this execution and its exact asset and network only.
+  - Completion needs the associated sum to equal the provider's `refundedAmount`.
+  - More than that: evidence is kept, the refund stays VERIFICATION_PENDING, and a review opens.
+  - Less: PARTIAL, with the outstanding amount.
+  - The provider amount is re-read every pass until completion.
+- `refundedAmount` of "0" (seen live before any refund) counts as unknown unless the status is REFUNDED and the value is above zero.
+- The monitor never gives up on FAILED or REFUNDING executions. After 7 days, or 24 straight failures, it opens one review and keeps checking (at least every 6 hours once old). Timeouts never become failures.
+
 ### Completion rules
 
 The refund is COMPLETED, and the execution REFUNDED, only when all of these hold:
 
+- The refund-evidence capability is CONFIRMED. It is not by default, so automatic REFUNDED is currently off.
 - The provider status is REFUNDED.
 - The provider stated `refundedAmount`.
 - No provider-listed transaction is still pending.
@@ -186,6 +206,7 @@ Migration `0005_failure_refund.sql`, additive:
 
 | Name | Purpose |
 |---|---|
+| SPAK_REFUND_EVIDENCE_CAPABILITY | CONFIRMED, UNCONFIRMED (default) or UNSUPPORTED. Set CONFIRMED only with documented or observed evidence |
 | SPAK_REVIEWERS | `id:sha256hex` entries, one per reviewer. Server only. Preferred |
 | SPAK_ADMIN_TOKEN | Legacy single shared reviewer token, identity `shared-admin`. Avoid when there is more than one reviewer |
 
@@ -207,7 +228,9 @@ The others (CRON_SECRET, SPAK_MONITOR_SECRET, SPAK_RPC_*) are unchanged.
 - No real refund was observed. Triggering one needs a funded swap that fails. Not done.
 - Association relies on NEAR Intents listing the refund transaction in `originChainTxHashes`. The docs do not promise refunds are listed there. If they are not, every real refund ends in ASSOCIATION_PENDING or DELAYED and needs manual handling with the provider. Fail-closed behaviour; check this before production.
 - The REFUNDED response shape comes from the OpenAPI spec, not a live response.
-- The refund time window (deadline + 7 days) is SPak policy.
+- The 7-day expected window is SPak policy. Late refunds are still counted and get reviewed.
+- Automatic REFUNDED is off until refund evidence is CONFIRMED. Every real refund currently needs manual review.
+- A refund already COMPLETED is not re-opened if the provider later changes its amount.
 - The refund fee formula is not documented by the provider.
 - Native EVM refunds through an internal call cannot be verified without trace RPC. They stay UNVERIFIABLE.
 - There is no admin web screen yet, only the API.

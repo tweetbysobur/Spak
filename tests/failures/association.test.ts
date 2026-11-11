@@ -75,7 +75,7 @@ describe("association", () => {
     expect((await rtx(ex.id)).every((r) => r.association === "PENDING_ASSOCIATION")).toBe(true);
   });
 
-  it("transactions before the deposit or after the refund window are rejected, even when provider-listed", async () => {
+  it("transactions before the deposit are rejected, even when provider-listed", async () => {
     const { ex, sig } = await deposited();
     const early = refundTx(ex.refundAddress, 50_000_000n, { block: 900 });
     provider(ex.depositAddress!, sig, "REFUNDED", { refundedAmount: "50000000", ...listed(early) });
@@ -84,15 +84,6 @@ describe("association", () => {
     expect((await rtx(ex.id))[0]).toMatchObject({ association: "REJECTED" });
     expect((await rtx(ex.id))[0].rejectedReason).toMatch(/before the deposit/);
 
-    const b = await deposited();
-    const lateBlock = 1000 + Math.ceil((REFUND_TIMING.windowAfterDeadlineMs + 30 * 24 * 3600_000) / 2000);
-    h.chain.evmHead = lateBlock + 20;
-    const late = refundTx(b.ex.refundAddress, 50_000_000n, { block: lateBlock });
-    provider(b.ex.depositAddress!, b.sig, "REFUNDED", { refundedAmount: "50000000", ...listed(late) });
-    await tick();
-    expect(await state(b.ex.id)).toBe("REFUNDING");
-    expect((await rtx(b.ex.id))[0].rejectedReason).toMatch(/after the refund window/);
-    expect(await h.failureRecords.openReviewFor(b.ex.id)).not.toBeNull();
   });
 
   it("wrong source chain: a hash that exists only on another network is never verified", async () => {
