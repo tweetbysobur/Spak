@@ -1,0 +1,14 @@
+{
+  "version": "1.0.0",
+  "note": "Spacing, radius, elevation and motion tokens (Phase 6.6). Radii follow docs/SPAK-BRAND-GUIDELINES.md section 6.",
+  "space": { "0": 0, "1": 4, "2": 8, "3": 12, "4": 16, "5": 20, "6": 24, "8": 32, "10": 40, "12": 48, "16": 64 },
+  "radius": { "control": 6, "card": 12, "panel": 14, "pill": 999 },
+  "layout": { "contentMax": 760, "shellMax": 1120, "gutterMobile": 16, "gutterDesktop": 32, "headerHeight": 64, "touchTarget": 44 },
+  "elevation": {
+    "light": { "card": "0 1px 2px rgb(34 39 36 / 0.06)", "overlay": "0 12px 32px rgb(34 39 36 / 0.16)" },
+    "dark": { "card": "none", "overlay": "0 12px 32px rgb(0 0 0 / 0.45)" },
+    "rule": "Light theme: cards use a hairline border plus a 1px shadow; overlays use the overlay shadow. Dark theme: elevation comes from lighter surfaces (surface, surfaceElevated), not shadows."
+  },
+  "motion": { "fast": "120ms", "base": "180ms", "easing": "cubic-bezier(0.2, 0, 0, 1)", "reducedMotion": "Animations stop under prefers-reduced-motion; processing indicators become static icons." },
+  "focus": { "width": 2, "offset": 2 }
+}

@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { api, startExecution, type ExecutionView, type IntentResult, type QuoteView } from "@/lib/client";
-import { Button, Card, Field, inputCls } from "./ui";
+import { Button, Card, Field, SectionTitle, Select, inputCls } from "./ui";
+import { Notice } from "./status";
 
 interface Net { id: string; name: string }
 interface Asset { id: string; network: string; symbol: string }
@@ -46,16 +47,16 @@ export function Manual({ ownAddress, onReady }: { ownAddress: (network: string) 
   const side = (p: "source" | "destination") => {
     const nk = `${p}Network` as const, ak = `${p}Asset` as const;
     return (
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label={p === "source" ? "From network" : "To network"}>
-          <select className={inputCls} value={f[nk]} onChange={(e) => { set(nk, e.target.value); set(ak, pick(e.target.value, assets.find((a) => a.id === f[ak])?.symbol ?? "USDC")); }}>
+          <Select value={f[nk]} onChange={(e) => { set(nk, e.target.value); set(ak, pick(e.target.value, assets.find((a) => a.id === f[ak])?.symbol ?? "USDC")); }}>
             {usable.map((n) => <option key={n.id} value={n.id}>{n.name}</option>)}
-          </select>
+          </Select>
         </Field>
         <Field label={p === "source" ? "Send asset" : "Receive asset"}>
-          <select className={inputCls} value={f[ak]} onChange={(e) => set(ak, e.target.value)}>
+          <Select value={f[ak]} onChange={(e) => set(ak, e.target.value)}>
             {on(f[nk]).map((a) => <option key={a.id} value={a.id}>{a.symbol}</option>)}
-          </select>
+          </Select>
         </Field>
       </div>
     );
@@ -63,19 +64,20 @@ export function Manual({ ownAddress, onReady }: { ownAddress: (network: string) 
 
   return (
     <Card>
+      <SectionTitle sub="Choose exactly what to send and receive. You review a quote before anything can be sent.">Manual swap</SectionTitle>
       <form onSubmit={submit} className="flex flex-col gap-4">
         {side("source")}
-        <Field label="Amount"><input className={inputCls} inputMode="decimal" placeholder="0.0" value={f.amount} onChange={(e) => set("amount", e.target.value.replace(/[^\d.]/g, ""))} /></Field>
+        <Field label="Amount"><input className={`${inputCls} type-amount`} inputMode="decimal" placeholder="0.0" value={f.amount} onChange={(e) => set("amount", e.target.value.replace(/[^\d.]/g, ""))} /></Field>
         {side("destination")}
         <Field label="Recipient (leave empty to receive in your own wallet)">
-          <input className={`${inputCls} font-mono`} placeholder={ownAddress(f.destinationNetwork) ?? "Address (no verified wallet on this network)"} value={f.recipient} onChange={(e) => set("recipient", e.target.value.trim())} />
+          <input className={`${inputCls} type-address`} placeholder={ownAddress(f.destinationNetwork) ?? "Address (no verified wallet on this network)"} value={f.recipient} onChange={(e) => set("recipient", e.target.value.trim())} />
         </Field>
         <Field label="Max slippage">
-          <select className={inputCls} value={f.slippageBps} onChange={(e) => set("slippageBps", Number(e.target.value))}>
+          <Select value={f.slippageBps} onChange={(e) => set("slippageBps", Number(e.target.value))}>
             {[30, 50, 100].map((b) => <option key={b} value={b}>{b / 100}%</option>)}
-          </select>
+          </Select>
         </Field>
-        {!!problems.length && <ul className="list-disc pl-4 text-sm text-red-400">{problems.map((p) => <li key={p}>{p}</li>)}</ul>}
+        {!!problems.length && <Notice role="error" title="SPak cannot quote this yet"><ul className="list-disc pl-4">{problems.map((p) => <li key={p}>{p}</li>)}</ul></Notice>}
         <Button type="submit" disabled={busy || !f.amount || !f.sourceAsset || !f.destinationAsset}>{busy ? "Checking" : "Get quote"}</Button>
       </form>
     </Card>

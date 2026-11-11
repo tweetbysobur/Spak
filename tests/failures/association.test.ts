@@ -5,7 +5,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { refundTxs, reviews } from "@/database/schema";
-import { REFUND_TIMING } from "@/failures";
 import type { ExecutionError } from "@/execution";
 import { parseReviewers, resolveReviewer } from "@/server/reviewers";
 import { createHash } from "node:crypto";

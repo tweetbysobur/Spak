@@ -1,4 +1,73 @@
 @import "tailwindcss";
 
-:root { color-scheme: dark; }
-body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+/*
+ * Tailwind names mapped onto SPak token variables. The values come from src/design/*.json, injected by
+ * src/app/layout.tsx (see src/design/css.ts). No colour, size or radius value is defined in this file.
+ */
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+@theme inline {
+  --color-bg: var(--spak-background);
+  --color-surface: var(--spak-surface);
+  --color-elevated: var(--spak-surface-elevated);
+  --color-line: var(--spak-border);
+  --color-line-strong: var(--spak-border-strong);
+  --color-fg: var(--spak-text-primary);
+  --color-fg-2: var(--spak-text-secondary);
+  --color-fg-3: var(--spak-text-muted);
+  --color-primary: var(--spak-primary);
+  --color-primary-hover: var(--spak-primary-hover);
+  --color-primary-active: var(--spak-primary-active);
+  --color-on-primary: var(--spak-on-primary);
+  --color-secondary: var(--spak-secondary);
+  --color-secondary-hover: var(--spak-secondary-hover);
+  --color-secondary-active: var(--spak-secondary-active);
+  --color-on-secondary: var(--spak-on-secondary);
+  --color-focus: var(--spak-focus-ring);
+  --color-disabled: var(--spak-disabled-background);
+  --color-disabled-fg: var(--spak-disabled-text);
+  --color-disabled-line: var(--spak-disabled-border);
+
+  --font-sans: var(--spak-font-sans);
+  --font-mono: var(--spak-font-mono);
+  --font-display: var(--spak-font-display);
+  --font-editorial: var(--spak-font-editorial);
+
+  --radius-control: var(--spak-radius-control);
+  --radius-card: var(--spak-radius-card);
+  --radius-panel: var(--spak-radius-panel);
+
+  --shadow-card: var(--spak-shadow-card);
+  --shadow-overlay: var(--spak-shadow-overlay);
+}
+
+:root { color-scheme: light; }
+[data-theme=dark] { color-scheme: dark; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme]) { color-scheme: dark; } }
+
+html { -webkit-text-size-adjust: 100%; }
+body {
+  background: var(--spak-background);
+  color: var(--spak-text-primary);
+  font-family: var(--spak-font-sans);
+  font-size: 1rem;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* Focus: 2px ring with a 2px gap in the page colour (required next to the primary button, colour system section 6). */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: var(--spak-focus-width) solid var(--spak-focus-ring);
+  outline-offset: var(--spak-focus-offset);
+}
+
+/* Theme-specific logo files: the approved light and dark artwork, never recoloured in CSS. */
+.logo-dark { display: none; }
+[data-theme=dark] .logo-light { display: none; }
+[data-theme=dark] .logo-dark { display: block; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme]) .logo-light { display: none; } :root:not([data-theme]) .logo-dark { display: block; } }
+
+@keyframes spak-spin { to { transform: rotate(360deg); } }
+.spak-spin { animation: spak-spin 1s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .spak-spin { animation: none; } * { transition-duration: 0ms !important; } }

@@ -4,7 +4,9 @@ import { getNetwork } from "@/spak-in/registries/networks";
 import { getAsset } from "@/spak-in/registries/assets";
 import { api, formatUnits, type ExecutionView, type IntentResult, type Prepared, type QuoteView } from "@/lib/client";
 import { classifyWalletError } from "@/wallets/errors";
-import { Button, Card, Row } from "./ui";
+import { Amount, Button, Card, ErrorText, Mono, Panel, Row } from "./ui";
+import { Notice } from "./status";
+import { Icon } from "./icons";
 
 const net = (id: string | null) => (id ? getNetwork(id)?.name ?? id : "");
 const usd = (v: string | null | undefined) => (v ? ` (~$${Number(v).toFixed(2)})` : "");
@@ -55,55 +57,77 @@ export function Review({ intent, execution, quote: initial, onApproved, onCancel
   const srcSym = getAsset(src)?.symbol ?? src, dstSym = getAsset(dst)?.symbol ?? dst;
   const fees = quote.fees as Fee[];
   const approveBy = new Date(Date.parse(quote.createdAt) + FIRM_APPROVAL_WINDOW_MS);
+  const quoteRole = firm ? "pending" : "info";
   return (
     <Card>
-      <div className="mb-1 flex items-center justify-between">
-        <h3 className="font-semibold">{firm ? "Step 2 of 7: approve the firm quote" : "Step 1 of 7: review the estimate"}</h3>
-        <span className={`rounded-full px-2.5 py-1 text-xs ${firm ? "bg-sky-400/15 text-sky-300" : "bg-white/10 text-white/70"}`}>{firm ? "Firm quote" : "Indicative quote"}</span>
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <p className="type-label text-fg-2">{firm ? "Step 2 of 7" : "Step 1 of 7"}</p>
+        <span className="type-status inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1"
+          style={{ color: `var(--spak-status-${quoteRole}-foreground)`, background: `var(--spak-status-${quoteRole}-background)`, borderColor: `var(--spak-status-${quoteRole}-border)` }}>
+          <Icon name={quoteRole} size={14} />{firm ? "Firm quote" : "Indicative quote"}
+        </span>
       </div>
-      <p className="mb-3 text-xs text-white/50">
+      <h2 className="type-app-heading text-fg">{firm ? "Approve the firm quote" : "Review the estimate"}</h2>
+      <p className="type-body-sm mt-1 mb-5 text-fg-2">
         {firm ? "These are the provider's committed terms for this deposit address. The expected output is not guaranteed; the minimum is the worst case after slippage."
           : "An estimate to check the route. You will see and approve the firm quote before anything can be sent."}
       </p>
+
+      <Panel className="mb-5">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <span className="type-label text-fg-2">You send</span>
+          <span className="text-right"><Amount value={formatUnits(quote.source.amountIn, src)} size="amount-display" />
+            <span className="type-caption block text-fg-2">on {net(quote.source.network)}{usd(quote.source.amountInUsd)}</span></span>
+        </div>
+        <div className="my-3 border-t border-line" />
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <span className="type-label text-fg-2">Minimum you receive</span>
+          <span className="text-right"><Amount value={formatUnits(quote.destination.minAmountOut, dst)} size="amount-total" />
+            <span className="type-caption block text-fg-2">on {net(quote.destination.network)}</span></span>
+        </div>
+        <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <span className="type-label text-fg-2">Expected to receive (not guaranteed)</span>
+          <span className="text-right"><Amount value={formatUnits(quote.destination.amountOut, dst)} /><span className="type-amount-fee text-fg-2">{usd(quote.destination.amountOutUsd)}</span></span>
+        </div>
+      </Panel>
+
       <Row k="Type" v={intent.intentType.replaceAll("_", " ").toLowerCase()} />
       <Row k="From" v={`${srcSym} on ${net(quote.source.network)}`} />
       <Row k="To" v={`${dstSym} on ${net(quote.destination.network)}`} />
-      <Row k="You send" v={`${formatUnits(quote.source.amountIn, src)}${usd(quote.source.amountInUsd)}`} />
-      <Row k="Expected to receive (not guaranteed)" v={`${formatUnits(quote.destination.amountOut, dst)}${usd(quote.destination.amountOutUsd)}`} />
-      <Row k="Minimum you receive" v={formatUnits(quote.destination.minAmountOut, dst)} />
-      <Row k="Max slippage" v={`${quote.slippageBps / 100}%`} />
+      <Row k="Max slippage" v={<span className="type-amount">{quote.slippageBps / 100}%</span>} />
       {fees.map((f) => (
         <Row key={f.kind} k={f.kind === "PROVIDER_APP_FEE" ? "Protocol fee" : f.kind === "DESTINATION_NETWORK" ? "Destination network fee" : "Refund fee (only if refunded)"}
-          v={`${f.bps !== undefined ? `${f.bps / 100}% of the input` : formatUnits(f.amount, f.assetId ?? src)}. ${f.note}`} />
+          v={<><span className="type-amount-fee">{f.bps !== undefined ? `${f.bps / 100}% of the input` : formatUnits(f.amount, f.assetId ?? src)}</span><span className="type-caption block text-fg-2">{f.note}</span></>} />
       ))}
       <Row k="Source network fee" v={`Paid in ${net(quote.source.network)} gas by your wallet; shown in the wallet before you sign`} />
-      <Row k="Total cost" v={`${formatUnits(quote.source.amountIn, src)} + source network fee (protocol and destination fees come out of the output)`} />
-      <Row k="Recipient" v={execution.recipient.address} mono />
-      <Row k="Refund address" v={execution.refundAddress} mono />
-      {firm && quote.deposit && <Row k="Deposit address" v={quote.deposit.address} mono />}
-      {firm && quote.deposit?.memo && <Row k="Deposit memo (required)" v={quote.deposit.memo} mono />}
+      <Row k="Total cost" strong v={<><Amount value={formatUnits(quote.source.amountIn, src)} size="amount-total" /><span className="type-caption block text-fg-2">+ source network fee (protocol and destination fees come out of the output)</span></>} />
+      <Row k="Recipient" v={<Mono value={execution.recipient.address} full />} />
+      <Row k="Refund address" v={<Mono value={execution.refundAddress} full />} />
+      {firm && quote.deposit && <Row k="Deposit address" v={<Mono value={quote.deposit.address} full />} />}
+      {firm && quote.deposit?.memo && <Row k="Deposit memo (required)" v={<Mono value={quote.deposit.memo} full />} />}
       {firm && quote.deposit?.deadline && <Row k="Deposit deadline" v={new Date(quote.deposit.deadline).toLocaleString()} />}
       <Row k={firm ? "Approve before" : "Estimate valid until"} v={(firm ? approveBy : new Date(quote.expiresAt)).toLocaleTimeString()} />
       {quote.timeEstimateSec !== null && <Row k="Estimated time" v={`~${quote.timeEstimateSec}s after the deposit confirms`} />}
-      <Row k="Execution reference" v={execution.id} mono />
-      <Row k="Quote reference" v={quote.id} mono />
+      <Row k="Execution reference" v={<Mono value={execution.id} full />} />
+      <Row k="Quote reference" v={<Mono value={quote.id} full />} />
       {firm && indicative?.destination.amountOut && quote.destination.amountOut && (
-        <p className="mt-2 text-xs text-white/50">Firm expected output vs the estimate: {formatUnits(quote.destination.amountOut, dst)} vs {formatUnits(indicative.destination.amountOut, dst)}.</p>
+        <p className="type-body-sm mt-3 text-fg-2">Firm expected output vs the estimate: <span className="type-amount-fee text-fg">{formatUnits(quote.destination.amountOut, dst)}</span> vs <span className="type-amount-fee text-fg">{formatUnits(indicative.destination.amountOut, dst)}</span>.</p>
       )}
 
       {firm && (
-        <label className="mt-4 flex items-start gap-2 text-xs text-white/70">
-          <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-0.5" />
-          I approve exactly this transaction: send {formatUnits(quote.source.amountIn, src)} to the deposit address above, delivering at least {formatUnits(quote.destination.minAmountOut, dst)} to the recipient. My wallet will still ask me to sign the deposit.
+        <label className="type-body-sm mt-5 flex items-start gap-3 rounded-card border border-line-strong bg-surface p-4 text-fg dark:bg-elevated">
+          <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--spak-primary)]" />
+          <span>I approve exactly this transaction: send <b className="type-amount">{formatUnits(quote.source.amountIn, src)}</b> to the deposit address above, delivering at least <b className="type-amount">{formatUnits(quote.destination.minAmountOut, dst)}</b> to the recipient. My wallet will still ask me to sign the deposit.</span>
         </label>
       )}
-      {error && <p role="alert" className="mt-3 text-sm text-red-400">{error}</p>}
-      <div className="mt-4 flex flex-wrap gap-2">
+      {dupe && <Notice role="warning" title="You started the same transfer recently" className="mt-4">Approve again only if you really want to send it twice.</Notice>}
+      {error && <ErrorText>{error}</ErrorText>}
+      <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap">
+        <Button variant="ghost" onClick={async () => { await api(`/api/executions/${execution.id}/cancel`, {}).catch(() => {}); onCancel(); }}>Cancel</Button>
+        {dupe && <Button variant="secondary" onClick={() => approve(true)} disabled={busy}>Yes, do it again</Button>}
         {stale ? <Button onClick={requote} disabled={busy}>Get a new quote</Button>
           : firm ? <Button onClick={() => approve(false)} disabled={!ack || busy}>{busy ? "Approving" : "Approve"}</Button>
           : <Button onClick={getFirm} disabled={busy}>{busy ? "Getting firm quote" : "Get firm quote"}</Button>}
-        {dupe && <Button variant="ghost" onClick={() => approve(true)} disabled={busy}>Yes, do it again</Button>}
-        <Button variant="ghost" onClick={async () => { await api(`/api/executions/${execution.id}/cancel`, {}).catch(() => {}); onCancel(); }}>Cancel</Button>
       </div>
     </Card>
   );

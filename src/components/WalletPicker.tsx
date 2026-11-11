@@ -5,7 +5,7 @@ import { watchSolanaWallets, type SolanaWalletInfo } from "@/wallets/solana";
 import { discoverNearWallets, type NearWalletInfo } from "@/wallets/near";
 import { complete, needsSecondClick, prepare, type Prepared, type Purpose, type WalletChoice } from "@/wallets/flow";
 import { classifyWalletError } from "@/wallets/errors";
-import { Button, Card } from "./ui";
+import { Button, Card, ErrorText, SectionTitle, Spinner } from "./ui";
 
 type Stage =
   | { kind: "idle" }
@@ -60,14 +60,14 @@ export function WalletPicker({ purpose, onDone }: { purpose: Purpose; onDone: ()
   const row = (key: string, name: string, icon: string | undefined, choice: WalletChoice, disabled = false) => (
     <div key={key} className="flex flex-col gap-2">
       <button disabled={busy || disabled} onClick={() => start(key, choice)}
-        className="flex w-full items-center gap-3 rounded-xl border border-white/10 px-3 py-2.5 text-left text-sm hover:bg-white/5 disabled:opacity-40">
+        className="type-body flex min-h-12 w-full items-center gap-3 rounded-card border border-line-strong bg-elevated px-3 py-2 text-left text-fg hover:bg-surface disabled:cursor-not-allowed disabled:border-disabled-line disabled:bg-disabled disabled:text-disabled-fg dark:bg-bg dark:hover:bg-elevated">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        {icon ? <img src={icon} alt="" className="h-6 w-6 rounded" /> : <span className="h-6 w-6 rounded bg-white/10" />}
+        {icon ? <img src={icon} alt="" className="h-7 w-7 rounded-control" /> : <span className="h-7 w-7 rounded-control bg-surface" />}
         <span className="flex-1">{name}{disabled ? " (not installed)" : ""}</span>
-        {stage.kind === "working" && stage.key === key && <span className="text-xs text-white/50">{stage.label}</span>}
+        {stage.kind === "working" && stage.key === key && <Spinner label={stage.label} />}
       </button>
       {stage.kind === "ready" && stage.key === key && (
-        <div className="flex items-center gap-2 pl-2">
+        <div className="flex flex-wrap items-center gap-2 pl-1">
           <Button onClick={() => sign(stage.prepared, key)}>Open {name} to sign</Button>
           <Button variant="ghost" onClick={() => setStage({ kind: "idle" })}>Cancel</Button>
         </div>
@@ -77,34 +77,35 @@ export function WalletPicker({ purpose, onDone }: { purpose: Purpose; onDone: ()
 
   return (
     <Card>
-      <h3 className="mb-1 font-semibold">{purpose === "SIGN_IN" ? "Sign in with a wallet" : "Link another wallet"}</h3>
-      <p className="mb-4 text-xs text-white/50">You sign a text message to prove you own the wallet. It is not a transaction and costs no gas. SPak never asks for your seed phrase or private key.</p>
-      <div className="flex flex-col gap-4">
+      <SectionTitle sub="You sign a text message to prove you own the wallet. It is not a transaction and costs no gas. SPak never asks for your seed phrase or private key.">
+        {purpose === "SIGN_IN" ? "Sign in with a wallet" : "Link another wallet"}
+      </SectionTitle>
+      <div className="flex flex-col gap-5">
         <section>
-          <p className="mb-2 text-xs uppercase tracking-wide text-white/40">Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche, Gnosis</p>
+          <p className="type-label mb-2 text-fg-2">Ethereum, Base, Arbitrum, Optimism, Polygon, BNB, Avalanche, Gnosis</p>
           <div className="flex flex-col gap-2">
-            {evm.length ? evm.map((w) => row(`evm:${w.id}`, w.name, w.icon, { family: "evm", info: w })) : <p className="text-xs text-white/40">No EVM wallet found. Install MetaMask or another EVM wallet extension.</p>}
+            {evm.length ? evm.map((w) => row(`evm:${w.id}`, w.name, w.icon, { family: "evm", info: w })) : <p className="type-body-sm text-fg-2">No EVM wallet found. Install MetaMask or another EVM wallet extension.</p>}
           </div>
         </section>
         <section>
-          <p className="mb-2 text-xs uppercase tracking-wide text-white/40">Solana</p>
+          <p className="type-label mb-2 text-fg-2">Solana</p>
           <div className="flex flex-col gap-2">
-            {sol.length ? sol.map((w) => row(`sol:${w.id}`, w.name, w.icon, { family: "solana", info: w })) : <p className="text-xs text-white/40">No Solana wallet found. Install Phantom or another Wallet Standard wallet.</p>}
+            {sol.length ? sol.map((w) => row(`sol:${w.id}`, w.name, w.icon, { family: "solana", info: w })) : <p className="type-body-sm text-fg-2">No Solana wallet found. Install Phantom or another Wallet Standard wallet.</p>}
           </div>
         </section>
         <section>
-          <p className="mb-2 text-xs uppercase tracking-wide text-white/40">NEAR</p>
+          <p className="type-label mb-2 text-fg-2">NEAR</p>
           <div className="flex flex-col gap-2">
-            {near === null ? <p className="text-xs text-white/40">Loading NEAR wallets…</p>
+            {near === null ? <p className="type-body-sm text-fg-2">Loading NEAR wallets…</p>
               : near.map((w) => row(`near:${w.id}`, w.name, w.icon, { family: "near", id: w.id, name: w.name }, !w.available))}
           </div>
         </section>
       </div>
-      <label className="mt-4 flex items-center gap-2 text-xs text-white/60">
-        <input type="checkbox" checked={pickAccount} onChange={(e) => setPickAccount(e.target.checked)} />
+      <label className="type-body-sm mt-5 flex min-h-11 items-center gap-2 text-fg-2">
+        <input type="checkbox" className="h-4 w-4 accent-[var(--spak-primary)]" checked={pickAccount} onChange={(e) => setPickAccount(e.target.checked)} />
         Let me choose a different account (EVM and Solana)
       </label>
-      {error && <p role="alert" className="mt-3 text-sm text-red-400">{error}</p>}
+      {error && <ErrorText>{error}</ErrorText>}
     </Card>
   );
 }

@@ -8,14 +8,12 @@ import { watchEvmWallets, type EvmWalletInfo } from "@/wallets/evm";
 import { watchSolanaWallets, type SolanaWalletInfo } from "@/wallets/solana";
 import { checkEvmWallet, checkSolanaWallet, requestEvmAccounts, requestEvmNetwork, sendEvmDeposit, sendSolanaDeposit } from "@/wallets/deposit";
 import { classifyWalletError } from "@/wallets/errors";
-import { Button, inputCls, Row } from "./ui";
+import { Amount, Button, ErrorText, Mono, Panel, Row, inputCls } from "./ui";
+import { DEPOSIT_LABEL, Notice, StatusBadge } from "./status";
+import { Icon } from "./icons";
 
 interface Prepared { deposit: DepositView; transaction: DepositTransaction; balance: { balance: string | null; sufficient: boolean | null } }
 const LIVE = ["SUBMITTED", "VERIFICATION_PENDING", "CONFIRMED"];
-const DEPOSIT_LABEL: Record<string, string> = {
-  WALLET_CONFIRMATION_REQUESTED: "Waiting for your wallet", SUBMITTED: "Submitted, not verified yet", VERIFICATION_PENDING: "Verifying on chain",
-  CONFIRMED: "Deposit confirmed on chain", REJECTED: "Deposit rejected", FAILED: "Deposit transaction failed", EXPIRED: "Deposit expired",
-};
 
 /**
  * Steps 3 to 7: confirm wallet details, authorize the deposit in the wallet, submit the transaction reference,
@@ -81,52 +79,69 @@ export function DepositPanel({ execution }: { execution: ExecutionView }) {
 
   if (dep && LIVE.includes(dep.state)) {
     return (
-      <div className="mb-4 rounded-xl border border-white/10 p-4 text-sm">
-        <p className="mb-2 font-medium">Step {dep.state === "CONFIRMED" ? "7" : "6"} of 7: {DEPOSIT_LABEL[dep.state]}</p>
-        <Row k="Transaction" v={dep.txHash} mono />
-        {dep.confirmations !== null && <Row k="Confirmations" v={String(dep.confirmations)} />}
+      <Panel className="mb-5">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <p className="type-label text-fg-2">Step {dep.state === "CONFIRMED" ? "7" : "6"} of 7</p>
+          <StatusBadge kind="deposit" state={dep.state} />
+        </div>
+        <Row k="Transaction" v={<Mono value={dep.txHash ?? ""} full />} />
+        {dep.confirmations !== null && <Row k="Confirmations" v={<span className="type-amount">{dep.confirmations}</span>} />}
         {dep.reason && dep.state !== "CONFIRMED" && <Row k="Note" v={dep.reason} />}
-        <p className="mt-2 text-xs text-white/50">
+        <p className="type-body-sm mt-3 text-fg-2">
           {dep.state === "CONFIRMED"
             ? `The deposit is confirmed on ${network}. The cross-chain transfer is a separate step; its status is below.`
             : "SPak only reports a deposit once the source chain confirms it. Do not send it again."}
         </p>
-      </div>
+      </Panel>
     );
   }
 
   const tx = prep?.transaction;
   const wallets = family === "evm" ? evm.map((w) => ({ id: w.id, name: w.name })) : family === "solana" ? sol.map((w) => ({ id: w.id, name: w.name })) : [];
+  const ok = (good: boolean, text: string) => (
+    <p className="type-body-sm flex items-start gap-2" style={{ color: `var(--spak-status-${good ? "success" : "error"}-foreground)` }}>
+      <Icon name={good ? "success" : "error"} size={16} className="mt-0.5 shrink-0" />{text}
+    </p>
+  );
   return (
-    <div className="mb-4 rounded-xl border border-amber-400/30 bg-amber-400/5 p-4 text-sm">
-      <p className="mb-2 font-medium text-amber-200">Step 3 of 7: send the deposit</p>
-      <Row k="Send exactly" v={formatUnits(execution.source.amountIn, execution.source.assetId)} />
-      <Row k="On" v={network} />
-      {execution.deposit && <Row k="To deposit address" v={execution.deposit.address} mono />}
-      {execution.deposit?.memo && <Row k="Memo (required)" v={execution.deposit.memo} mono />}
-      {execution.deposit?.deadline && <Row k="Before" v={new Date(execution.deposit.deadline).toLocaleString()} />}
-      <Row k="From your verified wallet" v={execution.refundAddress} mono />
-      {dep && ["REJECTED", "FAILED", "EXPIRED"].includes(dep.state) && <p className="mt-2 text-xs text-red-300">Last attempt: {DEPOSIT_LABEL[dep.state]}{dep.reason ? `. ${dep.reason}` : ""}</p>}
+    <div className="mb-5 rounded-card border p-4 sm:p-5" style={{ borderColor: "var(--spak-status-pending-border)", background: "var(--spak-status-pending-background)" }}>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <p className="type-app-subheading text-fg">Step 3 of 7: send the deposit</p>
+        <StatusBadge state="AWAITING_DEPOSIT" />
+      </div>
+      <div className="rounded-card border border-line bg-elevated px-4 py-1 dark:bg-bg">
+        <Row k="Send exactly" v={<Amount value={formatUnits(execution.source.amountIn, execution.source.assetId)} size="amount-total" />} />
+        <Row k="On" v={network} />
+        {execution.deposit && <Row k="To deposit address" v={<Mono value={execution.deposit.address} full />} />}
+        {execution.deposit?.memo && <Row k="Memo (required)" v={<Mono value={execution.deposit.memo} full />} />}
+        {execution.deposit?.deadline && <Row k="Before" v={new Date(execution.deposit.deadline).toLocaleString()} />}
+        <Row k="From your verified wallet" v={<Mono value={execution.refundAddress} full />} />
+      </div>
+      {dep && ["REJECTED", "FAILED", "EXPIRED"].includes(dep.state) && (
+        <Notice role={dep.state === "EXPIRED" ? "neutral" : "error"} title={`Last attempt: ${DEPOSIT_LABEL[dep.state]}`} className="mt-3">{dep.reason ?? undefined}</Notice>
+      )}
 
-      {!tx && family !== "near" && <Button className="mt-3" onClick={prepare} disabled={!!busy}>{busy === "prepare" ? "Preparing" : "Prepare deposit"}</Button>}
+      {!tx && family !== "near" && <Button className="mt-4 w-full sm:w-auto" onClick={prepare} disabled={!!busy}>{busy === "prepare" ? "Preparing" : "Prepare deposit"}</Button>}
 
       {tx && tx.family !== "near" && (
-        <div className="mt-3 flex flex-col gap-2">
-          <p className="text-xs text-white/60">Your wallet will be asked to:</p>
-          <ul className="list-disc pl-4 text-xs text-white/70">{tx.steps.map((s) => <li key={s.action}><b>{s.action}</b>: {s.detail}</li>)}</ul>
-          <p className="text-xs text-white/50">No token allowance (approve) is requested. Balance: {prep?.balance.balance !== null ? formatUnits(prep!.balance.balance!, execution.source.assetId) : "could not be read; the wallet will check"}.</p>
-          <p className="text-xs text-white/60">Step 4: choose the wallet that holds {execution.refundAddress.slice(0, 8)}…</p>
+        <div className="mt-4 flex flex-col gap-3">
+          <div>
+            <p className="type-label text-fg-2">Your wallet will be asked to</p>
+            <ul className="type-body-sm mt-1 list-disc pl-5 text-fg">{tx.steps.map((s) => <li key={s.action}><b>{s.action}</b>: {s.detail}</li>)}</ul>
+          </div>
+          <p className="type-body-sm text-fg-2">No token allowance (approve) is requested. Balance: {prep?.balance.balance !== null ? <span className="type-amount-fee text-fg">{formatUnits(prep!.balance.balance!, execution.source.assetId)}</span> : "could not be read; the wallet will check"}.</p>
+          <p className="type-label text-fg-2">Step 4: choose the wallet that holds <span className="type-address text-fg">{execution.refundAddress.slice(0, 8)}…</span></p>
           <div className="flex flex-wrap gap-2">
-            {wallets.length ? wallets.map((w) => <Button key={w.id} variant={picked === w.id ? "primary" : "ghost"} onClick={() => setPicked(w.id)}>{w.name}</Button>)
-              : <span className="text-xs text-white/50">No {family === "evm" ? "EVM" : "Solana"} wallet found in this browser.</span>}
+            {wallets.length ? wallets.map((w) => <Button key={w.id} variant={picked === w.id ? "primary" : "ghost"} aria-pressed={picked === w.id} onClick={() => setPicked(w.id)}>{w.name}</Button>)
+              : <span className="type-body-sm text-fg-2">No {family === "evm" ? "EVM" : "Solana"} wallet found in this browser.</span>}
           </div>
           {picked && check && (
-            <div className="text-xs">
-              <p className={check.accountOk ? "text-emerald-300" : "text-red-300"}>Account: {check.accountOk ? "matches your verified wallet" : `wallet shows ${check.account ?? "no account"}; switch to ${execution.refundAddress} in the wallet`}</p>
-              {tx.family === "evm" && <p className={check.networkOk ? "text-emerald-300" : "text-red-300"}>Network: {check.networkOk ? network : `wallet is on a different network; ${network} is required`}</p>}
+            <div className="flex flex-col gap-1">
+              {ok(check.accountOk, `Account: ${check.accountOk ? "matches your verified wallet" : `wallet shows ${check.account ?? "no account"}; switch to ${execution.refundAddress} in the wallet`}`)}
+              {tx.family === "evm" && ok(check.networkOk, `Network: ${check.networkOk ? network : `wallet is on a different network; ${network} is required`}`)}
             </div>
           )}
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
             {picked && evmWallet && check && !check.account && <Button variant="ghost" onClick={() => run("acct", async () => { await requestEvmAccounts(evmWallet); await recheck(); })}>Connect account in wallet</Button>}
             {picked && evmWallet && tx.family === "evm" && check && !check.networkOk && (
               <Button variant="ghost" onClick={() => run("net", async () => { await requestEvmNetwork(evmWallet, tx.chainId); await recheck(); })}>Ask wallet to switch to {network}</Button>
@@ -137,15 +152,16 @@ export function DepositPanel({ execution }: { execution: ExecutionView }) {
       )}
 
       {(family === "near" || tx) && (
-        <div className="mt-4 border-t border-white/10 pt-3">
-          <p className="mb-2 text-xs text-white/60">{family === "near" ? "NEAR deposits are sent from your NEAR wallet. Paste the transaction hash; SPak verifies it on chain." : "Sent it another way? Paste the transaction hash; SPak verifies it on chain."}</p>
-          <div className="flex gap-2">
-            <input className={`${inputCls} flex-1 font-mono`} placeholder="Transaction hash" value={manual} onChange={(e) => setManual(e.target.value)} />
-            <Button variant="ghost" onClick={submitManual} disabled={!!busy || manual.trim().length < 10}>Submit</Button>
+        <div className="mt-5 border-t border-line pt-4">
+          <p className="type-body-sm mb-2 text-fg-2">{family === "near" ? "NEAR deposits are sent from your NEAR wallet. Paste the transaction hash; SPak verifies it on chain." : "Sent it another way? Paste the transaction hash; SPak verifies it on chain."}</p>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <label className="sr-only" htmlFor={`manual-${execution.id}`}>Transaction hash</label>
+            <input id={`manual-${execution.id}`} className={`${inputCls} type-address flex-1`} placeholder="Transaction hash" value={manual} onChange={(e) => setManual(e.target.value)} />
+            <Button variant="secondary" onClick={submitManual} disabled={!!busy || manual.trim().length < 10}>Submit</Button>
           </div>
         </div>
       )}
-      {error && <p role="alert" className="mt-3 text-sm text-red-400">{error}</p>}
+      {error && <ErrorText>{error}</ErrorText>}
     </div>
   );
 }

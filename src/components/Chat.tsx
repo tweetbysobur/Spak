@@ -2,7 +2,7 @@
 import { useRef, useState } from "react";
 import { getNetwork } from "@/spak-in/registries/networks";
 import { api, formatUnits, startExecution, type ExecutionView, type IntentResult, type QuoteView } from "@/lib/client";
-import { Button, Card, inputCls } from "./ui";
+import { Button, Card, SectionTitle, inputCls } from "./ui";
 
 interface Msg { from: "you" | "spak"; text: string; detail?: string[]; options?: string[] }
 
@@ -45,30 +45,35 @@ export function Chat({ timezone, onReady }: {
 
   return (
     <Card className="flex flex-col gap-4">
-      <div className="flex max-h-96 min-h-32 flex-col gap-3 overflow-y-auto">
+      <SectionTitle sub="Describe a transfer in plain words. SPak plans it and gets a quote; nothing moves until you approve it and sign in your wallet.">Ask SPak</SectionTitle>
+      <div className="flex max-h-[28rem] min-h-28 flex-col gap-3 overflow-y-auto" aria-live="polite">
         {msgs.length === 0 && (
-          <div className="flex flex-wrap gap-2">
-            {EXAMPLES.map((x) => (
-              <button key={x} onClick={() => setText(x)} className="rounded-full border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:bg-white/5">{x}</button>
-            ))}
+          <div className="flex flex-col gap-2">
+            <p className="type-label text-fg-2">Try an example</p>
+            <div className="flex flex-wrap gap-2">
+              {EXAMPLES.map((x) => (
+                <button key={x} onClick={() => setText(x)} className="type-body-sm min-h-9 rounded-full border border-line-strong px-3 text-fg hover:bg-secondary dark:hover:bg-elevated">{x}</button>
+              ))}
+            </div>
           </div>
         )}
         {msgs.map((m, i) => (
-          <div key={i} className={`max-w-[90%] rounded-2xl px-4 py-2.5 text-sm ${m.from === "you" ? "self-end bg-emerald-400/15" : "self-start bg-white/5"}`}>
+          <div key={i} className={`type-body max-w-[92%] rounded-card px-4 py-3 ${m.from === "you" ? "self-end bg-primary text-on-primary" : "self-start border border-line bg-surface text-fg dark:bg-elevated"}`}>
             <p>{m.text}</p>
-            {!!m.detail?.length && <ul className="mt-1.5 list-disc pl-4 text-xs text-white/60">{m.detail.map((d) => <li key={d}>{d}</li>)}</ul>}
+            {!!m.detail?.length && <ul className={`type-body-sm mt-1.5 list-disc pl-4 ${m.from === "you" ? "" : "text-fg-2"}`}>{m.detail.map((d) => <li key={d}>{d}</li>)}</ul>}
             {!!m.options?.length && i === msgs.length - 1 && (
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {m.options.map((o) => (
-                  <button key={o} onClick={() => send(getNetwork(o) ? `on ${getNetwork(o)!.name}` : o)} className="rounded-full border border-white/15 px-2.5 py-1 text-xs hover:bg-white/10">{getNetwork(o)?.name ?? o}</button>
+                  <button key={o} onClick={() => send(getNetwork(o) ? `on ${getNetwork(o)!.name}` : o)} className="type-button-sm min-h-9 rounded-full border border-line-strong bg-elevated px-3 text-fg hover:bg-secondary dark:bg-bg">{getNetwork(o)?.name ?? o}</button>
                 ))}
               </div>
             )}
           </div>
         ))}
       </div>
-      <form onSubmit={(e) => { e.preventDefault(); send(text.trim()); }} className="flex gap-2">
-        <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Tell SPak what to do" className={`${inputCls} flex-1`} />
+      <form onSubmit={(e) => { e.preventDefault(); send(text.trim()); }} className="flex flex-col gap-2 sm:flex-row">
+        <label className="sr-only" htmlFor="spak-intent">Instruction</label>
+        <input id="spak-intent" value={text} onChange={(e) => setText(e.target.value)} placeholder="For example: Swap 50 USDC on Base to SOL on Solana" className={`${inputCls} flex-1`} />
         <Button type="submit" disabled={busy || !text.trim()}>{busy ? "Working" : "Send"}</Button>
       </form>
     </Card>

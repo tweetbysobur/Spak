@@ -22,8 +22,10 @@ describe("structure", () => {
     expect(src).toMatch(/Instrument_Serif\(\{[^}]*style: \["italic"\]/);
     expect(src.match(/preload: false/g)?.length).toBe(3); // only Inter is preloaded
   });
-  it("the font loader is not wired into the app yet", () => {
-    expect(readFileSync("src/app/layout.tsx", "utf8")).not.toContain("design/fonts");
+  it("the font loader is wired into the root layout (Phase 6.6)", () => {
+    const layout = readFileSync("src/app/layout.tsx", "utf8");
+    expect(layout).toContain('from "@/design/fonts"');
+    expect(layout).toContain("className={fontVariables}");
   });
   it("all font-file validations passed when the tokens were generated", () => {
     for (const c of type.validation) expect(c.pass, `${c.check}: ${c.detail}`).toBe(true);
