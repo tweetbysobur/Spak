@@ -7,7 +7,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "SPak",
     short_name: "SPak",
     description: "Intelligent execution across chains.",
-    start_url: "/",
+    start_url: "/app",
     display: "standalone",
     background_color: colors.themes.light.background,
     theme_color: colors.brand.forestGreen,

@@ -58,7 +58,7 @@ export function Chat({ timezone, onReady }: {
           </div>
         )}
         {msgs.map((m, i) => (
-          <div key={i} className={`type-body max-w-[92%] rounded-card px-4 py-3 ${m.from === "you" ? "self-end bg-primary text-on-primary" : "self-start border border-line bg-surface text-fg dark:bg-elevated"}`}>
+          <div key={i} className={`type-body max-w-[92%] rounded-card [overflow-wrap:anywhere] px-4 py-3 ${m.from === "you" ? "self-end bg-primary text-on-primary" : "self-start border border-line bg-surface text-fg dark:bg-elevated"}`}>
             <p>{m.text}</p>
             {!!m.detail?.length && <ul className={`type-body-sm mt-1.5 list-disc pl-4 ${m.from === "you" ? "" : "text-fg-2"}`}>{m.detail.map((d) => <li key={d}>{d}</li>)}</ul>}
             {!!m.options?.length && i === msgs.length - 1 && (

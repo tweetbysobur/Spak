@@ -1,0 +1,42 @@
+{
+  "chat": {
+    "width": 1392,
+    "height": 825
+  },
+  "plan": {
+    "width": 1392,
+    "height": 2295
+  },
+  "approval": {
+    "width": 1392,
+    "height": 2770
+  },
+  "tracking": {
+    "width": 1392,
+    "height": 2504
+  },
+  "refund": {
+    "width": 1292,
+    "height": 1569
+  },
+  "chat-m": {
+    "width": 736,
+    "height": 1201
+  },
+  "plan-m": {
+    "width": 736,
+    "height": 3012
+  },
+  "approval-m": {
+    "width": 736,
+    "height": 3775
+  },
+  "tracking-m": {
+    "width": 736,
+    "height": 2887
+  },
+  "refund-m": {
+    "width": 652,
+    "height": 2070
+  }
+}

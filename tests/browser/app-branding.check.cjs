@@ -13,6 +13,7 @@ const { privateKeyToAccount, generatePrivateKey } = require(require.resolve('vie
 const fs = require('fs');
 const [,, BASE = 'http://localhost:3100', OUT = '/tmp/spak-shots'] = process.argv;
 fs.mkdirSync(OUT, { recursive: true });
+const APP = `${BASE}/app`; // the application route; the marketing site is at "/"
 const account = privateKeyToAccount(generatePrivateKey());
 const results = []; const errors = [];
 const ok = (name, pass, detail = '') => { results.push({ name, pass, detail }); console.log(`${pass ? 'PASS' : 'FAIL'} ${name}${detail ? ' | ' + detail : ''}`); };
@@ -45,7 +46,7 @@ async function shot(page, name) { await page.screenshot({ path: `${OUT}/${name}.
   page.on('response', (r) => { if (r.status() >= 400 && !r.url().includes('/deposits')) errors.push(`${r.status()} ${r.url()}`); });
 
   // 1. Signed out, light
-  await page.goto(BASE, { waitUntil: 'networkidle' });
+  await page.goto(APP, { waitUntil: 'networkidle' });
   await page.evaluate(() => document.fonts.ready);
   const fonts = await page.evaluate(() => [...new Set([...document.fonts].filter((f) => f.status === 'loaded').map((f) => f.family))]);
   ok('fonts loaded (Inter at least)', fonts.some((f) => /Inter/.test(f)), fonts.join(', '));
@@ -154,7 +155,7 @@ async function shot(page, name) { await page.screenshot({ path: `${OUT}/${name}.
   const m = await mob.newPage();
   m.on('pageerror', (e) => errors.push(`mobile pageerror: ${e.message}`));
   for (const theme of ['light', 'dark']) {
-    await m.goto(BASE, { waitUntil: 'networkidle' });
+    await m.goto(APP, { waitUntil: 'networkidle' });
     await m.evaluate((t) => localStorage.setItem('spak-theme', t), theme);
     await m.reload({ waitUntil: 'networkidle' });
     const clipped = await m.locator('[role=tablist] [role=tab]:visible').evaluateAll((els) => els.filter((e) => { const r = e.getBoundingClientRect(); return r.right > window.innerWidth || r.left < 0 || e.scrollWidth > e.clientWidth; }).map((e) => e.textContent));
@@ -175,7 +176,7 @@ async function shot(page, name) { await page.screenshot({ path: `${OUT}/${name}.
   }
   // Tablet
   const tab = await browser.newContext({ viewport: { width: 820, height: 1180 }, storageState: await ctx.storageState() });
-  const tp = await tab.newPage(); await tp.goto(BASE, { waitUntil: 'networkidle' });
+  const tp = await tab.newPage(); await tp.goto(APP, { waitUntil: 'networkidle' });
   ok('tablet: no horizontal overflow', (await overflow(tp)) <= 0); await shot(tp, '12-tablet-chat');
 
   const real4xx = errors.filter((e) => !/INSUFFICIENT_BALANCE|status of 422|status of 4\d\d \(\)/.test(e));
