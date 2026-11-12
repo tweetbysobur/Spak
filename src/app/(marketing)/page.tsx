@@ -41,8 +41,9 @@ export default function HomePage() {
         </div>
         <div data-hero-content className="mkt-wrap flex min-h-[clamp(34rem,165vw,50rem)] flex-col sm:min-h-[clamp(34rem,50vw,50rem)] items-center justify-center pb-20 pt-14 text-center max-sm:pb-32 md:pb-28 md:pt-16">
           <BuiltOnNear className="mkt-hero-chip" />
-          <h1 className="type-display-lg mt-7 max-w-2xl text-fg">Intelligent execution across chains.</h1>
-          <p className="type-lead mt-6 max-w-xl text-fg">{SITE.description}</p>
+          {/* Phones: two fixed lines, sized to fit the screen width. From 640 px up, unchanged. */}
+          <h1 className="type-display-lg mt-7 max-w-2xl text-fg max-sm:text-[clamp(1.45rem,7.3vw,1.85rem)]!"><span className="max-sm:whitespace-nowrap">Intelligent execution</span> <span className="max-sm:block max-sm:whitespace-nowrap">across chains.</span></h1>
+          <p className="type-lead mt-6 max-w-xl text-fg max-sm:mt-4 max-sm:max-w-[22rem] max-sm:text-[clamp(0.85rem,3.9vw,0.95rem)]! max-sm:[text-wrap:balance]">{SITE.description}</p>
           <div className="mt-9 flex w-full flex-col items-stretch justify-center gap-3 sm:w-auto sm:flex-row sm:items-center">
             <CtaLink href={SITE.appPath} variant="on-forest">Launch SPak<Icon name="arrow" size={18} aria-hidden="true" className="ml-2 -rotate-45" /></CtaLink>
             <CtaLink href="/developers" variant="on-forest-ghost" className="mkt-hero-chip">Explore Developers</CtaLink>
