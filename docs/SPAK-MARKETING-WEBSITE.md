@@ -64,6 +64,18 @@ The homepage was shortened. The journey, cross-chain detail, network coverage, p
 - **/product:** opens with the architecture as one path (Connect, Intelligence, Guard, NEAR Intents, verification) with Agent, Payments and Conditional Execution beside it. Each module has a different treatment: Intelligence is a parsed sentence; Guard is the one photographic dark band with the approval screen; Payments is a route diagram; Connect and Agent share an account diagram; Conditional Execution is muted and framed by a dashed line because it is planned. The developer block closes the page.
 - Status is shown with `StatusMark` (`src/components/marketing/internal.tsx`): words plus a filled, half or hollow circle. "Planned, not available yet" is never shown as live.
 
+### Generated imagery
+
+Created with Figma's image generator (gpt-image-2.5) from the art-direction prompts, then compressed to JPEG. All are illustrations and are never used as product evidence; real screens stay real.
+
+| File | Used on | Purpose |
+| --- | --- | --- |
+| `public/marketing/images/spak-how-it-works-landscape.jpg` (1536 x 864) | /how-it-works opening | Separate peaks joined by faint paths of light: coordination between places. Text sits in the dark sky |
+| `public/marketing/images/spak-product-infrastructure.jpg` (1536 x 864) | /product, under the headline | A slanted central structure linked to four plateaus: SPak coordinating, each network keeping its own ground. Captioned as an illustration |
+| `public/marketing/images/spak-module-<id>.jpg` (768 x 768, six files) | /product, at the top of each module | One family of spot illustrations: agent, intelligence, guard, payments, conditional, connect |
+
+The execution journey stays a coded spine of real screens and diagrams, because a generated picture could not show the actual order of steps accurately.
+
 ## 4. Components
 
 | Component | File | Job |

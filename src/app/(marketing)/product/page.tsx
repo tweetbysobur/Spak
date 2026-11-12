@@ -22,6 +22,8 @@ const P = (id: string) => PILLARS.find((p) => p.id === id) as Pillar;
 function ModuleHead({ p, onDark = false }: { p: Pillar; onDark?: boolean }) {
   return (
     <div>
+      {/* The module's illustration: one family, same style for all six. Decorative, the heading names it. */}
+      <Image src={`/marketing/images/spak-module-${p.id}.jpg`} alt="" width={112} height={112} sizes="112px" className="mb-6 h-28 w-28 rounded-card" />
       <StatusMark status={p.status} />
       <h2 className={`type-display-lg mt-4 ${onDark ? "text-fg" : "text-fg"}`}>{p.name}</h2>
       <p className="type-lead mt-5 max-w-xl text-fg-2">{p.summary}</p>
@@ -35,9 +37,20 @@ export default function ProductPage() {
     <>
       {/* Opening: the architecture as one path. */}
       <section className="mkt-wrap pb-20 pt-14 md:pb-28 md:pt-20">
-        <h1 className="type-display-xl max-w-4xl text-fg">Cross-chain execution, built as infrastructure.</h1>
-        <p className="type-lead mt-6 max-w-2xl text-fg-2">Six modules along one path, from your wallet to a verified delivery. Each says what works today and what is still being built.</p>
-        <div className="mt-16"><ArchitectureFlow /></div>
+        <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr] lg:items-end lg:gap-16">
+          <h1 className="type-display-xl text-fg">Cross-chain execution, built as infrastructure.</h1>
+          <p className="type-lead text-fg-2">Six modules along one path, from your wallet to a verified delivery. Each says what works today and what is still being built.</p>
+        </div>
+      </section>
+      {/* Full-bleed on phones and tablets, inset on desktop. The structure stays in frame at every width. */}
+      <figure className="lg:mx-auto lg:max-w-[76rem] lg:px-10">
+        <div className="relative aspect-[4/3] overflow-hidden sm:aspect-[16/9] lg:rounded-card">
+          <Image src="/marketing/images/spak-product-infrastructure.jpg" alt="Illustration: a slanted stone structure on a forested hilltop, joined by thin paths of light to four separate plateaus across a misty valley." fill priority sizes="(min-width: 1280px) 1200px, 100vw" quality={80} className="object-cover object-[50%_45%]" />
+        </div>
+        <figcaption className="type-demo-label mkt-wrap mt-3 text-fg-2 lg:px-0">Illustration. SPak coordinates; each network keeps its own ground.</figcaption>
+      </figure>
+      <section className="mkt-wrap pb-20 pt-16 md:pb-28">
+        <ArchitectureFlow />
       </section>
 
       {/* Intelligence: an instruction taken apart. Typographic, no frame. */}

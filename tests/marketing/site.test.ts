@@ -175,6 +175,20 @@ describe("marketing site: honesty and brand rules in the source", () => {
     for (const n of ["chat", "plan", "approval", "tracking", "refund"]) expect([HOME, HOW, PRODUCT].some((t) => t.includes(`name="${n}"`)), n).toBe(true);
   });
 
+  it("generated imagery: files exist, are web-sized, and are used where documented", () => {
+    const imgs = ["spak-how-it-works-landscape.jpg", "spak-product-infrastructure.jpg", ...PILLARS.map((p) => `spak-module-${p.id}.jpg`)];
+    for (const f of imgs) {
+      expect(existsSync(join(ROOT, "public/marketing/images", f)), f).toBe(true);
+      expect(readFileSync(join(ROOT, "public/marketing/images", f)).length, f).toBeLessThan(300 * 1024);
+    }
+    expect(HOW).toContain("/marketing/images/spak-how-it-works-landscape.jpg");
+    expect(PRODUCT).toContain("/marketing/images/spak-product-infrastructure.jpg");
+    expect(PRODUCT).toContain("/marketing/images/spak-module-${p.id}.jpg");
+    // Generated imagery is labelled as illustration, never presented as product evidence.
+    expect(PRODUCT).toMatch(/alt="Illustration:/);
+    expect(PRODUCT).toContain("Illustration. SPak coordinates");
+  });
+
   it("labels simulated product screens", () => {
     expect(HOW).toMatch(/caption="Demonstration\. This state was produced with simulated tracking data\./);
     expect(read("scripts/marketing/capture.cjs")).toMatch(/SIMULATED tracking data/);

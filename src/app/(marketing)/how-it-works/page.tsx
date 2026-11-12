@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { EvidenceField, ExecutionLanes, RouteDiagram } from "@/components/marketing/art";
-import { CoverageLists, JourneyBand, PlanSteps } from "@/components/marketing/internal";
+import { CoverageLists, PlanSteps } from "@/components/marketing/internal";
 import { CtaLink, Screen } from "@/components/marketing/site";
 import { ASSET_COUNT, NETWORK_COUNT, NETWORKS_REVIEWED, NETWORKS_VERIFIED, OG_IMAGE, SECURITY, SITE, VERIFICATION_ROWS } from "@/marketing/content";
 
@@ -65,14 +66,15 @@ function StageVisual({ id }: { id: (typeof STAGES)[number]["id"] }) {
 export default function HowItWorksPage() {
   return (
     <>
-      {/* Opening: Graphite, with the transfer drawn across the landscape. */}
-      <section data-theme="dark" className="overflow-hidden bg-bg text-fg">
-        <div className="mkt-wrap grid items-center gap-10 py-16 md:py-24 lg:grid-cols-[1fr_1.1fr] lg:gap-8">
-          <div>
-            <h1 className="type-display-xl text-fg">From a sentence to a verified transfer.</h1>
-            <p className="type-lead mt-6 max-w-xl text-fg-2">SPak understands and plans. You approve and sign. NEAR Intents settles. SPak checks the result on chain where it can.</p>
-          </div>
-          <JourneyBand className="h-auto w-full" />
+      {/* Opening: a wide landscape of separate peaks joined by faint paths of light. Text sits in the dark sky. */}
+      <section data-theme="dark" className="relative isolate overflow-hidden bg-bg text-fg">
+        <div aria-hidden="true" className="absolute inset-0 -z-10">
+          <Image src="/marketing/images/spak-how-it-works-landscape.jpg" alt="" fill priority sizes="100vw" quality={80} className="object-cover object-[58%_70%] md:object-center" />
+          <div className="absolute inset-0 bg-[color-mix(in_srgb,var(--spak-brand-graphite)_35%,transparent)]" />
+        </div>
+        <div className="mkt-wrap flex min-h-[clamp(34rem,56vw,46rem)] flex-col justify-start pb-56 pt-16 md:pb-40 md:pt-24">
+          <h1 className="type-display-xl max-w-3xl text-fg">From a sentence to a verified transfer.</h1>
+          <p className="type-lead mt-6 max-w-xl text-fg">SPak understands and plans. You approve and sign. NEAR Intents settles. SPak checks the result on chain where it can.</p>
         </div>
       </section>
 
