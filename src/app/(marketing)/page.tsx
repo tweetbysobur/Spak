@@ -17,7 +17,7 @@ export default function HomePage() {
       {/* B. Hero */}
       <section className="mkt-wrap flex min-h-[clamp(30rem,72vh,44rem)] flex-col items-center justify-center py-16 text-center md:py-24">
         <BuiltOnNear />
-        <h1 className="type-display-lg mt-7 max-w-2xl text-fg">Intelligent execution <em className="type-editorial-accent">across chains.</em></h1>
+        <h1 className="type-display-lg mt-7 max-w-2xl text-fg">Intelligent execution across chains.</h1>
         <p className="type-lead mt-6 max-w-xl text-fg-2">{SITE.description}</p>
         <div className="mt-9 flex w-full flex-col items-stretch justify-center gap-3 sm:w-auto sm:flex-row sm:items-center">
           <CtaLink href={SITE.appPath}>Launch SPak<Icon name="arrow" size={18} aria-hidden="true" className="ml-2 -rotate-45" /></CtaLink>

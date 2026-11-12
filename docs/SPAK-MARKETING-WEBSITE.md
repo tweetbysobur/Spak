@@ -41,7 +41,7 @@ The move to `/app` changed three things only: the file location, `start_url` in 
 | Section | Anchor | Notes |
 | --- | --- | --- |
 | Navigation | | Logo, Product, Developers, Documentation, theme toggle, Launch App |
-| Hero | | Centred: Built on NEAR badge, approved tagline, supporting sentence, two CTAs. No illustration |
+| Hero | | Centred: Built on NEAR badge, approved tagline in Sora, supporting sentence, two CTAs. No illustration. Plain page background |
 | Product introduction | `#product` | What SPak is, the problem, the coordination argument, the NEAR Intents relationship |
 | How SPak works | `#how-it-works` | Five steps as a lane diagram. Dotted line before approval, solid after |
 | Cross-chain execution | `#cross-chain` | Route diagram, five capabilities, the two network groups, three product screens |
@@ -83,7 +83,7 @@ The hero was first built with an intent-path illustration on the right. It was r
 
 ### Third-party mark
 
-The hero badge shows the NEAR logo. The files are NEAR's own, copied byte for byte from NEAR's official documentation site (docs.near.org): `public/marketing/partners/near-logo.svg` (black, light theme) and `near-logo-rev.svg` (white, dark theme). They are never redrawn or recoloured, and a test pins their checksums. To update them, download the new files from NEAR and update the checksums in `tests/marketing/site.test.ts`.
+The hero badge shows the NEAR icon followed by the words "Built on NEAR". The icon is the left part of NEAR's logo file, shown through a square window, so the file is not edited. The files are NEAR's own, copied byte for byte from NEAR's official documentation site (docs.near.org): `public/marketing/partners/near-logo.svg` (black, light theme) and `near-logo-rev.svg` (white, dark theme). They are never redrawn or recoloured, and a test pins their checksums. To update them, download the new files from NEAR and update the checksums in `tests/marketing/site.test.ts`.
 
 ## 6. Product screens
 

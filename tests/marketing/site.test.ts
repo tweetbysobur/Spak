@@ -102,8 +102,7 @@ describe("marketing site: honesty and brand rules in the source", () => {
     const at = ["<BuiltOnNear />", "<h1", "{SITE.description}", "href={SITE.appPath}>Launch SPak", 'href="/developers" variant="ghost">Explore Developers'].map((t) => hero.indexOf(t));
     expect(at.every((i) => i >= 0), JSON.stringify(at)).toBe(true);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
-    expect(hero).toContain("Intelligent execution <em");
-    expect(hero).toContain("across chains.</em>");
+    expect(hero).toContain(">Intelligent execution across chains.</h1>");
     expect(SITE.description).toBe("SPak turns your intentions into controlled, verifiable actions across blockchain networks.");
     expect(hero).toMatch(/items-center justify-center[^"]*text-center/);
     expect(HOME).not.toContain("HeroComposition");
@@ -116,7 +115,8 @@ describe("marketing site: honesty and brand rules in the source", () => {
       expect(createHash("sha256").update(readFileSync(join(ROOT, "public/marketing/partners", file))).digest("hex"), file).toBe(sha);
     }
     const site = read("src/components/marketing/site.tsx");
-    for (const file of Object.keys(official)) expect(site).toContain(`/marketing/partners/${file}`);
+    for (const file of Object.keys(official)) expect(site).toContain(`"${file}"`);
+    expect(site).toContain("Built on NEAR");
     for (const { f, text } of ALL) expect(/m421\.61,108|M13\.9017/.test(text), `${f}: NEAR path data in source`).toBe(false);
   });
 

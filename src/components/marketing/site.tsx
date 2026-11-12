@@ -19,17 +19,23 @@ export function CtaLink({ href, children, variant = "primary", className = "" }:
 }
 
 /**
- * "Built on NEAR" badge. The mark is NEAR's own logo file, unmodified (public/marketing/partners, taken from
- * NEAR's official documentation site). Black artwork on light surfaces, the reversed file on dark ones.
+ * "Built on NEAR" badge: the NEAR icon, then the words. The icon is the left part of NEAR's own logo file, shown
+ * through a square window so the file itself stays unmodified (public/marketing/partners, from NEAR's official
+ * documentation site). Black artwork on light surfaces, the reversed file on dark ones. The mark is never
+ * redrawn or recoloured.
  */
 export function BuiltOnNear() {
+  const mark = (file: string, show: string) => (
+    <span aria-hidden="true" className={`${show} h-4 w-4 shrink-0 overflow-hidden`}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={`/marketing/partners/${file}`} alt="" width={66} height={16} className="h-4 w-auto max-w-none" />
+    </span>
+  );
   return (
-    <p className="type-label inline-flex items-center gap-2 rounded-full border border-line-strong px-3.5 py-1.5 text-fg-2">
-      Built on
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/marketing/partners/near-logo.svg" alt="NEAR" width={57} height={14} className="logo-light h-3.5 w-auto" />
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/marketing/partners/near-logo-rev.svg" alt="NEAR" width={57} height={14} className="logo-dark h-3.5 w-auto" />
+    <p className="type-label inline-flex items-center gap-2 rounded-full border border-line-strong py-1.5 pl-3 pr-3.5 text-fg">
+      {mark("near-logo.svg", "logo-light")}
+      {mark("near-logo-rev.svg", "logo-dark")}
+      Built on NEAR
     </p>
   );
 }

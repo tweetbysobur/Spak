@@ -56,14 +56,17 @@ async function settle(page) {
     const h = await hp.evaluate(() => {
       const sec = document.querySelector('main > section'); const box = (e) => e.getBoundingClientRect();
       const kids = [...sec.children]; const centre = (e) => box(e).left + box(e).width / 2;
-      const logo = [...sec.querySelectorAll('img[alt="NEAR"]')].find((i) => i.offsetParent !== null);
+      const marks = [...sec.querySelectorAll('p img')].filter((i) => i.offsetParent !== null); const logo = marks[0];
+      const win = logo ? box(logo.parentElement) : null;
       const links = [...sec.querySelectorAll('a')];
       return {
         order: kids.map((k) => k.tagName + (k.tagName === 'P' ? ':' + k.textContent.trim().slice(0, 8) : '')).join(' > '),
         offCentre: Math.max(...kids.map((k) => Math.abs(centre(k) - window.innerWidth / 2))),
         fits: kids.every((k) => box(k).left >= 0 && box(k).right <= window.innerWidth),
         headline: sec.querySelector('h1').textContent, lines: Math.round(box(sec.querySelector('h1')).height / parseFloat(getComputedStyle(sec.querySelector('h1')).lineHeight)),
-        logoOk: !!logo && logo.complete && logo.naturalWidth > 0, logoSrc: logo ? logo.getAttribute('src') : '', visibleLogos: [...sec.querySelectorAll('img[alt="NEAR"]')].filter((i) => i.offsetParent !== null).length,
+        logoOk: !!logo && logo.complete && logo.naturalWidth > 0, logoSrc: logo ? logo.getAttribute('src') : '', visibleLogos: marks.length, badge: kids[0].textContent.trim(),
+        // The window is square and shows only the icon: the wordmark part of the file starts beyond its right edge.
+        iconOnly: !!win && Math.abs(win.width - win.height) < 0.5 && box(logo).width > win.width * 3 && getComputedStyle(logo.parentElement).overflow === 'hidden',
         para: kids[2].textContent, links: links.map((l) => `${l.textContent.trim()}=${l.getAttribute('href')}`).join('|'),
         stacked: box(links[1]).top > box(links[0]).bottom - 1, svgs: sec.querySelectorAll('svg.mkt-art').length, vCentre: Math.abs((box(kids[0]).top - box(sec).top) - (box(sec).bottom - box(kids[kids.length - 1]).bottom)),
       };
@@ -72,7 +75,7 @@ async function settle(page) {
     ok(`hero ${size} ${theme}: badge, headline, paragraph, buttons in order; centred; inside the screen`,
       h.order === 'P:Built on > H1 > P:SPak tur > DIV' && h.offCentre <= 1 && h.vCentre <= 2 && h.fits && h.svgs === 0, JSON.stringify({ order: h.order, off: h.offCentre, v: h.vCentre }));
     ok(`hero ${size} ${theme}: exact copy, headline on ${h.lines} lines, official NEAR logo for this theme`,
-      h.headline === 'Intelligent execution across chains.' && h.para === 'SPak turns your intentions into controlled, verifiable actions across blockchain networks.' && h.lines >= 2 && h.lines <= 3 && h.logoOk && h.visibleLogos === 1 && h.logoSrc === wantLogo, `${h.logoSrc} ${h.lines}`);
+      h.headline === 'Intelligent execution across chains.' && h.para === 'SPak turns your intentions into controlled, verifiable actions across blockchain networks.' && h.lines >= 2 && h.lines <= 3 && h.logoOk && h.visibleLogos === 1 && h.logoSrc === wantLogo && h.iconOnly && h.badge === 'Built on NEAR', `${h.logoSrc} ${h.lines}`);
     ok(`hero ${size} ${theme}: both buttons keep their destinations${size === 'phone' ? ' and stack' : ''}`, h.links === 'Launch SPak=/app|Explore Developers=/developers' && h.stacked === (size === 'phone'), h.links);
     await hp.screenshot({ path: `${OUT}/hero-${size}-${theme}.png` });
     await hctx.close();
