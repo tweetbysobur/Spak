@@ -8,6 +8,10 @@ Rule for every word on the site: describe what the code does today. Anything els
 
 The site was simplified. The landing page has five sections: hero, What is SPak?, core capabilities (six modules with availability), How SPak works (one five-stop path on Forest Green, dotted until approval and solid after) and trust and control (three points). `/product` and `/how-it-works` no longer exist as pages; they redirect to the matching homepage sections. The detailed lifecycle, network coverage, verification, refunds, modules and architecture live in `/docs`, with all five product screens. The generated images were removed from the site. Sections below that describe the Product and How it works pages are history.
 
+### iPhone 16 captures for Figma
+
+`node scripts/marketing/iphone16-capture.cjs <baseUrl> <outDir>` captures /, /docs, /developers and /app in light and dark at iPhone 16 size (393 x 852 points at 3x, so 1179 x 2556 PNGs): one image per screen height plus a full-page image. Drop a screen PNG into a Figma "iPhone 16" frame and it fits exactly. Run it against the production URL after a deploy. It is Chromium emulation, not Apple's iOS Simulator.
+
 ## 1. Architecture
 
 The site lives in the same Next.js app as the product. It shares the root layout, so tokens, fonts and themes are identical.
