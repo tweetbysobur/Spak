@@ -42,7 +42,7 @@ The move to `/app` changed three things only: the file location, `start_url` in 
 | --- | --- | --- |
 | Navigation | | Logo, Product, Developers, Documentation, theme toggle, Launch App |
 | Hero | | Centred over the landscape photograph: Built on NEAR badge, approved tagline in Sora, supporting sentence, two CTAs |
-| What is SPak? | `#product` | Two columns: a short factual definition with a "See how it works" link to `#how-it-works`, and the symbol composition. Stacked on phones |
+| What is SPak? | `#product` | Two columns (48% / 42%): heading, one paragraph and a "See how it works" link to `#how-it-works`; the three-shape composition on the right. Stacked on phones |
 | How SPak works | `#how-it-works` | Five steps as a lane diagram. Dotted line before approval, solid after |
 | Cross-chain execution | `#cross-chain` | Route diagram, five capabilities, the two network groups, three product screens |
 | Agent, Intelligence, Guard, Payments | `#agent` `#intelligence` `#guard` `#payments` | Each lists "Live today" and "Not live yet" |
@@ -62,7 +62,7 @@ The move to `/app` changed three things only: the file location, `start_url` in 
 | Screen | site.tsx | Product screenshot with caption. Switches by theme and by width |
 | LivePlanned | site.tsx | Two lists: live and not live. Labelled in words, not only by colour |
 | Reveal | Reveal.tsx | Scroll reveal for `data-reveal` elements |
-| SymbolLandscape, ExecutionLanes, RouteDiagram, EvidenceField, BandField | art.tsx | Artwork (section 5) |
+| WhatIsComposition, ExecutionLanes, RouteDiagram, EvidenceField, BandField | art.tsx | Artwork (section 5) |
 
 ## 5. Art direction
 
@@ -70,7 +70,7 @@ All artwork is SVG drawn in code from the approved symbol geometry: the 51.8 deg
 
 | Composition | Explains |
 | --- | --- |
-| Symbol landscape (What is SPak?) | The official symbol at large size, its geometry read from `public/brand/logo/spak-symbol.svg` at build time and never redrawn. The upper form shows the hero landscape, scaled up 1.47 times so the rock face fills its top band and the mist runs down its arm. The leaf uses the primary colour (Forest Green, Light Forest in dark). The lower form is Muted Sage. An owner-approved illustration, not a logo placement |
+| What is SPak? composition | Three separate forms built from the symbol's construction (51.8 degree diagonal, the leaf), not the logo itself: an upper ribbon with the hero landscape clipped inside (scaled 2x so the rock face and mist show), the leaf in the primary colour, and a flat Muted Sage lower ribbon |
 | Execution lanes | Who acts at each of the five steps: you, SPak, NEAR Intents. Dotted until approval, solid after |
 | Route diagram | Wallet to deposit address to recipient. A dotted refund route returns to the wallet that sent the deposit |
 | Evidence field | A halftone field (12 px grid, radius 0.4 to 4.6) around the leaf. Dense where SPak has read the chain, sparse where it has not |

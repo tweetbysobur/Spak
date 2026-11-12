@@ -1,6 +1,6 @@
 import { getImageProps } from "next/image";
 import { Icon } from "@/components/icons";
-import { BandField, EvidenceField, ExecutionLanes, RouteDiagram, SymbolLandscape } from "@/components/marketing/art";
+import { BandField, EvidenceField, ExecutionLanes, RouteDiagram, WhatIsComposition } from "@/components/marketing/art";
 import { BuiltOnNear, CtaLink, LivePlanned, Screen } from "@/components/marketing/site";
 import { ASSET_COUNT, NETWORK_COUNT, NETWORKS_REVIEWED, NETWORKS_VERIFIED, PILLARS, SECURITY, SITE, STEPS, VERIFICATION_ROWS } from "@/marketing/content";
 
@@ -57,18 +57,17 @@ export default function HomePage() {
       </section>
 
       {/* C. What is SPak? */}
-      <section id="product" className="mkt-section">
-        <div className="mkt-wrap grid items-center gap-14 md:grid-cols-[1fr_1fr] md:gap-10 lg:grid-cols-[1fr_1.05fr] lg:gap-20">
+      <section id="product" className="py-20 md:py-28">
+        <div className="mkt-wrap grid items-center gap-14 md:grid-cols-[48fr_42fr] md:justify-between md:gap-10">
           <div data-reveal>
             <h2 className="type-display-lg text-fg">What is SPak?</h2>
-            <p className="type-lead mt-6 max-w-lg text-fg">An intelligent execution layer that turns what you ask for into a controlled, tracked transfer between blockchain networks.</p>
-            <p className="type-body-marketing mt-5 max-w-lg text-fg-2">You describe the outcome in plain words. SPak interprets it, builds a plan and gets a quote from NEAR Intents, across {NETWORK_COUNT} supported networks. Nothing moves until you approve the quote and sign in your wallet. NEAR Intents settles the transfer, and SPak tracks it to the end, confirming delivery on chain on the networks it can read.</p>
+            <p className="mt-6 max-w-[26rem] text-[1.25rem] leading-[1.6] text-fg md:text-[1.5rem]">An intent-based execution layer that coordinates cross-chain actions, approvals and verification in one interface.</p>
             <a href="#how-it-works" className="type-cta mt-8 inline-flex min-h-11 items-center gap-2 text-primary underline-offset-4 transition-colors hover:text-primary-hover hover:underline">
               See how it works<Icon name="arrow" size={18} aria-hidden="true" />
             </a>
           </div>
-          <div data-reveal className="mx-auto w-full max-w-md md:max-w-none">
-            <SymbolLandscape className="w-full" />
+          <div data-reveal className="flex justify-center">
+            <WhatIsComposition className="w-full max-w-md md:max-w-none" />
           </div>
         </div>
       </section>

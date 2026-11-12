@@ -141,27 +141,18 @@ describe("marketing site: honesty and brand rules in the source", () => {
     for (const { f, text } of ALL) expect(/m421\.61,108|M13\.9017/.test(text), `${f}: NEAR path data in source`).toBe(false);
   });
 
-  it("What is SPak?: heading, factual copy and a link to a real section", () => {
+  it("What is SPak?: one heading, the exact paragraph, one link to How it works, and the three-shape composition", () => {
     const sec = HOME.slice(HOME.indexOf('<section id="product"'), HOME.indexOf("</section>", HOME.indexOf('<section id="product"')));
     expect(sec).toContain(">What is SPak?</h2>");
-    expect(sec).toContain("{NETWORK_COUNT} supported networks"); // read from the registry, never typed in
-    expect(sec).toContain("Nothing moves until you approve the quote and sign in your wallet.");
-    expect(sec).toContain("NEAR Intents settles the transfer"); // SPak does not run its own bridge
-    expect(sec).toContain("on the networks it can read"); // on-chain delivery checks are not claimed for every network
+    expect(sec).toContain(">An intent-based execution layer that coordinates cross-chain actions, approvals and verification in one interface.</p>");
+    expect(sec.match(/<p\b/g)).toHaveLength(1);
+    expect(sec.match(/<a\b/g)).toHaveLength(1);
     expect(sec).toMatch(/href="#how-it-works"[^>]*>\s*See how it works/);
     expect(HOME).toContain('<section id="how-it-works"');
-    expect(sec).toContain("<SymbolLandscape");
-  });
-
-  it("the symbol composition reads the official symbol file and keeps its geometry", () => {
+    expect(sec).toContain("<WhatIsComposition");
     const art = read("src/components/marketing/art.tsx");
-    expect(art).toContain('const SYMBOL_FILE = "public/brand/logo/spak-symbol.svg"');
-    expect(art).toMatch(/readFileSync\(join\(process\.cwd\(\), SYMBOL_FILE\)/);
-    // The box always has the symbol's own aspect ratio, so the forms are never stretched.
-    expect(art).toContain("aspectRatio: `${f.width} / ${f.height}`");
-    const svg = read("public/brand/logo/spak-symbol.svg");
-    expect((/\sd="([^"]+)"/.exec(svg)?.[1] ?? "").split(/(?=M)/)).toHaveLength(3);
     expect(art).toContain('src="/brand/images/spak-hero-landscape.png"');
+    expect(art).toContain('clipPath: "url(#what-upper)"');
   });
 
   it("labels simulated product screens", () => {

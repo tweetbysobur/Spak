@@ -102,12 +102,12 @@ async function settle(page) {
       const sec = document.querySelector('#product'); const box = (e) => e.getBoundingClientRect();
       const text = sec.querySelector('h2').parentElement; const sym = sec.querySelector('[role=img]'); const img = sym.querySelector('img');
       return { h2: sec.querySelector('h2').textContent, link: sec.querySelector('a')?.getAttribute('href'), linkText: sec.querySelector('a')?.textContent.trim(),
-        ratio: (box(sym).width / box(sym).height).toFixed(3), img: !!img && img.complete && img.naturalWidth > 0,
-        sideBySide: box(sym).left >= box(text).right - 1 && Math.abs((box(sym).top + box(sym).height / 2) - (box(text).top + box(text).height / 2)) < 60,
+        ratio: (box(sym).width / box(sym).height).toFixed(3), symW: box(sym).width, img: !!img && img.complete && img.naturalWidth > 0,
+        sideBySide: box(sym).left >= box(text).right - 1 && Math.abs((box(sym).top + box(sym).height / 2) - (box(text).top + box(text).height / 2)) < 80,
         stacked: box(sym).top >= box(text).bottom, inside: box(sym).left >= 0 && box(sym).right <= innerWidth && box(text).right <= innerWidth };
     });
     ok(`What is SPak? ${size} ${theme}: ${size === 'phone' ? 'stacked, text first' : 'two columns, centred on each other'}; symbol undistorted with the photo loaded`,
-      w.h2 === 'What is SPak?' && w.link === '#how-it-works' && w.linkText === 'See how it works' && w.ratio === '1.136' && w.img && w.inside && (size === 'phone' ? w.stacked : w.sideBySide), JSON.stringify(w));
+      w.h2 === 'What is SPak?' && w.link === '#how-it-works' && w.linkText === 'See how it works' && w.ratio === '1.368' && w.img && w.inside && (size === 'phone' ? w.stacked : w.sideBySide), JSON.stringify(w));
     if (size === 'desktop' && theme === 'light') {
       await sp.locator('#product a', { hasText: 'See how it works' }).click(); await sp.waitForTimeout(400);
       ok('What is SPak?: "See how it works" scrolls to the How it works section', (await sp.evaluate(() => location.hash)) === '#how-it-works' && (await sp.evaluate(() => Math.abs(document.querySelector('#how-it-works').getBoundingClientRect().top) < 120)));
