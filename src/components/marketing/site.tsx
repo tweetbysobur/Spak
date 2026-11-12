@@ -71,7 +71,7 @@ export function SiteFooter() {
       <div className="mkt-wrap grid gap-12 py-16 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
         <div>
           <Link href="/" aria-label="SPak home" className="inline-block"><Logo className="h-7" /></Link>
-          <p className="type-body-sm mt-4 max-w-xs text-fg-2">{SITE.tagline} Built on NEAR. Transfers are executed through NEAR Intents.</p>
+          <p className="type-body-sm mt-4 max-w-xs text-fg-2">Built on NEAR. Transfers are executed through NEAR Intents.</p>
         </div>
         {FOOTER.map((col) => (
           <nav key={col.title} aria-label={col.title}>
@@ -83,7 +83,7 @@ export function SiteFooter() {
         ))}
       </div>
       <div className="mkt-wrap border-t border-line py-6">
-        <p className="type-caption text-fg-2">© 2026 SPak. Every transfer needs your approval and your wallet signature.</p>
+        <p className="type-caption text-fg-2">© 2026 SPak</p>
       </div>
     </footer>
   );

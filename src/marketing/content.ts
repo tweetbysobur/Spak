@@ -139,7 +139,7 @@ export const VERIFICATION_ROWS = [
 export const JOURNEY = [
   { id: "describe", title: "Describe your intention", body: "Write what you want in plain words.", moves: false },
   { id: "plan", title: "SPak prepares the plan", body: "A fixed plan and a quote, with every fee.", moves: false },
-  { id: "approve", title: "You review and approve", body: "Nothing moves before this.", moves: false },
+  { id: "approve", title: "You review and approve", body: "You see the full quote first.", moves: false },
   { id: "execute", title: "NEAR Intents executes", body: "Your wallet sends; NEAR Intents settles.", moves: true },
   { id: "verify", title: "SPak tracks and verifies", body: "Delivery is checked on chain where supported.", moves: true },
 ] as const;

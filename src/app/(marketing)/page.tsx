@@ -91,11 +91,10 @@ export default function HomePage() {
         <div className="mkt-wrap">
           <h2 className="type-display-lg text-[var(--spak-brand-warm-white)]">How SPak works</h2>
           <ol data-reveal className="mt-14 grid md:grid-cols-5">
-            {JOURNEY.map((j, i) => (
+            {JOURNEY.map((j) => (
               <li key={j.id} className={`relative border-l-2 pb-10 pl-7 last:pb-0 md:border-l-0 md:border-t-2 md:pb-0 md:pl-0 md:pr-6 md:pt-8 ${j.moves ? "border-[var(--spak-brand-warm-white)]" : "border-dotted border-[var(--spak-brand-muted-sage)]"}`}>
                 <span aria-hidden="true" className={`absolute -left-[9px] top-0 flex h-4 w-4 items-center justify-center rounded-full md:-top-[9px] md:left-0 ${j.id === "approve" || j.moves ? "bg-[var(--spak-brand-warm-white)]" : "border-2 border-[var(--spak-brand-muted-sage)] bg-[var(--spak-brand-forest-green)]"}`} />
-                <p className="type-demo-label text-[var(--spak-brand-muted-sage)]">{i + 1}</p>
-                <h3 className="type-heading-feature mt-1 text-[var(--spak-brand-warm-white)]">{j.title}</h3>
+                <h3 className="type-heading-feature text-[var(--spak-brand-warm-white)]">{j.title}</h3>
                 <p className="type-body mt-2 text-[var(--spak-brand-muted-sage)]">{j.body}</p>
               </li>
             ))}
