@@ -111,10 +111,19 @@ describe("marketing site: honesty and brand rules in the source", () => {
   it("hero background is the owner-supplied landscape, listed in the brand inventory, shown with a real image element", () => {
     const hero = HOME.slice(HOME.indexOf("<section"), HOME.indexOf("</section>"));
     expect(HOME).toContain('const HERO_IMAGE = "/brand/images/spak-hero-landscape.png"');
-    expect(hero).toMatch(/<Image src=\{HERO_IMAGE\} alt="" fill priority[^>]*object-cover/);
-    expect(existsSync(join(ROOT, "public/brand/images/spak-hero-landscape.png"))).toBe(true);
-    const inventory = JSON.parse(read("public/brand/manifest.json")) as { assets: { path: string; approved: boolean }[] };
-    expect(inventory.assets.find((a) => a.path === "public/brand/images/spak-hero-landscape.png")?.approved).toBe(true);
+    expect(HOME).toContain('const HERO_IMAGE_MOBILE = "/brand/images/spak-hero-landscape-mobile.jpg"');
+    expect(HOME).toContain('const MOBILE_MEDIA = "(max-width: 639px)"');
+    // One <picture>: a portrait source for phones, the landscape for everything else, both optimized by Next.js.
+    expect(hero).toMatch(/<picture>\s*<source media=\{MOBILE_MEDIA\} srcSet=\{hero\.mobileSrcSet\} sizes="100vw" \/>\s*<img \{\.\.\.hero\.desktop\} alt="" className="object-cover/);
+    // Tablet and desktop classes are exactly as approved before the phone version was added.
+    expect(hero).toContain("sm:object-[30%_50%] md:object-[50%_50%] lg:object-center");
+    expect(hero).toContain("sm:min-h-[clamp(34rem,50vw,50rem)]");
+    const inventory = JSON.parse(read("public/brand/manifest.json")) as { assets: { path: string; approved: boolean; dimensions: string }[] };
+    for (const f of ["spak-hero-landscape.png", "spak-hero-landscape-mobile.jpg"]) {
+      expect(existsSync(join(ROOT, "public/brand/images", f)), f).toBe(true);
+      expect(inventory.assets.find((a) => a.path === `public/brand/images/${f}`)?.approved, f).toBe(true);
+    }
+    expect(inventory.assets.find((a) => a.path.endsWith("spak-hero-landscape-mobile.jpg"))?.dimensions).toBe("1080x1620");
     // A flat tint only: no gradient stands in for, or sits over, the photograph.
     expect(read("src/app/(marketing)/marketing.css")).not.toMatch(/gradient/);
     expect(hero).toContain('data-theme="dark"');

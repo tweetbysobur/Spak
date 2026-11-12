@@ -283,6 +283,16 @@
       "approved": true
     },
     {
+      "path": "public/brand/images/spak-hero-landscape-mobile.jpg",
+      "kind": "image",
+      "format": "jpg",
+      "dimensions": "1080x1620",
+      "bytes": 181534,
+      "sha256": "fa850fb84b0ab315cd572de847f6865cac3740c90f12a479c535a417f4ad8688",
+      "purpose": "Homepage hero background for phones: portrait composition built from the landscape by scripts/brand/build_hero_mobile.py",
+      "approved": true
+    },
+    {
       "path": "public/brand/images/spak-hero-landscape.png",
       "kind": "image",
       "format": "png",

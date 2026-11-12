@@ -85,12 +85,14 @@ The hero was first built with an intent-path illustration on the right. It was r
 
 The hero background is a misty mountain landscape supplied by the brand owner: `public/brand/images/spak-hero-landscape.png` (1774 x 887, the original upload, listed in the brand asset inventory). It is an owner-approved exception to the imagery rules in the brand guidelines, section 5.
 
-- It is a real image element (`next/image`, `fill`, `object-cover`, loaded with priority), so Next.js serves resized, compressed versions. The source file is not edited.
+- It is a real image element, so Next.js serves resized, compressed versions. The source file is not edited.
+- Phones (under 640 px) get a portrait version instead: `public/brand/images/spak-hero-landscape-mobile.jpg` (1080 x 1620). `scripts/brand/build_hero_mobile.py` builds it only from the landscape: the left hillside and the rock face at the landscape's own scale, framing the mist, with the landscape's dark sky above for the text and its cloud bank in the top-right corner. Nothing is generated, stretched or recoloured. The pieces meet through soft masks across dark sky.
+- One `<picture>` element picks the file by width (`getImageProps`), so each device downloads one hero image. Phones download about 66 to 98 KB instead of the landscape. There is no preload, because a preload would fetch the landscape on phones too.
 - A flat Forest Green tint at 38% sits over it. There is no gradient. The tint and the two chip fills are the only styles added (`.mkt-hero-tint`, `.mkt-hero-chip` in `marketing.css`).
 - The hero always uses the dark theme tokens, because the photograph is dark in both themes: Warm White text, the reversed NEAR mark, and the Warm White primary button.
-- Height: `clamp(34rem, 50vw, 50rem)`. At 1280 px this is 640 px, which is the photograph's own 2:1 ratio, so the full composition shows.
-- Focal point: centre from 768 px up, so the mountain stays on the right. 30% from the left on phones, where the open sky sits behind the text.
-- Measured contrast of Warm White text against the pixels behind it, worst pixel: headline 4.58 desktop, 3.63 tablet, 8.94 phone (large text needs 3). Paragraph 5.88 desktop, 4.75 tablet, 10.22 phone (needs 4.5).
+- Height: `clamp(34rem, 50vw, 50rem)` from 640 px up. At 1280 px this is 640 px, the photograph's own 2:1 ratio, so the full composition shows. On phones: `clamp(34rem, 165vw, 50rem)` with extra space below the buttons, so the valley shows under them (644 px tall at 390 px wide).
+- Focal point: centre from 1024 px, 50% from 768 px, 30% from 640 px (unchanged). On phones the portrait image is anchored bottom right, so a narrow screen keeps the rock face.
+- Measured contrast of Warm White text against the pixels behind it, worst pixel: headline 4.58 at 1280 px, 3.63 at 768 px, 9.63 on phones from 360 to 430 px (large text needs 3). Paragraph 5.88 at 1280 px, 4.53 at 768 px, 9.63 or more on phones (needs 4.5).
 
 ### Third-party mark
 
@@ -122,7 +124,7 @@ Each screen exists in light and dark, at desktop width and at phone width (`-m`)
 - Under 768 px the navigation becomes a menu button. Launch App stays in the menu.
 - Under 1024 px the lane diagram is replaced by a vertical list with the same dotted and solid rule.
 - Under 640 px the screens swap to phone-width captures, and the two hero buttons stack at full width.
-- The hero photograph is cropped, never stretched. Tablet and phone show less of the mountain than desktop.
+- The hero photograph is cropped, never stretched. Tablets show less of the mountain than desktop. Phones use the portrait version.
 - The hero is centred at every width. Its headline is capped at 42rem and wraps to two lines on desktop and tablet, three on phones.
 - Tables scroll sideways inside their own box. The page never scrolls sideways.
 - Checked at 1280, 820 and 390 px in both themes.

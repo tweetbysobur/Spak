@@ -55,7 +55,9 @@ async function settle(page) {
     await hp.goto(BASE, { waitUntil: 'networkidle' }); await hp.evaluate(() => document.fonts.ready);
     const h = await hp.evaluate(() => {
       const hero = document.querySelector('main > section'); const sec = hero.querySelector('[data-hero-content]'); const box = (e) => e.getBoundingClientRect();
-      const bg = hero.querySelector('img[src*="spak-hero-landscape"], img[srcset*="spak-hero-landscape"]');
+      const bg = hero.querySelector('picture img');
+      // Only one hero image may be downloaded: the portrait one on phones, the landscape one otherwise.
+      const heroFiles = [...new Set(performance.getEntriesByType('resource').map((e) => decodeURIComponent(e.name)).filter((n) => n.includes('spak-hero-landscape')).map((n) => n.match(/spak-hero-landscape[-a-z]*\.(png|jpg)/)[0]))];
       const kids = [...sec.children]; const centre = (e) => box(e).left + box(e).width / 2;
       const marks = [...sec.querySelectorAll('p img')].filter((i) => i.offsetParent !== null); const logo = marks[0];
       const win = logo ? box(logo.parentElement) : null;
@@ -71,14 +73,17 @@ async function settle(page) {
         para: kids[2].textContent, links: links.map((l) => `${l.textContent.trim()}=${l.getAttribute('href')}`).join('|'),
         stacked: box(links[1]).top > box(links[0]).bottom - 1,
         bgOk: !!bg && bg.complete && bg.naturalWidth > 0 && getComputedStyle(bg).objectFit === 'cover' && box(bg).width >= box(hero).width - 1 && box(bg).height >= box(hero).height - 1,
-        bgRatio: bg ? (bg.naturalWidth / bg.naturalHeight).toFixed(2) : '', heroH: Math.round(box(hero).height), textColor: getComputedStyle(sec.querySelector('h1')).color, svgs: sec.querySelectorAll('svg.mkt-art').length, // Bottom gap minus top gap. The content sits a little above centre, in the open sky above the mist.
+        bgRatio: bg ? (bg.naturalWidth / bg.naturalHeight).toFixed(2) : '', bgFile: bg ? decodeURIComponent(bg.currentSrc).match(/spak-hero-landscape[-a-z]*\.(png|jpg)/)[0] : '', heroFiles: heroFiles.join(','), heroH: Math.round(box(hero).height), textColor: getComputedStyle(sec.querySelector('h1')).color, svgs: sec.querySelectorAll('svg.mkt-art').length, // Bottom gap minus top gap. The content sits a little above centre, in the open sky above the mist (phones leave
+        // more room below the buttons so the valley shows).
         vCentre: (box(sec).bottom - box(kids[kids.length - 1]).bottom) - (box(kids[0]).top - box(sec).top),
       };
     });
     const wantLogo = '/marketing/partners/near-logo-rev.svg'; // the landscape is dark in both themes
-    ok(`hero ${size} ${theme}: the landscape photograph covers the hero (${h.heroH}px tall), undistorted, with light text`, h.bgOk && h.bgRatio === '2.00' && h.textColor === 'rgb(247, 246, 240)', `${h.bgRatio} ${h.textColor}`);
+    const wantFile = size === 'phone' ? 'spak-hero-landscape-mobile.jpg' : 'spak-hero-landscape.png';
+    ok(`hero ${size} ${theme}: ${wantFile} covers the hero (${h.heroH}px tall), undistorted, light text, and is the only hero image downloaded`,
+      h.bgOk && h.bgFile === wantFile && h.heroFiles === wantFile && h.bgRatio === (size === 'phone' ? '0.67' : '2.00') && h.textColor === 'rgb(247, 246, 240)', `${h.bgFile} ${h.bgRatio} [${h.heroFiles}] ${h.textColor}`);
     ok(`hero ${size} ${theme}: badge, headline, paragraph, buttons in order; centred; inside the screen`,
-      h.order === 'P:Built on > H1 > P:SPak tur > DIV' && h.offCentre <= 1 && h.vCentre >= 0 && h.vCentre <= 64 && h.fits && h.svgs === 0, JSON.stringify({ order: h.order, off: h.offCentre, v: h.vCentre }));
+      h.order === 'P:Built on > H1 > P:SPak tur > DIV' && h.offCentre <= 1 && h.vCentre >= 0 && h.vCentre <= 80 && h.fits && h.svgs === 0, JSON.stringify({ order: h.order, off: h.offCentre, v: h.vCentre }));
     ok(`hero ${size} ${theme}: exact copy, headline on ${h.lines} lines, official NEAR logo for this theme`,
       h.headline === 'Intelligent execution across chains.' && h.para === 'SPak turns your intentions into controlled, verifiable actions across blockchain networks.' && h.lines >= 2 && h.lines <= 3 && h.logoOk && h.visibleLogos === 1 && h.logoSrc === wantLogo && h.iconOnly && h.badge === 'Built on NEAR', `${h.logoSrc} ${h.lines}`);
     ok(`hero ${size} ${theme}: both buttons keep their destinations${size === 'phone' ? ' and stack' : ''}`, h.links === 'Launch SPak=/app|Explore Developers=/developers' && h.stacked === (size === 'phone'), h.links);

@@ -1,4 +1,4 @@
-import Image from "next/image";
+import { getImageProps } from "next/image";
 import { Icon } from "@/components/icons";
 import { BandField, EvidenceField, ExecutionLanes, RouteDiagram } from "@/components/marketing/art";
 import { BuiltOnNear, CtaLink, LivePlanned, Screen } from "@/components/marketing/site";
@@ -14,18 +14,38 @@ const CROSS_CHAIN = [
 
 /** Homepage hero background, supplied by the brand owner (public/brand/images, listed in the brand asset inventory). */
 const HERO_IMAGE = "/brand/images/spak-hero-landscape.png";
+/** Portrait version for phones, built from the same landscape by scripts/brand/build_hero_mobile.py. */
+const HERO_IMAGE_MOBILE = "/brand/images/spak-hero-landscape-mobile.jpg";
+/** Phones get the portrait image; tablets and desktops keep the landscape. Matches Tailwind's sm breakpoint. */
+const MOBILE_MEDIA = "(max-width: 639px)";
+
+/**
+ * Art direction: one <picture>, so the browser downloads only the image for the current width. Both are served
+ * through the Next.js image optimizer at sizes matched to the screen. No preload: a preload would fetch the
+ * landscape on phones too. The hero is the first thing on the page, so the image still loads early.
+ */
+function heroImageProps() {
+  const common = { alt: "", fill: true, priority: true, quality: 85, sizes: "100vw" } as const;
+  const mobile = getImageProps({ ...common, src: HERO_IMAGE_MOBILE }).props;
+  const desktop = getImageProps({ ...common, src: HERO_IMAGE }).props;
+  return { mobileSrcSet: mobile.srcSet, desktop };
+}
 
 export default function HomePage() {
+  const hero = heroImageProps();
   return (
     <>
       {/* B. Hero */}
       {/* The landscape is dark in both themes, so the hero always uses the dark theme tokens (white text, reversed marks). */}
       <section data-theme="dark" className="relative isolate overflow-hidden">
         <div aria-hidden="true" className="absolute inset-0 -z-10 bg-[var(--spak-brand-forest-green)]">
-          <Image src={HERO_IMAGE} alt="" fill priority sizes="100vw" quality={85} className="object-cover object-[30%_50%] md:object-[50%_50%] lg:object-center" />
+          <picture>
+            <source media={MOBILE_MEDIA} srcSet={hero.mobileSrcSet} sizes="100vw" />
+            <img {...hero.desktop} alt="" className="object-cover max-sm:object-[75%_100%] sm:object-[30%_50%] md:object-[50%_50%] lg:object-center" />
+          </picture>
           <div className="mkt-hero-tint absolute inset-0" />
         </div>
-        <div data-hero-content className="mkt-wrap flex min-h-[clamp(34rem,50vw,50rem)] flex-col items-center justify-center pb-20 pt-14 text-center md:pb-28 md:pt-16">
+        <div data-hero-content className="mkt-wrap flex min-h-[clamp(34rem,165vw,50rem)] flex-col sm:min-h-[clamp(34rem,50vw,50rem)] items-center justify-center pb-20 pt-14 text-center max-sm:pb-32 md:pb-28 md:pt-16">
           <BuiltOnNear className="mkt-hero-chip" />
           <h1 className="type-display-lg mt-7 max-w-2xl text-fg">Intelligent execution across chains.</h1>
           <p className="type-lead mt-6 max-w-xl text-fg">{SITE.description}</p>
