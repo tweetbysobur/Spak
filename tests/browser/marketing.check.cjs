@@ -56,8 +56,9 @@ async function settle(page) {
     const h = await hp.evaluate(() => {
       const hero = document.querySelector('main > section'); const sec = hero.querySelector('[data-hero-content]'); const box = (e) => e.getBoundingClientRect();
       const bg = hero.querySelector('picture img');
-      // Only one hero image may be downloaded: the portrait one on phones, the landscape one otherwise.
-      const heroFiles = [...new Set(performance.getEntriesByType('resource').map((e) => decodeURIComponent(e.name)).filter((n) => n.includes('spak-hero-landscape')).map((n) => n.match(/spak-hero-landscape[-a-z]*\.(png|jpg)/)[0]))];
+      // Only one hero background may be downloaded: the portrait one on phones, the landscape one otherwise. Hero
+      // requests are the q=85 ones; the What is SPak? symbol requests a small q=80 copy of the landscape further down.
+      const heroFiles = [...new Set(performance.getEntriesByType('resource').map((e) => decodeURIComponent(e.name)).filter((n) => n.includes('spak-hero-landscape') && /[?&]q=85\b/.test(n)).map((n) => n.match(/spak-hero-landscape[-a-z]*\.(png|jpg)/)[0]))];
       const kids = [...sec.children]; const centre = (e) => box(e).left + box(e).width / 2;
       const marks = [...sec.querySelectorAll('p img')].filter((i) => i.offsetParent !== null); const logo = marks[0];
       const win = logo ? box(logo.parentElement) : null;
@@ -89,6 +90,29 @@ async function settle(page) {
     ok(`hero ${size} ${theme}: both buttons keep their destinations${size === 'phone' ? ' and stack' : ''}`, h.links === 'Launch SPak=/app|Explore Developers=/developers' && h.stacked === (size === 'phone'), h.links);
     await hp.screenshot({ path: `${OUT}/hero-${size}-${theme}.png` });
     await hctx.close();
+  }
+
+  // 1c. What is SPak?: two columns from tablet up, stacked on phones, the symbol undistorted with the photo loaded
+  for (const [size, [width, height]] of Object.entries(SIZES)) for (const theme of ['light', 'dark']) {
+    const sctx = await browser.newContext({ viewport: { width, height }, colorScheme: theme, deviceScaleFactor: 1, reducedMotion: 'reduce' });
+    const sp = await sctx.newPage(); watch(sp, `product ${size}/${theme}`);
+    await sp.goto(BASE, { waitUntil: 'networkidle' }); await sp.evaluate(() => document.fonts.ready);
+    await sp.locator('#product').scrollIntoViewIfNeeded(); await sp.waitForLoadState('networkidle');
+    const w = await sp.evaluate(() => {
+      const sec = document.querySelector('#product'); const box = (e) => e.getBoundingClientRect();
+      const text = sec.querySelector('h2').parentElement; const sym = sec.querySelector('[role=img]'); const img = sym.querySelector('img');
+      return { h2: sec.querySelector('h2').textContent, link: sec.querySelector('a')?.getAttribute('href'), linkText: sec.querySelector('a')?.textContent.trim(),
+        ratio: (box(sym).width / box(sym).height).toFixed(3), img: !!img && img.complete && img.naturalWidth > 0,
+        sideBySide: box(sym).left >= box(text).right - 1 && Math.abs((box(sym).top + box(sym).height / 2) - (box(text).top + box(text).height / 2)) < 60,
+        stacked: box(sym).top >= box(text).bottom, inside: box(sym).left >= 0 && box(sym).right <= innerWidth && box(text).right <= innerWidth };
+    });
+    ok(`What is SPak? ${size} ${theme}: ${size === 'phone' ? 'stacked, text first' : 'two columns, centred on each other'}; symbol undistorted with the photo loaded`,
+      w.h2 === 'What is SPak?' && w.link === '#how-it-works' && w.linkText === 'See how it works' && w.ratio === '1.136' && w.img && w.inside && (size === 'phone' ? w.stacked : w.sideBySide), JSON.stringify(w));
+    if (size === 'desktop' && theme === 'light') {
+      await sp.locator('#product a', { hasText: 'See how it works' }).click(); await sp.waitForTimeout(400);
+      ok('What is SPak?: "See how it works" scrolls to the How it works section', (await sp.evaluate(() => location.hash)) === '#how-it-works' && (await sp.evaluate(() => Math.abs(document.querySelector('#how-it-works').getBoundingClientRect().top) < 120)));
+    }
+    await sctx.close();
   }
 
   // 2. Accessibility structure

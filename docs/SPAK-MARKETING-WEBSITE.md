@@ -42,7 +42,7 @@ The move to `/app` changed three things only: the file location, `start_url` in 
 | --- | --- | --- |
 | Navigation | | Logo, Product, Developers, Documentation, theme toggle, Launch App |
 | Hero | | Centred over the landscape photograph: Built on NEAR badge, approved tagline in Sora, supporting sentence, two CTAs |
-| Product introduction | `#product` | What SPak is, the problem, the coordination argument, the NEAR Intents relationship |
+| What is SPak? | `#product` | Two columns: a short factual definition with a "See how it works" link to `#how-it-works`, and the symbol composition. Stacked on phones |
 | How SPak works | `#how-it-works` | Five steps as a lane diagram. Dotted line before approval, solid after |
 | Cross-chain execution | `#cross-chain` | Route diagram, five capabilities, the two network groups, three product screens |
 | Agent, Intelligence, Guard, Payments | `#agent` `#intelligence` `#guard` `#payments` | Each lists "Live today" and "Not live yet" |
@@ -62,7 +62,7 @@ The move to `/app` changed three things only: the file location, `start_url` in 
 | Screen | site.tsx | Product screenshot with caption. Switches by theme and by width |
 | LivePlanned | site.tsx | Two lists: live and not live. Labelled in words, not only by colour |
 | Reveal | Reveal.tsx | Scroll reveal for `data-reveal` elements |
-| ExecutionLanes, RouteDiagram, EvidenceField, BandField | art.tsx | Artwork (section 5) |
+| SymbolLandscape, ExecutionLanes, RouteDiagram, EvidenceField, BandField | art.tsx | Artwork (section 5) |
 
 ## 5. Art direction
 
@@ -70,6 +70,7 @@ All artwork is SVG drawn in code from the approved symbol geometry: the 51.8 deg
 
 | Composition | Explains |
 | --- | --- |
+| Symbol landscape (What is SPak?) | The official symbol at large size, its geometry read from `public/brand/logo/spak-symbol.svg` at build time and never redrawn. The upper form shows the hero landscape, scaled up 1.47 times so the rock face fills its top band and the mist runs down its arm. The leaf uses the primary colour (Forest Green, Light Forest in dark). The lower form is Muted Sage. An owner-approved illustration, not a logo placement |
 | Execution lanes | Who acts at each of the five steps: you, SPak, NEAR Intents. Dotted until approval, solid after |
 | Route diagram | Wallet to deposit address to recipient. A dotted refund route returns to the wallet that sent the deposit |
 | Evidence field | A halftone field (12 px grid, radius 0.4 to 4.6) around the leaf. Dense where SPak has read the chain, sparse where it has not |
@@ -105,6 +106,9 @@ The hero badge shows the NEAR icon followed by the words "Built on NEAR". The ic
 | Screen | Real | Simulated |
 | --- | --- | --- |
 | chat, plan, approval | The app, sign-in, the NEAR Intents quote | The wallet (a throwaway key) |
+
+The chat screen is captured but no longer shown on the homepage: "What is SPak?" replaced it with the symbol composition.
+
 | tracking | The approved execution. No deposit was sent | The wallet |
 | refund | The recovery panel component | The tracking data. The caption says so |
 

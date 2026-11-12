@@ -3,6 +3,9 @@
  * diagonals at 51.8 degrees (dx/dy 0.786), flat-topped bands, and the concave leaf. Palette tokens only.
  * These are illustrations of the visual language. None of them is a logo.
  */
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import Image from "next/image";
 import { STEPS } from "@/marketing/content";
 
 /** dx per unit of dy for the symbol's 51.8 degree diagonal. */
@@ -113,5 +116,56 @@ export function BandField({ className = "" }: { className?: string }) {
     <svg viewBox="0 0 480 320" className={className} aria-hidden="true" focusable="false" preserveAspectRatio="xMaxYMid slice">
       {[0, 1, 2, 3, 4].map((i) => <polygon key={i} points={band(250 + i * 110, 0, 60, 320)} fill="var(--art-tone)" />)}
     </svg>
+  );
+}
+
+/**
+ * The official SPak symbol at large size, used as an illustration in "What is SPak?". The geometry is read from the
+ * approved file (public/brand/logo/spak-symbol.svg) at build time, never copied or redrawn, and keeps its exact
+ * proportions and spacing. Its three forms are filled separately: the upper form shows the whole approved hero
+ * landscape (through the Next.js image optimizer), the leaf uses the primary colour, the lower form Muted Sage.
+ * An owner-approved illustration, not a logo placement: the logo itself still appears only as the approved files.
+ */
+const SYMBOL_FILE = "public/brand/logo/spak-symbol.svg";
+function symbolForms() {
+  const svg = readFileSync(join(process.cwd(), SYMBOL_FILE), "utf8");
+  const viewBox = /viewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(svg)!;
+  const d = /\sd="([^"]+)"/.exec(svg)![1];
+  const [upper, leaf, lower] = d.split(/(?=M)/);
+  return { width: Number(viewBox[1]), height: Number(viewBox[2]), upper, leaf, lower, upperBox: bounds(upper) };
+}
+/** Bounding box of a path made of absolute M, L, C and Z commands (the symbol's own form). */
+function bounds(path: string) {
+  const n = (path.match(/-?\d*\.?\d+/g) ?? []).map(Number);
+  const xs = n.filter((_, i) => i % 2 === 0), ys = n.filter((_, i) => i % 2 === 1);
+  // Control points of the curves are included, so this can only be larger than the true box, never smaller.
+  return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+}
+
+export function SymbolLandscape({ className = "" }: { className?: string }) {
+  const f = symbolForms();
+  const b = f.upperBox;
+  return (
+    <div className={`relative ${className}`} style={{ aspectRatio: `${f.width} / ${f.height}` }} role="img" aria-label="The SPak symbol at large size, its upper form filled with a misty mountain landscape.">
+      <svg viewBox={`0 0 ${f.width} ${f.height}`} className="absolute inset-0 h-full w-full" aria-hidden="true" focusable="false">
+        <defs>
+          {/* objectBoundingBox units: the clip scales with the box, which always has the symbol's own aspect ratio. */}
+          <clipPath id="spak-symbol-upper" clipPathUnits="objectBoundingBox">
+            <path d={f.upper} transform={`scale(${1 / b.w} ${1 / b.h}) translate(${-b.x} ${-b.y})`} />
+          </clipPath>
+        </defs>
+        <path d={f.leaf} fill="var(--spak-primary)" />
+        <path d={f.lower} fill="var(--spak-brand-muted-sage)" />
+      </svg>
+      {/* The photograph sits in the upper form's own box, which is 2:1 like the landscape. It is scaled up 1.47x
+          (uniformly, never stretched) and offset so the rock face fills the top band and the mist runs down the
+          diagonal arm. */}
+      <div className="absolute" aria-hidden="true"
+        style={{ left: `${(b.x / f.width) * 100}%`, top: `${(b.y / f.height) * 100}%`, width: `${(b.w / f.width) * 100}%`, height: `${(b.h / f.height) * 100}%`, clipPath: "url(#spak-symbol-upper)" }}>
+        <div className="absolute" style={{ left: "-54.7%", top: "-37%", width: "147%", height: "147%" }}>
+          <Image src="/brand/images/spak-hero-landscape.png" alt="" fill sizes="(min-width: 1024px) 720px, (min-width: 768px) 60vw, 120vw" quality={80} className="object-cover" />
+        </div>
+      </div>
+    </div>
   );
 }

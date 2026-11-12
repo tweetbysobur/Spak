@@ -141,6 +141,29 @@ describe("marketing site: honesty and brand rules in the source", () => {
     for (const { f, text } of ALL) expect(/m421\.61,108|M13\.9017/.test(text), `${f}: NEAR path data in source`).toBe(false);
   });
 
+  it("What is SPak?: heading, factual copy and a link to a real section", () => {
+    const sec = HOME.slice(HOME.indexOf('<section id="product"'), HOME.indexOf("</section>", HOME.indexOf('<section id="product"')));
+    expect(sec).toContain(">What is SPak?</h2>");
+    expect(sec).toContain("{NETWORK_COUNT} supported networks"); // read from the registry, never typed in
+    expect(sec).toContain("Nothing moves until you approve the quote and sign in your wallet.");
+    expect(sec).toContain("NEAR Intents settles the transfer"); // SPak does not run its own bridge
+    expect(sec).toContain("on the networks it can read"); // on-chain delivery checks are not claimed for every network
+    expect(sec).toMatch(/href="#how-it-works"[^>]*>\s*See how it works/);
+    expect(HOME).toContain('<section id="how-it-works"');
+    expect(sec).toContain("<SymbolLandscape");
+  });
+
+  it("the symbol composition reads the official symbol file and keeps its geometry", () => {
+    const art = read("src/components/marketing/art.tsx");
+    expect(art).toContain('const SYMBOL_FILE = "public/brand/logo/spak-symbol.svg"');
+    expect(art).toMatch(/readFileSync\(join\(process\.cwd\(\), SYMBOL_FILE\)/);
+    // The box always has the symbol's own aspect ratio, so the forms are never stretched.
+    expect(art).toContain("aspectRatio: `${f.width} / ${f.height}`");
+    const svg = read("public/brand/logo/spak-symbol.svg");
+    expect((/\sd="([^"]+)"/.exec(svg)?.[1] ?? "").split(/(?=M)/)).toHaveLength(3);
+    expect(art).toContain('src="/brand/images/spak-hero-landscape.png"');
+  });
+
   it("labels simulated product screens", () => {
     expect(HOME).toMatch(/caption="Demonstration\. This state was produced with simulated tracking data\./);
     expect(read("scripts/marketing/capture.cjs")).toMatch(/SIMULATED tracking data/);

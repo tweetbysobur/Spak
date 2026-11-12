@@ -1,6 +1,6 @@
 import { getImageProps } from "next/image";
 import { Icon } from "@/components/icons";
-import { BandField, EvidenceField, ExecutionLanes, RouteDiagram } from "@/components/marketing/art";
+import { BandField, EvidenceField, ExecutionLanes, RouteDiagram, SymbolLandscape } from "@/components/marketing/art";
 import { BuiltOnNear, CtaLink, LivePlanned, Screen } from "@/components/marketing/site";
 import { ASSET_COUNT, NETWORK_COUNT, NETWORKS_REVIEWED, NETWORKS_VERIFIED, PILLARS, SECURITY, SITE, STEPS, VERIFICATION_ROWS } from "@/marketing/content";
 
@@ -56,21 +56,20 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* C. Product introduction */}
-      <section id="product" className="mkt-section border-t border-line">
-        <div className="mkt-wrap grid gap-12 lg:grid-cols-[1fr_1fr] lg:gap-20">
+      {/* C. What is SPak? */}
+      <section id="product" className="mkt-section">
+        <div className="mkt-wrap grid items-center gap-14 md:grid-cols-[1fr_1fr] md:gap-10 lg:grid-cols-[1fr_1.05fr] lg:gap-20">
           <div data-reveal>
-            <h2 className="type-display-lg text-fg">Say what you want. SPak coordinates the steps.</h2>
-            <div className="mkt-prose mt-8 flex flex-col gap-5">
-              <p className="type-body-marketing text-fg">SPak is execution infrastructure for moving value between blockchain networks. You describe the outcome in a sentence. SPak turns it into a plan, gets a quote, waits for your approval and checks the result.</p>
-              <p className="type-body-marketing text-fg-2">Today a cross-chain transfer is a chain of separate decisions. Which route. Which token contract on which network. Whether the address fits the destination. After you send, you wait and hope it arrived.</p>
-              <p className="type-body-marketing text-fg-2">Each of those steps can go wrong on its own, and no single place keeps track of all of them. That is a coordination problem. SPak holds the whole transfer in one record, from the sentence you wrote to the delivery on the destination chain.</p>
-              <p className="type-body-marketing text-fg-2">SPak does not run its own bridge. Transfers are quoted and settled by NEAR Intents. SPak is the layer between your intention and that infrastructure: it understands, plans, asks, and verifies.</p>
-            </div>
+            <h2 className="type-display-lg text-fg">What is SPak?</h2>
+            <p className="type-lead mt-6 max-w-lg text-fg">An intelligent execution layer that turns what you ask for into a controlled, tracked transfer between blockchain networks.</p>
+            <p className="type-body-marketing mt-5 max-w-lg text-fg-2">You describe the outcome in plain words. SPak interprets it, builds a plan and gets a quote from NEAR Intents, across {NETWORK_COUNT} supported networks. Nothing moves until you approve the quote and sign in your wallet. NEAR Intents settles the transfer, and SPak tracks it to the end, confirming delivery on chain on the networks it can read.</p>
+            <a href="#how-it-works" className="type-cta mt-8 inline-flex min-h-11 items-center gap-2 text-primary underline-offset-4 transition-colors hover:text-primary-hover hover:underline">
+              See how it works<Icon name="arrow" size={18} aria-hidden="true" />
+            </a>
           </div>
-          <Screen name="chat" className="lg:mt-24" priority
-            alt="The SPak chat. An instruction to swap 50 USDC on Base to SOL on Solana, followed by SPak confirming it understood and that a quote is ready."
-            caption="Intent input. Captured from the app with a test wallet. The quote is real." />
+          <div data-reveal className="mx-auto w-full max-w-md md:max-w-none">
+            <SymbolLandscape className="w-full" />
+          </div>
         </div>
       </section>
 
