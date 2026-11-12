@@ -6,6 +6,7 @@ Cross-chain execution agent on NEAR. You state an intent. SPak-in parses and val
 - Wallet authentication: [docs/AUTH.md](docs/AUTH.md)
 - SPak Execution: [docs/SPAK-EXECUTION.md](docs/SPAK-EXECUTION.md)
 - Benchmark: [docs/BENCHMARK.md](docs/BENCHMARK.md)
+- Marketing website (`/`, `/developers`, `/docs`; the app is at `/app`): [docs/SPAK-MARKETING-WEBSITE.md](docs/SPAK-MARKETING-WEBSITE.md)
 - PRD: `gentles-build-brain/projects/spak.md`
 
 ## Layout

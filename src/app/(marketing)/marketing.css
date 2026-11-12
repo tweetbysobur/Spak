@@ -1,0 +1,71 @@
+/*
+ * Marketing site styles. Colours come from the token variables only (src/design/*.json); no values are defined here.
+ * Art variables name the job a colour does inside a composition.
+ */
+.mkt {
+  --art-forest: var(--spak-brand-forest-green);
+  --art-tone: var(--spak-art-band-tone);
+  --art-sage: var(--spak-brand-muted-sage);
+  --art-soft: var(--spak-surface);
+  --art-paper: var(--spak-background);
+  --art-on-forest: var(--spak-brand-warm-white);
+  --art-line: var(--spak-primary);
+  --art-ink: var(--spak-text-primary);
+  --art-ink-2: var(--spak-text-secondary);
+  --art-rule: var(--spak-border);
+  --art-rule-strong: var(--spak-border-strong);
+}
+.mkt-wrap { width: 100%; max-width: 76rem; margin-inline: auto; padding-inline: 1.25rem; }
+@media (min-width: 768px) { .mkt-wrap { padding-inline: 2.5rem; } }
+.mkt-section { padding-block: clamp(4.5rem, 10vw, 9rem); }
+.mkt h1, .mkt h2, .mkt h3 { text-wrap: balance; }
+.mkt p { text-wrap: pretty; }
+.mkt-prose { max-width: 38rem; }
+.mkt :target { scroll-margin-top: 6rem; }
+.mkt-art text { font-family: var(--spak-font-mono); font-size: 13px; font-weight: 500; fill: var(--art-ink-2); }
+.mkt-art.jb text { font-size: 15px; }
+@media (max-width: 639px) { .mkt-art.jb text { font-size: 19px; } }
+.mkt-art .t-strong { fill: var(--art-ink); }
+.mkt-art .t-on-forest { fill: var(--art-on-forest); }
+
+/* Status badges on the documentation page are reference material: the processing icon does not spin there. */
+.mkt .spak-spin { animation: none; }
+
+/*
+ * Hero landscape. A flat Forest Green tint keeps white text readable without hiding the mountain or the mist.
+ * Chips (the badge and the outlined button) get a Forest Green fill so their labels do not sit directly on mist.
+ */
+.mkt-hero-tint { background: color-mix(in srgb, var(--spak-brand-forest-green) 38%, transparent); }
+.mkt-hero-chip { background: color-mix(in srgb, var(--spak-brand-forest-green) 72%, transparent); }
+
+/* Theme-specific product screens (same switch as the logo files). */
+.only-dark { display: none; }
+[data-theme=dark] .only-light { display: none; }
+[data-theme=dark] .only-dark { display: block; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme]) .only-light { display: none; } :root:not([data-theme]) .only-dark { display: block; } }
+
+/* Scroll reveal. Content is visible by default; motion applies only when scripting runs and motion is allowed. */
+@media (prefers-reduced-motion: no-preference) {
+  .js-reveal [data-reveal] { opacity: 0; transform: translateY(12px); transition: opacity 600ms var(--spak-ease), transform 600ms var(--spak-ease); transition-delay: var(--reveal-delay, 0ms); }
+  .js-reveal [data-reveal].is-in { opacity: 1; transform: none; }
+}
+
+/*
+ * What is SPak? artwork. Entrance: the three forms start pulled apart along the symbol's 51.8 degree diagonal and
+ * settle into place, the leaf last. Then the photograph drifts slowly inside the upper form, only while on screen.
+ * Transform and opacity only. Nothing is hidden without JavaScript, and nothing moves with reduced motion.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  .what-frame[data-armed] .what-upper,
+  .what-frame[data-armed] .what-lower,
+  .what-frame[data-armed] .what-leaf { transition: transform 1100ms cubic-bezier(0.22, 1, 0.36, 1), opacity 700ms ease-out; }
+  .what-frame[data-armed]:not(.is-in) .what-upper { transform: translate(6%, -8%); opacity: 0; }
+  .what-frame[data-armed]:not(.is-in) .what-lower { transform: translate(-7px, 9px); opacity: 0; }
+  .what-frame[data-armed]:not(.is-in) .what-leaf { transform: scale(0.4); opacity: 0; }
+  .what-frame[data-armed] .what-lower { transition-delay: 120ms; }
+  .what-frame[data-armed] .what-leaf { transform-box: fill-box; transform-origin: 0% 50%; transition-delay: 520ms; }
+
+  .what-frame .what-photo { animation: what-drift 16s ease-in-out 1200ms infinite alternate; animation-play-state: paused; will-change: transform; }
+  .what-frame[data-inview="true"] .what-photo { animation-play-state: running; }
+  @keyframes what-drift { from { transform: translate(0, 0) scale(1); } to { transform: translate(-3%, 2.5%) scale(1.06); } }
+}

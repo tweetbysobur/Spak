@@ -19,7 +19,7 @@ describe("tokens come from the approved files only", () => {
   it("every light and dark theme token and every status colour is emitted, unchanged", () => {
     for (const t of ["light", "dark"] as const) {
       const vars = colorVars(t);
-      for (const [k, v] of Object.entries(colors.themes[t])) expect(Object.values(vars)).toContain(v);
+      for (const v of Object.values(colors.themes[t])) expect(Object.values(vars)).toContain(v);
       for (const r of Object.values(colors.semantic)) for (const v of Object.values(r[t])) expect(css).toContain(v);
       expect(vars["--spak-background"]).toBe(colors.themes[t].background);
     }

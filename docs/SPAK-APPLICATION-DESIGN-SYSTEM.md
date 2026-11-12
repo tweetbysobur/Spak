@@ -1,5 +1,7 @@
 # SPak Application Design System
 
+Since Phase 6.7 the application is served at `/app`. The marketing site is at `/` (see SPAK-MARKETING-WEBSITE.md).
+
 Phase 6.6. How the approved brand reaches the running app. The brand itself is defined in SPAK-BRAND-GUIDELINES.md, SPAK-COLOUR-SYSTEM.md, SPAK-TYPOGRAPHY.md and SPAK-LOGO-GUIDELINES.md. This file covers the code.
 
 No colour, font or logo was added in this phase. Every value comes from the approved source files.
@@ -104,7 +106,7 @@ Hard rules:
 ## 7. Testing
 
 - tests/brand/app-design-system.test.ts: token emission, no hex in CSS or components, dark theme structure, type classes, status mapping against stateRoles, failureRole limits, component rendering, layout and manifest wiring.
-- tests/browser/app-branding.check.cjs: Playwright check against a running production build. Run it with `node tests/browser/app-branding.check.cjs http://localhost:3100 <outDir>`. It uses a simulated EIP-6963 wallet with a throwaway key, real sign-in, and real NEAR Intents quotes. Failure, refund, unknown and completed screens use browser-only mocked API responses, marked "[mocked]" in the output. No funds move.
+- tests/browser/app-branding.check.cjs: Playwright check against a running production build. Run it with `node tests/browser/app-branding.check.cjs http://localhost:3100 <outDir>` (it opens `/app`). It uses a simulated EIP-6963 wallet with a throwaway key, real sign-in, and real NEAR Intents quotes. Failure, refund, unknown and completed screens use browser-only mocked API responses, marked "[mocked]" in the output. No funds move.
 
 ## 8. Remaining inconsistencies
 

@@ -16,6 +16,7 @@ export function colorVars(theme: Theme): Record<string, string> {
   for (const [k, v] of Object.entries(colors.themes[theme])) out[`--spak-${kebab(k)}`] = v;
   for (const [role, r] of Object.entries(colors.semantic)) for (const [part, v] of Object.entries(r[theme])) out[`--spak-status-${role}-${part}`] = v;
   for (const [k, v] of Object.entries(colors.brand)) out[`--spak-brand-${kebab(k)}`] = v;
+  out["--spak-art-band-tone"] = colors.art.bandTone.hex;
   const e = ui.elevation[theme];
   out["--spak-shadow-card"] = e.card; out["--spak-shadow-overlay"] = e.overlay;
   return out;
