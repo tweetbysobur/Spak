@@ -14,7 +14,7 @@ const [,, BASE = 'http://localhost:3100', OUT = '/tmp/spak-marketing'] = process
 fs.mkdirSync(OUT, { recursive: true });
 const results = []; const errors = [];
 const ok = (name, pass, detail = '') => { results.push({ name, pass, detail }); console.log(`${pass ? 'PASS' : 'FAIL'} ${name}${detail ? ' | ' + detail : ''}`); };
-const ROUTES = ['/', '/product', '/how-it-works', '/developers', '/docs'];
+const ROUTES = ['/', '/developers', '/docs'];
 const SIZES = { desktop: [1280, 900], tablet: [820, 1180], phone: [390, 844] };
 
 async function settle(page) {
@@ -107,11 +107,11 @@ async function settle(page) {
         stacked: box(sym).top >= box(text).bottom, inside: box(sym).left >= 0 && box(sym).right <= innerWidth && box(text).right <= innerWidth };
     });
     ok(`What is SPak? ${size} ${theme}: ${size === 'phone' ? 'stacked, text first' : 'two columns, centred on each other'}; symbol undistorted with the photo loaded`,
-      w.h2 === 'What is SPak?' && w.link === '/how-it-works' && w.linkText === 'See how it works' && w.ratio === '1.117' && w.img && w.inside && (size === 'phone' ? w.stacked : w.sideBySide), JSON.stringify(w));
+      w.h2 === 'What is SPak?' && w.link === '#how-it-works' && w.linkText === 'See how it works' && w.ratio === '1.117' && w.img && w.inside && (size === 'phone' ? w.stacked : w.sideBySide), JSON.stringify(w));
     if (size === 'desktop' && theme === 'light') {
       await sp.locator('#product a', { hasText: 'See how it works' }).click(); await sp.waitForTimeout(400);
-      await sp.waitForURL('**/how-it-works');
-      ok('What is SPak?: "See how it works" opens the How it works page', new URL(sp.url()).pathname === '/how-it-works' && (await sp.locator('#intent').count()) === 1);
+      ok('What is SPak?: "See how it works" scrolls to the How SPak works section', (await sp.evaluate(() => location.hash)) === '#how-it-works' && (await sp.evaluate(() => Math.abs(document.querySelector('#how-it-works').getBoundingClientRect().top) < 140)));
+      for (const [from, to] of [['/product', '#capabilities'], ['/how-it-works', '#how-it-works']]) { await sp.goto(BASE + from, { waitUntil: 'networkidle' }); ok(`old link ${from} redirects to the homepage section`, new URL(sp.url()).pathname === '/' && new URL(sp.url()).hash === to); }
     }
     await sctx.close();
   }
@@ -162,10 +162,8 @@ async function settle(page) {
   ok('nav: Developers opens /developers', true);
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Documentation' }).click(); await page.waitForURL('**/docs');
   ok('nav: Documentation opens /docs', true);
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Product' }).click(); await page.waitForURL('**/product');
-  ok('nav: Product opens /product', true);
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'How it works' }).click(); await page.waitForURL('**/how-it-works');
-  ok('nav: How it works opens /how-it-works', true);
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Product' }).click(); await page.waitForURL('**/#product');
+  ok('nav: Product opens the homepage product section', true);
   await page.getByRole('link', { name: 'SPak home' }).first().click(); await page.waitForURL(BASE + '/');
   await page.getByRole('link', { name: 'Explore Developers' }).first().click(); await page.waitForURL('**/developers');
   ok('CTA: Explore Developers opens /developers', true);
@@ -175,8 +173,8 @@ async function settle(page) {
   ok('CTA: Launch SPak opens the application, which renders its sign-in screen', true);
   await page.getByRole('link', { name: 'SPak home' }).first().click(); await page.waitForURL(BASE + '/');
   ok('app logo returns to the marketing homepage', true);
-  await page.getByRole('link', { name: 'Explore Developer Infrastructure' }).click(); await page.waitForURL('**/developers');
-  ok('final CTA: Explore Developer Infrastructure opens /developers', true);
+  await page.locator('#trust').getByRole('link', { name: 'Read the documentation' }).click(); await page.waitForURL('**/docs');
+  ok('trust section: Read the documentation opens /docs', true);
 
   // 5. Keyboard
   await page.goto(BASE, { waitUntil: 'networkidle' });
@@ -197,7 +195,7 @@ async function settle(page) {
   const btn = m.getByRole('button', { name: 'Menu' });
   ok('phone menu: closed by default', (await btn.getAttribute('aria-expanded')) === 'false' && !(await m.locator('#site-menu').isVisible()));
   await btn.click();
-  ok('phone menu: opens with all destinations', (await m.locator('#site-menu').getByRole('link').allInnerTexts()).join('|') === 'Product|How it works|Developers|Documentation|Launch App');
+  ok('phone menu: opens with all destinations', (await m.locator('#site-menu').getByRole('link').allInnerTexts()).join('|') === 'Product|Developers|Documentation|Launch App');
   await m.keyboard.press('Escape');
   ok('phone menu: Escape closes it', !(await m.locator('#site-menu').isVisible()));
   await m.getByRole('button', { name: 'Menu' }).click();

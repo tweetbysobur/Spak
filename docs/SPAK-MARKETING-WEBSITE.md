@@ -4,6 +4,10 @@ Phase 6.7. The public site for SPak. It uses the approved brand (SPAK-BRAND-GUID
 
 Rule for every word on the site: describe what the code does today. Anything else is listed as not live.
 
+## 0. Current structure (latest)
+
+The site was simplified. The landing page has five sections: hero, What is SPak?, core capabilities (six modules with availability), How SPak works (one five-stop path on Forest Green, dotted until approval and solid after) and trust and control (three points). `/product` and `/how-it-works` no longer exist as pages; they redirect to the matching homepage sections. The detailed lifecycle, network coverage, verification, refunds, modules and architecture live in `/docs`, with all five product screens. The generated images were removed from the site. Sections below that describe the Product and How it works pages are history.
+
 ## 1. Architecture
 
 The site lives in the same Next.js app as the product. It shares the root layout, so tokens, fonts and themes are identical.

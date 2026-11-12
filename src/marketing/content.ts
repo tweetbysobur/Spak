@@ -18,8 +18,7 @@ export const SITE = {
 export const OG_IMAGE = { url: "/marketing/spak-og.png", width: 1200, height: 630, alt: "SPak. Intelligent execution across chains." } as const;
 
 export const NAV = [
-  { label: "Product", href: "/product" },
-  { label: "How it works", href: "/how-it-works" },
+  { label: "Product", href: "/#product" },
   { label: "Developers", href: "/developers" },
   { label: "Documentation", href: "/docs" },
 ] as const;
@@ -136,12 +135,38 @@ export const VERIFICATION_ROWS = [
   { stage: "Refund", source: "NEAR Intents, then SPak", detail: "NEAR Intents sends refunds automatically and does not name the refund transaction. SPak shows Refunded only when a transfer back to you is verified on chain and linked to your transfer." },
 ] as const;
 
-/** Homepage trust section: four short points, each detailed on /how-it-works. */
+/** Homepage: how SPak works, five stops. `moves` is false until the user has approved and signed. */
+export const JOURNEY = [
+  { id: "describe", title: "Describe your intention", body: "Write what you want in plain words.", moves: false },
+  { id: "plan", title: "SPak prepares the plan", body: "A fixed plan and a quote, with every fee.", moves: false },
+  { id: "approve", title: "You review and approve", body: "Nothing moves before this.", moves: false },
+  { id: "execute", title: "NEAR Intents executes", body: "Your wallet sends; NEAR Intents settles.", moves: true },
+  { id: "verify", title: "SPak tracks and verifies", body: "Delivery is checked on chain where supported.", moves: true },
+] as const;
+
+/** Homepage: trust and control, three points. The detail is in /docs. */
 export const TRUST = [
-  { title: "You approve every transfer", body: "SPak prepares a transfer and stops. Nothing moves until you approve the firm quote and sign in your wallet." },
-  { title: "Executed through NEAR Intents", body: "NEAR Intents quotes and settles each cross-chain transfer. SPak does not run its own bridge." },
-  { title: "Tracked to the end", body: "Every transfer has one record, from your instruction to the final state, checked in the background." },
-  { title: "Delivery verified where supported", body: "On EVM networks, Solana and NEAR, SPak reads the destination chain before it says Completed. Elsewhere a person reviews it." },
+  { title: "You approve every transfer", body: "SPak prepares a transfer and stops. It continues only when you approve the exact quote." },
+  { title: "Your wallet authorises it", body: "Your own wallet signs and sends. SPak never holds your keys and cannot move your funds." },
+  { title: "Tracked and verified", body: "SPak tracks every transfer to the end and verifies delivery on chain where supported: EVM networks, Solana and NEAR." },
+] as const;
+
+/** Documentation: the detailed execution lifecycle, seven stages. */
+export const LIFECYCLE = [
+  { id: "intent", title: "Understand intent", actor: "You and SPak", moves: false,
+    body: "You write the outcome in plain words. SPak reads the amount, assets, networks and recipient with fixed rules. If something is missing or could mean two things, it asks." },
+  { id: "plan", title: "Build the plan", actor: "SPak", moves: false,
+    body: "The instruction becomes a fixed plan with a hash. Each step names who acts. SPak can prepare; only your wallet can send." },
+  { id: "quote", title: "Get a quote", actor: "NEAR Intents", moves: false,
+    body: "NEAR Intents quotes the route: an estimate first, then a firm quote with the minimum you receive, every fee and a deadline." },
+  { id: "approval", title: "Your approval", actor: "You", moves: false,
+    body: "You tick the box and approve that exact quote. A new quote or a changed plan cancels it. Approval alone moves nothing." },
+  { id: "deposit", title: "Deposit and execution", actor: "Your wallet, then NEAR Intents", moves: true,
+    body: "Your wallet signs and sends the deposit. SPak checks it on the source chain, then NEAR Intents settles the transfer." },
+  { id: "verification", title: "Destination verification", actor: "SPak", moves: true,
+    body: "SPak reads the destination chain and compares the delivery with the minimum you approved. Only then does it say Completed." },
+  { id: "refunds", title: "Failure and refunds", actor: "NEAR Intents, then SPak", moves: true,
+    body: "If a transfer fails, NEAR Intents returns the funds to the wallet that sent them. SPak marks it Refunded only when it can verify that on chain." },
 ] as const;
 
 /** Phrases the brand guidelines forbid in every channel (docs/SPAK-BRAND-GUIDELINES.md, honesty rules). */

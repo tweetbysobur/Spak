@@ -60,9 +60,9 @@ export function SiteNav() {
 }
 
 const FOOTER = [
-  { title: "Product", links: [{ label: "What SPak is", href: "/#product" }, { label: "Product", href: "/product" }, { label: "How it works", href: "/how-it-works" }, { label: "Security and verification", href: "/how-it-works#verification" }] },
-  { title: "Platform", links: [{ label: "SPak Agent", href: "/product#agent" }, { label: "SPak Intelligence", href: "/product#intelligence" }, { label: "SPak Guard", href: "/product#guard" }, { label: "SPak Payments", href: "/product#payments" }] },
-  { title: "Developers", links: [{ label: "Developer infrastructure", href: "/developers" }, { label: "Documentation", href: "/docs" }, { label: "Launch App", href: SITE.appPath }] },
+  { title: "Product", links: [{ label: "What SPak is", href: "/#product" }, { label: "Core capabilities", href: "/#capabilities" }, { label: "How it works", href: "/#how-it-works" }, { label: "Trust and control", href: "/#trust" }] },
+  { title: "Resources", links: [{ label: "Documentation", href: "/docs" }, { label: "Execution lifecycle", href: "/docs#lifecycle" }, { label: "Verification", href: "/docs#verification" }, { label: "Developers", href: "/developers" }] },
+  { title: "App", links: [{ label: "Launch SPak", href: SITE.appPath }] },
 ] as const;
 
 export function SiteFooter() {

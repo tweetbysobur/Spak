@@ -6,7 +6,7 @@ import { NETWORKS } from "@/spak-in/registries/networks";
 import { listAssets } from "@/spak-in/registries/assets";
 import colors from "@/design/colors.json";
 import screens from "@/marketing/screens.json";
-import { ASSET_COUNT, BANNED_PHRASES, NAV, NETWORK_COUNT, NETWORKS_REVIEWED, NETWORKS_VERIFIED, PILLARS, SECURITY, SITE, STEPS, VERIFICATION_ROWS, VERIFIED_FAMILIES } from "@/marketing/content";
+import { ASSET_COUNT, BANNED_PHRASES, NAV, NETWORK_COUNT, NETWORKS_REVIEWED, NETWORKS_VERIFIED, JOURNEY, LIFECYCLE, PILLARS, SECURITY, SITE, STEPS, TRUST, VERIFICATION_ROWS, VERIFIED_FAMILIES } from "@/marketing/content";
 import sitemap from "@/app/sitemap";
 import robots from "@/app/robots";
 import manifest from "@/app/manifest";
@@ -17,8 +17,7 @@ const SOURCES = [...walk("src/app/(marketing)"), ...walk("src/components/marketi
 const read = (f: string) => readFileSync(join(ROOT, f), "utf8");
 const ALL = SOURCES.map((f) => ({ f, text: read(f) }));
 const HOME = read("src/app/(marketing)/page.tsx");
-const HOW = read("src/app/(marketing)/how-it-works/page.tsx");
-const PRODUCT = read("src/app/(marketing)/product/page.tsx");
+const DOCS = read("src/app/(marketing)/docs/page.tsx");
 
 describe("marketing site: claims match the implementation", () => {
   it("network groups cover the registry exactly, with no invented network", () => {
@@ -50,10 +49,10 @@ describe("marketing site: claims match the implementation", () => {
 
   it("plan steps shown on the homepage exist in the planner", () => {
     const planner = read("src/spak-in/planner/execution-planner.ts");
-    for (const [, action, actor] of HOW.matchAll(/\["([A-Z_]+)", "([A-Z_]+)"\]/g)) {
+    for (const [, action, actor] of DOCS.matchAll(/\["([A-Z_]+)", "([A-Z_]+)"\]/g)) {
       expect(planner, action).toContain(`add("${action}", "${actor}"`);
     }
-    expect([...HOW.matchAll(/\["([A-Z_]+)", "([A-Z_]+)"\]/g)].length).toBe(6);
+    expect([...DOCS.matchAll(/\["([A-Z_]+)", "([A-Z_]+)"\]/g)].length).toBe(6);
   });
 
   it("the docs page describes every execution state in the approved mapping", () => {
@@ -67,7 +66,7 @@ describe("marketing site: claims match the implementation", () => {
     expect(rows["Quote and settlement"].detail).toMatch(/does not verify/);
     expect(rows.Refund.detail).toMatch(/does not name the refund transaction/);
     expect(rows.Refund.detail).toMatch(/only when .* verified on chain and linked/);
-    expect(HOW).toMatch(/does not verify every stage of a transfer on chain/);
+    expect(DOCS).toMatch(/does not verify every stage of a transfer on chain/);
     expect(SECURITY.length).toBe(5);
   });
 });
@@ -150,7 +149,7 @@ describe("marketing site: honesty and brand rules in the source", () => {
     expect(sec).toContain(">An intent-based execution layer that coordinates cross-chain actions, approvals and verification in one interface.</p>");
     expect(sec.match(/<p\b/g)).toHaveLength(1);
     expect(sec.match(/<a\b/g)).toHaveLength(1);
-    expect(sec).toMatch(/href="\/how-it-works"[^>]*>\s*See how it works/);
+    expect(sec).toMatch(/href="#how-it-works"[^>]*>\s*See how it works/);
     expect(sec).toContain("<WhatIsComposition");
     const art = read("src/components/marketing/art.tsx");
     expect(art).toContain('src="/brand/images/spak-hero-landscape.png"');
@@ -158,45 +157,35 @@ describe("marketing site: honesty and brand rules in the source", () => {
     expect(art).toContain('readFileSync(join(process.cwd(), "public/brand/logo/spak-symbol.svg")');
   });
 
-  it("short homepage: hero, What is SPak?, capabilities, trust, final CTA; detail lives on its own pages", () => {
+  it("landing page: hero, What is SPak?, capabilities, how it works, trust. Nothing else", () => {
     const ids = [...HOME.matchAll(/<section(?: id="([a-z-]+)")?/g)].map((m) => m[1] ?? "-");
-    expect(ids).toEqual(["-", "product", "capabilities", "trust", "-"]);
-    expect(HOME).toContain('href="/product"');
-    expect(HOME).toContain('href="/how-it-works"');
-    // The seven stages, in order, each rendered with its own anchor (id={s.id}).
-    expect([...HOW.matchAll(/\{ id: "([a-z]+)", title:/g)].map((m) => m[1])).toEqual(["intent", "plan", "quote", "approval", "deposit", "verification", "refunds"]);
-    expect(HOW).toContain("id={s.id}");
-    expect(HOW).toContain('id="verification"');
-    // Every module has its own section and shows its status in words.
-    for (const p of PILLARS) expect(PRODUCT, p.id).toMatch(new RegExp(`id="${p.id}"`));
-    expect(PRODUCT.match(/<ModuleHead p=\{/g)).toHaveLength(PILLARS.length);
-    expect(read("src/components/marketing/internal.tsx")).toContain('"Planned, not available yet"');
-    // Every product screen still has a home somewhere on the site.
-    for (const n of ["chat", "plan", "approval", "tracking", "refund"]) expect([HOME, HOW, PRODUCT].some((t) => t.includes(`name="${n}"`)), n).toBe(true);
+    expect(ids).toEqual(["-", "product", "capabilities", "how-it-works", "trust"]);
+    expect(HOME).toContain("PILLARS.map"); // all six modules, each with its availability
+    expect(HOME).toContain("<StatusMark status={p.status}");
+    expect(JOURNEY.map((j) => j.id)).toEqual(["describe", "plan", "approve", "execute", "verify"]);
+    JOURNEY.forEach((j, i) => expect(j.moves, j.id).toBe(i > 2)); // nothing moves before approval
+    expect(TRUST).toHaveLength(3);
+    expect(TRUST[2].body).toMatch(/where supported/);
+    expect(JOURNEY[4].body).toMatch(/where supported/);
   });
 
-  it("generated imagery: files exist, are web-sized, and are used where documented", () => {
-    const imgs = ["spak-how-it-works-landscape.jpg", "spak-product-infrastructure.jpg", ...PILLARS.map((p) => `spak-module-${p.id}.jpg`)];
-    for (const f of imgs) {
-      expect(existsSync(join(ROOT, "public/marketing/images", f)), f).toBe(true);
-      expect(readFileSync(join(ROOT, "public/marketing/images", f)).length, f).toBeLessThan(300 * 1024);
-    }
-    expect(HOW).toContain("/marketing/images/spak-how-it-works-landscape.jpg");
-    expect(PRODUCT).toContain("/marketing/images/spak-product-infrastructure.jpg");
-    expect(PRODUCT).toContain("/marketing/images/spak-module-${p.id}.jpg");
-    // Generated imagery is labelled as illustration, never presented as product evidence.
-    expect(PRODUCT).toMatch(/alt="Illustration:/);
-    expect(PRODUCT).toContain("Illustration. SPak coordinates");
+  it("detail lives in the documentation: lifecycle, verification, refunds, modules, architecture, every screen", () => {
+    for (const id of ["lifecycle", "networks", "verification", "refunds", "modules", "architecture"]) expect(DOCS, id).toContain(`id="${id}"`);
+    expect(LIFECYCLE.map((x) => x.id)).toEqual(["intent", "plan", "quote", "approval", "deposit", "verification", "refunds"]);
+    for (const n of ["chat", "plan", "approval", "tracking", "refund"]) expect(DOCS, n).toContain(`name: "${n}"`);
+    const config = read("next.config.ts");
+    expect(config).toContain('source: "/product", destination: "/#capabilities"');
+    expect(config).toContain('source: "/how-it-works", destination: "/#how-it-works"');
   });
 
   it("labels simulated product screens", () => {
-    expect(HOW).toMatch(/caption="Demonstration\. This state was produced with simulated tracking data\./);
+    expect(DOCS).toMatch(/caption: "Demonstration\. This state was produced with simulated tracking data\./);
     expect(read("scripts/marketing/capture.cjs")).toMatch(/SIMULATED tracking data/);
   });
 });
 
 describe("marketing site: routes, links, assets and SEO", () => {
-  const ROUTES = ["/", "/product", "/how-it-works", "/developers", "/docs", "/app"];
+  const ROUTES = ["/", "/developers", "/docs", "/app"];
   const page = (r: string) => (r === "/" ? "src/app/(marketing)/page.tsx" : r === "/app" ? "src/app/app/page.tsx" : `src/app/(marketing)${r}/page.tsx`);
 
   it("every route exists, and the application moved to /app intact", () => {
@@ -237,10 +226,10 @@ describe("marketing site: routes, links, assets and SEO", () => {
   it("metadata, sitemap and robots are wired", () => {
     const layout = read("src/app/(marketing)/layout.tsx");
     for (const key of ["metadataBase", "openGraph", "twitter", "canonical", "OG_IMAGE"]) expect(layout, key).toContain(key);
-    expect(sitemap().map((e) => e.url)).toEqual(["/", "/product", "/how-it-works", "/developers", "/docs"].map((p) => `${SITE.origin}${p}`));
+    expect(sitemap().map((e) => e.url)).toEqual(["/", "/developers", "/docs"].map((p) => `${SITE.origin}${p}`));
     const rules = robots().rules as { disallow: string[] }[];
     expect(rules[0].disallow).toContain("/api/");
-    for (const r of ["developers", "docs", "product", "how-it-works"]) expect(read(`src/app/(marketing)/${r}/page.tsx`)).toMatch(/export const metadata[\s\S]*images: \[OG_IMAGE\]/);
+    for (const r of ["developers", "docs"]) expect(read(`src/app/(marketing)/${r}/page.tsx`)).toMatch(/export const metadata[\s\S]*images: \[OG_IMAGE\]/);
   });
 
   it("motion respects reduced-motion and content is visible without scripts", () => {

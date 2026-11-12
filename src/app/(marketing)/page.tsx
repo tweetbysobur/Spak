@@ -1,12 +1,10 @@
 import { getImageProps } from "next/image";
 import { Icon } from "@/components/icons";
-import { BandField, WhatIsComposition } from "@/components/marketing/art";
+import { WhatIsComposition } from "@/components/marketing/art";
+import { StatusMark } from "@/components/marketing/internal";
 import { InView } from "@/components/marketing/InView";
 import { BuiltOnNear, CtaLink } from "@/components/marketing/site";
-import { PILLARS, SITE, TRUST } from "@/marketing/content";
-
-/** The four modules the homepage introduces. All six are on /product. */
-const HOME_PILLARS = PILLARS.filter((p) => ["agent", "intelligence", "guard", "payments"].includes(p.id));
+import { JOURNEY, PILLARS, SITE, TRUST } from "@/marketing/content";
 
 /** Homepage hero background, supplied by the brand owner (public/brand/images, listed in the brand asset inventory). */
 const HERO_IMAGE = "/brand/images/spak-hero-landscape.png";
@@ -58,7 +56,7 @@ export default function HomePage() {
           <div data-reveal>
             <h2 className="type-display-lg text-fg">What is SPak?</h2>
             <p className="mt-6 max-w-[26rem] text-[1.25rem] leading-[1.6] text-fg md:text-[1.5rem]">An intent-based execution layer that coordinates cross-chain actions, approvals and verification in one interface.</p>
-            <a href="/how-it-works" className="type-cta mt-8 inline-flex min-h-11 items-center gap-2 text-primary underline-offset-4 transition-colors hover:text-primary-hover hover:underline">
+            <a href="#how-it-works" className="type-cta mt-8 inline-flex min-h-11 items-center gap-2 text-primary underline-offset-4 transition-colors hover:text-primary-hover hover:underline">
               See how it works<Icon name="arrow" size={18} aria-hidden="true" />
             </a>
           </div>
@@ -69,40 +67,47 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* D. Core capabilities: one line each, with status in words. Detail lives on /product. */}
+      {/* D. Core capabilities: six modules, one line each, availability in words and shape. */}
       <section id="capabilities" className="mkt-section border-t border-line">
-        <div className="mkt-wrap grid gap-12 lg:grid-cols-[1fr_1.5fr] lg:gap-20">
-          <div data-reveal>
+        <div className="mkt-wrap">
+          <div data-reveal className="grid gap-6 lg:grid-cols-[1.2fr_1fr] lg:items-end lg:gap-20">
             <h2 className="type-display-lg text-fg">Core capabilities</h2>
-            <p className="type-lead mt-6 max-w-md text-fg-2">Some of SPak works today and some is still being built. Each part says which.</p>
-            <a href="/product" className="type-cta mt-8 inline-flex min-h-11 items-center gap-2 text-primary underline-offset-4 transition-colors hover:text-primary-hover hover:underline">
-              Explore the product<Icon name="arrow" size={18} aria-hidden="true" />
-            </a>
+            <p className="type-lead text-fg-2">Some of SPak works today and some is still being built. Each part says which.</p>
           </div>
-          <ul data-reveal className="flex flex-col">
-            {HOME_PILLARS.map((p) => (
-              <li key={p.id} className="grid gap-2 border-t border-line-strong py-6 sm:grid-cols-[13rem_1fr] sm:gap-8">
-                <div>
-                  <h3 className="type-heading-feature text-fg">{p.name}</h3>
-                  <p className="type-label mt-1 text-fg-2">{p.status}</p>
-                </div>
-                <p className="type-body text-fg-2">{p.summary} <span className="text-fg">Live today: {p.live[0].replace(/\.$/, "").toLowerCase()}.</span></p>
+          <ul data-reveal className="mt-12 grid gap-x-12 sm:grid-cols-2 lg:grid-cols-3">
+            {PILLARS.map((p) => (
+              <li key={p.id} id={p.id} className="border-t border-line-strong py-6">
+                <h3 className="type-heading-feature text-fg">{p.name}</h3>
+                <StatusMark status={p.status} className="mt-2" />
+                <p className="type-body mt-3 text-fg-2">{p.summary}</p>
               </li>
             ))}
           </ul>
         </div>
       </section>
 
-      {/* E. Trust and verification: four points. The full explanation is on /how-it-works. */}
-      <section id="trust" className="mkt-section bg-surface">
+      {/* E. How SPak works: one visual. A single path, dotted until you approve, solid after. The page's Forest Green block. */}
+      <section id="how-it-works" className="bg-[var(--spak-brand-forest-green)] py-20 md:py-28">
         <div className="mkt-wrap">
-          <div data-reveal className="grid gap-6 lg:grid-cols-[1.2fr_1fr] lg:items-end lg:gap-20">
-            <h2 className="type-display-lg text-fg">Nothing moves without you.</h2>
-            <a href="/how-it-works" className="type-cta inline-flex min-h-11 items-center gap-2 text-primary underline-offset-4 transition-colors hover:text-primary-hover hover:underline lg:justify-self-end">
-              See how it works<Icon name="arrow" size={18} aria-hidden="true" />
-            </a>
-          </div>
-          <ul data-reveal className="mt-12 grid gap-x-12 sm:grid-cols-2 lg:grid-cols-4">
+          <h2 className="type-display-lg text-[var(--spak-brand-warm-white)]">How SPak works</h2>
+          <ol data-reveal className="mt-14 grid md:grid-cols-5">
+            {JOURNEY.map((j, i) => (
+              <li key={j.id} className={`relative border-l-2 pb-10 pl-7 last:pb-0 md:border-l-0 md:border-t-2 md:pb-0 md:pl-0 md:pr-6 md:pt-8 ${j.moves ? "border-[var(--spak-brand-warm-white)]" : "border-dotted border-[var(--spak-brand-muted-sage)]"}`}>
+                <span aria-hidden="true" className={`absolute -left-[9px] top-0 flex h-4 w-4 items-center justify-center rounded-full md:-top-[9px] md:left-0 ${j.id === "approve" || j.moves ? "bg-[var(--spak-brand-warm-white)]" : "border-2 border-[var(--spak-brand-muted-sage)] bg-[var(--spak-brand-forest-green)]"}`} />
+                <p className="type-demo-label text-[var(--spak-brand-muted-sage)]">{i + 1}</p>
+                <h3 className="type-heading-feature mt-1 text-[var(--spak-brand-warm-white)]">{j.title}</h3>
+                <p className="type-body mt-2 text-[var(--spak-brand-muted-sage)]">{j.body}</p>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      {/* F. Trust and control: three points and the way in. */}
+      <section id="trust" className="mkt-section">
+        <div className="mkt-wrap">
+          <h2 data-reveal className="type-display-lg text-fg">Nothing moves without you.</h2>
+          <ul data-reveal className="mt-12 grid gap-x-12 md:grid-cols-3">
             {TRUST.map((t) => (
               <li key={t.title} className="border-t border-line-strong py-6">
                 <h3 className="type-heading-feature text-fg">{t.title}</h3>
@@ -110,24 +115,9 @@ export default function HomePage() {
               </li>
             ))}
           </ul>
-        </div>
-      </section>
-
-      {/* L. Final CTA. The page's one Forest Green block. */}
-      <section className="mkt-wrap pb-24">
-        <div data-reveal className="relative overflow-hidden rounded-card bg-[var(--spak-brand-forest-green)]">
-          <BandField className="absolute inset-y-0 right-0 hidden h-full w-1/4 lg:block" />
-          <div className="relative grid gap-12 px-6 py-14 md:grid-cols-2 md:px-14 md:py-20 lg:max-w-[75%]">
-            <div>
-              <h2 className="type-heading-section text-[var(--spak-brand-warm-white)]">For users</h2>
-              <p className="type-body-marketing mt-3 max-w-sm text-[var(--spak-brand-muted-sage)]">Connect a wallet and write your first transfer. You see the full quote before anything is approved.</p>
-              <CtaLink href={SITE.appPath} variant="on-forest" className="mt-7">Launch SPak</CtaLink>
-            </div>
-            <div>
-              <h2 className="type-heading-section text-[var(--spak-brand-warm-white)]">For developers</h2>
-              <p className="type-body-marketing mt-3 max-w-sm text-[var(--spak-brand-muted-sage)]">See how the engine, execution and verification fit together, and what is planned for integrations.</p>
-              <CtaLink href="/developers" variant="on-forest-ghost" className="mt-7">Explore Developer Infrastructure</CtaLink>
-            </div>
+          <div data-reveal className="mt-10 flex flex-wrap gap-3">
+            <CtaLink href={SITE.appPath}>Launch SPak</CtaLink>
+            <CtaLink href="/docs" variant="ghost">Read the documentation</CtaLink>
           </div>
         </div>
       </section>

@@ -3,8 +3,22 @@ import Link from "next/link";
 import colors from "@/design/colors.json";
 import { NETWORKS } from "@/spak-in/registries/networks";
 import { StatusBadge } from "@/components/status";
-import { CtaLink } from "@/components/marketing/site";
-import { OG_IMAGE, SITE, VERIFIED_FAMILIES } from "@/marketing/content";
+import { PlanSteps, StatusMark } from "@/components/marketing/internal";
+import { CtaLink, LivePlanned, Screen } from "@/components/marketing/site";
+import { LIFECYCLE, OG_IMAGE, PILLARS, SECURITY, SITE, VERIFICATION_ROWS, VERIFIED_FAMILIES } from "@/marketing/content";
+
+/** Plan step actions and actors for an executable cross-chain plan (src/spak-in/planner/execution-planner.ts). */
+const PLAN_STEPS = [
+  ["QUOTE", "PROVIDER"], ["REVIEW", "SPAK"], ["USER_APPROVAL", "USER_WALLET"], ["DEPOSIT", "USER_WALLET"], ["SETTLE", "PROVIDER"], ["VERIFY", "SPAK"],
+] as const;
+
+const LIFECYCLE_SCREEN: Record<string, { name: "chat" | "plan" | "approval" | "tracking" | "refund"; alt: string; caption: string } | undefined> = {
+  intent: { name: "chat", alt: "The SPak chat. An instruction to swap 50 USDC on Base to SOL on Solana, followed by SPak confirming it understood and that a quote is ready.", caption: "Captured from the app with a test wallet. The quote is real." },
+  quote: { name: "plan", alt: "The review screen for a 50 USDC transfer from Base to SOL on Solana, listing the amount sent, the minimum received, slippage and each fee.", caption: "The estimate. Real quote from NEAR Intents." },
+  approval: { name: "approval", alt: "The approval screen. A firm quote with recipient, refund address, deposit address and deadline, and a checkbox the user must tick before the Approve button works.", caption: "The button stays disabled until you tick the box." },
+  deposit: { name: "tracking", alt: "The tracking screen after approval. It shows the exact deposit to send and a seven-step timeline with only the first step done.", caption: "Approved with a test wallet. No deposit was sent, so the timeline stops at step one." },
+  refunds: { name: "refund", alt: "The recovery panel for a failed transfer. Refund status reads waiting for NEAR Intents to send the refund. Reported, seen on chain, and verified amounts are listed separately, all empty.", caption: "Demonstration. This state was produced with simulated tracking data. No transfer failed and no refund took place." },
+};
 
 export const metadata: Metadata = {
   title: "Documentation",
@@ -14,8 +28,8 @@ export const metadata: Metadata = {
 };
 
 const TOC = [
-  ["start", "Getting started"], ["instructions", "Writing instructions"], ["approval", "Quotes and approval"], ["states", "Execution states"],
-  ["networks", "Networks and verification"], ["refunds", "Failures and refunds"], ["limits", "Not built yet"],
+  ["start", "Getting started"], ["lifecycle", "Execution lifecycle"], ["instructions", "Writing instructions"], ["approval", "Quotes and approval"], ["states", "Execution states"],
+  ["networks", "Networks and verification"], ["verification", "Transaction verification"], ["refunds", "Failures and refunds"], ["modules", "Modules"], ["architecture", "Architecture"], ["limits", "Not built yet"],
 ] as const;
 
 /** One line per execution state. The states and their status roles come from src/design/colors.json (stateRoles). */
@@ -66,6 +80,25 @@ export default function DocsPage() {
             <li className={LI}>Sign the deposit in your wallet. SPak verifies it and tracks the transfer.</li>
           </ol>
           <CtaLink href={SITE.appPath} className="mt-8">Launch SPak</CtaLink>
+        </section>
+
+        <section id="lifecycle" className="mt-20">
+          <h2 className={H2}>Execution lifecycle</h2>
+          <p className={P}>A transfer passes through seven stages. Nothing moves until the fifth.</p>
+          <ol className="mt-6">
+            {LIFECYCLE.map((st, i) => {
+              const screen = LIFECYCLE_SCREEN[st.id];
+              return (
+                <li key={st.id} id={`stage-${st.id}`} className="border-t border-line py-8">
+                  <p className="type-demo-label text-fg-2">{i + 1} · {st.actor}</p>
+                  <h3 className="type-heading-feature mt-1 text-fg">{st.title}</h3>
+                  <p className={P}>{st.body}</p>
+                  {st.id === "plan" && <div className="mt-6"><PlanSteps steps={PLAN_STEPS} /></div>}
+                  {screen && <Screen name={screen.name} alt={screen.alt} caption={screen.caption} className="mt-6" />}
+                </li>
+              );
+            })}
+          </ol>
         </section>
 
         <section id="instructions" className="mt-20">
@@ -134,6 +167,29 @@ export default function DocsPage() {
           <p className={P}>SPak does not verify the settlement steps between deposit and delivery. For those it relies on the status NEAR Intents reports.</p>
         </section>
 
+        <section id="verification" className="mt-20">
+          <h2 className={H2}>Transaction verification</h2>
+          <p className={P}>SPak does not verify every stage of a transfer on chain. It verifies the two that involve your funds arriving somewhere: the deposit and the delivery. For the rest it relies on NEAR Intents, and it says so.</p>
+          <ul className="mt-5 flex list-disc flex-col gap-3 pl-5">
+            {SECURITY.map((x) => <li key={x.title} className={LI}><span className="font-medium text-fg">{x.title}.</span> {x.body}</li>)}
+          </ul>
+          <div className="mt-8 overflow-x-auto">
+            <table className="w-full min-w-[36rem] border-collapse text-left">
+              <caption className="type-heading-feature pb-4 text-left text-fg">Who verifies each stage</caption>
+              <thead><tr className="border-b border-line-strong"><th scope="col" className="type-label py-3 pr-6 text-fg-2">Stage</th><th scope="col" className="type-label py-3 pr-6 text-fg-2">Checked by</th><th scope="col" className="type-label py-3 text-fg-2">How</th></tr></thead>
+              <tbody>
+                {VERIFICATION_ROWS.map((r) => (
+                  <tr key={r.stage} className="border-b border-line align-top">
+                    <th scope="row" className="type-body py-3 pr-6 font-medium text-fg">{r.stage}</th>
+                    <td className="type-body py-3 pr-6 text-fg">{r.source}</td>
+                    <td className="type-body py-3 text-fg-2">{r.detail}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
         <section id="refunds" className="mt-20">
           <h2 className={H2}>Failures and refunds</h2>
           <ul className="mt-5 flex list-disc flex-col gap-3 pl-5">
@@ -144,6 +200,26 @@ export default function DocsPage() {
             <li className={LI}>Refunded is shown only when a transfer back to you is verified on chain and linked to your transfer. A transfer that merely looks right is held for manual review.</li>
             <li className={LI}>A transfer with a submitted or confirmed deposit cannot be cancelled.</li>
           </ul>
+        </section>
+
+        <section id="modules" className="mt-20">
+          <h2 className={H2}>Modules</h2>
+          <p className={P}>What each part of SPak does today, and what is designed but not built.</p>
+          {PILLARS.map((m) => (
+            <div key={m.id} id={`module-${m.id}`} className="border-t border-line py-8 first-of-type:mt-6">
+              <h3 className="type-heading-feature text-fg">{m.name}</h3>
+              <StatusMark status={m.status} className="mt-2" />
+              <p className={P}>{m.summary}</p>
+              <div className="mt-6"><LivePlanned live={m.live} planned={m.planned} /></div>
+            </div>
+          ))}
+        </section>
+
+        <section id="architecture" className="mt-20">
+          <h2 className={H2}>Architecture</h2>
+          <p className={P}>SPak is built as separate services behind an HTTP API: an intent engine, an execution service on NEAR Intents, deposit and destination verifiers, and a tracking monitor. Each writes to one execution record. A cross-chain plan has these steps, with the actor for each:</p>
+          <div className="mt-6"><PlanSteps steps={PLAN_STEPS} /></div>
+          <p className={P}>There is no public API or SDK yet. The module-by-module description is on the <Link href="/developers" className="text-primary underline underline-offset-4">Developers</Link> page.</p>
         </section>
 
         <section id="limits" className="mt-20">
