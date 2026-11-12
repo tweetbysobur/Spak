@@ -18,7 +18,8 @@ export const SITE = {
 export const OG_IMAGE = { url: "/marketing/spak-og.png", width: 1200, height: 630, alt: "SPak. Intelligent execution across chains." } as const;
 
 export const NAV = [
-  { label: "Product", href: "/#product" },
+  { label: "Product", href: "/product" },
+  { label: "How it works", href: "/how-it-works" },
   { label: "Developers", href: "/developers" },
   { label: "Documentation", href: "/docs" },
 ] as const;
@@ -40,16 +41,15 @@ export const STEPS = [
   { id: "verify", lane: "SPak", title: "Verify the outcome", body: "SPak reads the destination chain and compares the delivery with what you approved. Only then does it say Completed.", moves: true },
 ] as const;
 
-export type Pillar = { id: string; name: string; summary: string; live: string[]; planned: string[] };
+export type Pillar = { id: string; name: string; summary: string; status: "Live" | "Partly live" | "Planned"; live: string[]; planned: string[] };
 
 export const PILLARS: Pillar[] = [
   {
-    id: "agent", name: "SPak Agent",
+    id: "agent", name: "SPak Agent", status: "Partly live",
     summary: "A NEAR account that represents you inside SPak. Your connected wallets stay yours and keep signing.",
     live: [
-      "Sign in with an EVM, Solana or NEAR wallet by signing a one-time message.",
-      "Link several wallets to one account and choose which one is active on each network.",
       "Mark one verified NEAR wallet as your agent identity. This records the link only.",
+      "The agent identity is tied to your account and checked on every request.",
     ],
     planned: [
       "A dedicated NEAR account created for your agent.",
@@ -57,7 +57,7 @@ export const PILLARS: Pillar[] = [
     ],
   },
   {
-    id: "intelligence", name: "SPak Intelligence",
+    id: "intelligence", name: "SPak Intelligence", status: "Partly live",
     summary: "The part that understands what you ask. It follows fixed rules and does not use a language model, so the same sentence always gives the same plan.",
     live: [
       "Reads swaps, bridges, transfers and payments written in plain words.",
@@ -66,11 +66,11 @@ export const PILLARS: Pillar[] = [
     ],
     planned: [
       "Portfolio balances and cross-chain insights. SPak understands these questions today but cannot answer them yet.",
-      "Rebalancing, schedules and price conditions. They are understood and planned, and they do not run.",
+      "Rebalancing. It is understood and planned, and it does not run.",
     ],
   },
   {
-    id: "guard", name: "SPak Guard",
+    id: "guard", name: "SPak Guard", status: "Partly live",
     summary: "The controls between an instruction and your funds.",
     live: [
       "Every transfer needs your approval of a firm quote. The approval is bound to that exact plan.",
@@ -82,7 +82,7 @@ export const PILLARS: Pillar[] = [
     ],
   },
   {
-    id: "payments", name: "SPak Payments",
+    id: "payments", name: "SPak Payments", status: "Partly live",
     summary: "Pay someone on another network from the asset you hold.",
     live: [
       "Send an asset to another person's address on a different network in one instruction.",
@@ -91,6 +91,28 @@ export const PILLARS: Pillar[] = [
     ],
     planned: [
       "Payment requests, checkout and recurring payments are not built.",
+    ],
+  },
+  {
+    id: "conditional", name: "SPak Conditional Execution", status: "Planned",
+    summary: "Transfers that wait for a time or a price. SPak reads these instructions today; it does not run them.",
+    live: [
+      "Understands many scheduled and price-conditional instructions and shows the plan they would follow.",
+      "Says plainly that the plan needs a scheduler or a price monitor that is not built, so nothing runs.",
+    ],
+    planned: [
+      "A scheduler and a condition monitor. Each run would still need your approval unless you set limits in SPak Guard.",
+    ],
+  },
+  {
+    id: "connect", name: "SPak Connect", status: "Partly live",
+    summary: "How wallets, and later other apps, connect to SPak.",
+    live: [
+      "Sign in with an EVM, Solana or NEAR wallet by signing a one-time message. No password, key or seed phrase.",
+      "Link several wallets to one account and choose which one is active on each network.",
+    ],
+    planned: [
+      "A public API and SDK so other apps can hand SPak an intent. Today the API serves only the SPak app.",
     ],
   },
 ];
@@ -112,6 +134,14 @@ export const VERIFICATION_ROWS = [
   { stage: "Deposit", source: "SPak, on chain", detail: "Read from the source chain on EVM networks, Solana and NEAR." },
   { stage: "Delivery", source: "SPak, on chain", detail: "Read from the destination chain on EVM networks, Solana and NEAR. On other networks the transfer goes to manual review." },
   { stage: "Refund", source: "NEAR Intents, then SPak", detail: "NEAR Intents sends refunds automatically and does not name the refund transaction. SPak shows Refunded only when a transfer back to you is verified on chain and linked to your transfer." },
+] as const;
+
+/** Homepage trust section: four short points, each detailed on /how-it-works. */
+export const TRUST = [
+  { title: "You approve every transfer", body: "SPak prepares a transfer and stops. Nothing moves until you approve the firm quote and sign in your wallet." },
+  { title: "Executed through NEAR Intents", body: "NEAR Intents quotes and settles each cross-chain transfer. SPak does not run its own bridge." },
+  { title: "Tracked to the end", body: "Every transfer has one record, from your instruction to the final state, checked in the background." },
+  { title: "Delivery verified where supported", body: "On EVM networks, Solana and NEAR, SPak reads the destination chain before it says Completed. Elsewhere a person reviews it." },
 ] as const;
 
 /** Phrases the brand guidelines forbid in every channel (docs/SPAK-BRAND-GUIDELINES.md, honesty rules). */

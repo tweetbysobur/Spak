@@ -60,8 +60,8 @@ export function SiteNav() {
 }
 
 const FOOTER = [
-  { title: "Product", links: [{ label: "What SPak is", href: "/#product" }, { label: "How it works", href: "/#how-it-works" }, { label: "Cross-chain execution", href: "/#cross-chain" }, { label: "Security and verification", href: "/#security" }] },
-  { title: "Platform", links: [{ label: "SPak Agent", href: "/#agent" }, { label: "SPak Intelligence", href: "/#intelligence" }, { label: "SPak Guard", href: "/#guard" }, { label: "SPak Payments", href: "/#payments" }] },
+  { title: "Product", links: [{ label: "What SPak is", href: "/#product" }, { label: "Product", href: "/product" }, { label: "How it works", href: "/how-it-works" }, { label: "Security and verification", href: "/how-it-works#verification" }] },
+  { title: "Platform", links: [{ label: "SPak Agent", href: "/product#agent" }, { label: "SPak Intelligence", href: "/product#intelligence" }, { label: "SPak Guard", href: "/product#guard" }, { label: "SPak Payments", href: "/product#payments" }] },
   { title: "Developers", links: [{ label: "Developer infrastructure", href: "/developers" }, { label: "Documentation", href: "/docs" }, { label: "Launch App", href: SITE.appPath }] },
 ] as const;
 
@@ -122,11 +122,11 @@ export function LivePlanned({ live, planned }: { live: readonly string[]; planne
   return (
     <div className="grid gap-8 sm:grid-cols-2">
       <div>
-        <h4 className="type-label text-fg">Live today</h4>
+        <h3 className="type-label text-fg">Live today</h3>
         <ul className="mt-3 flex flex-col gap-3">{live.map((t) => <li key={t} className="type-body border-l-2 border-primary pl-4 text-fg">{t}</li>)}</ul>
       </div>
       <div>
-        <h4 className="type-label text-fg-2">Not live yet</h4>
+        <h3 className="type-label text-fg-2">Not live yet</h3>
         <ul className="mt-3 flex flex-col gap-3">{planned.map((t) => <li key={t} className="type-body border-l-2 border-dashed border-line-strong pl-4 text-fg-2">{t}</li>)}</ul>
       </div>
     </div>

@@ -14,7 +14,7 @@ const [,, BASE = 'http://localhost:3100', OUT = '/tmp/spak-marketing'] = process
 fs.mkdirSync(OUT, { recursive: true });
 const results = []; const errors = [];
 const ok = (name, pass, detail = '') => { results.push({ name, pass, detail }); console.log(`${pass ? 'PASS' : 'FAIL'} ${name}${detail ? ' | ' + detail : ''}`); };
-const ROUTES = ['/', '/developers', '/docs'];
+const ROUTES = ['/', '/product', '/how-it-works', '/developers', '/docs'];
 const SIZES = { desktop: [1280, 900], tablet: [820, 1180], phone: [390, 844] };
 
 async function settle(page) {
@@ -107,10 +107,11 @@ async function settle(page) {
         stacked: box(sym).top >= box(text).bottom, inside: box(sym).left >= 0 && box(sym).right <= innerWidth && box(text).right <= innerWidth };
     });
     ok(`What is SPak? ${size} ${theme}: ${size === 'phone' ? 'stacked, text first' : 'two columns, centred on each other'}; symbol undistorted with the photo loaded`,
-      w.h2 === 'What is SPak?' && w.link === '#how-it-works' && w.linkText === 'See how it works' && w.ratio === '1.117' && w.img && w.inside && (size === 'phone' ? w.stacked : w.sideBySide), JSON.stringify(w));
+      w.h2 === 'What is SPak?' && w.link === '/how-it-works' && w.linkText === 'See how it works' && w.ratio === '1.117' && w.img && w.inside && (size === 'phone' ? w.stacked : w.sideBySide), JSON.stringify(w));
     if (size === 'desktop' && theme === 'light') {
       await sp.locator('#product a', { hasText: 'See how it works' }).click(); await sp.waitForTimeout(400);
-      ok('What is SPak?: "See how it works" scrolls to the How it works section', (await sp.evaluate(() => location.hash)) === '#how-it-works' && (await sp.evaluate(() => Math.abs(document.querySelector('#how-it-works').getBoundingClientRect().top) < 120)));
+      await sp.waitForURL('**/how-it-works');
+      ok('What is SPak?: "See how it works" opens the How it works page', (await sp.locator('h1').innerText()) === 'How it works');
     }
     await sctx.close();
   }
@@ -161,8 +162,10 @@ async function settle(page) {
   ok('nav: Developers opens /developers', true);
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Documentation' }).click(); await page.waitForURL('**/docs');
   ok('nav: Documentation opens /docs', true);
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Product' }).click(); await page.waitForURL('**/#product');
-  ok('nav: Product opens the homepage product section', true);
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Product' }).click(); await page.waitForURL('**/product');
+  ok('nav: Product opens /product', true);
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'How it works' }).click(); await page.waitForURL('**/how-it-works');
+  ok('nav: How it works opens /how-it-works', true);
   await page.getByRole('link', { name: 'SPak home' }).first().click(); await page.waitForURL(BASE + '/');
   await page.getByRole('link', { name: 'Explore Developers' }).first().click(); await page.waitForURL('**/developers');
   ok('CTA: Explore Developers opens /developers', true);
@@ -194,7 +197,7 @@ async function settle(page) {
   const btn = m.getByRole('button', { name: 'Menu' });
   ok('phone menu: closed by default', (await btn.getAttribute('aria-expanded')) === 'false' && !(await m.locator('#site-menu').isVisible()));
   await btn.click();
-  ok('phone menu: opens with all destinations', (await m.locator('#site-menu').getByRole('link').allInnerTexts()).join('|') === 'Product|Developers|Documentation|Launch App');
+  ok('phone menu: opens with all destinations', (await m.locator('#site-menu').getByRole('link').allInnerTexts()).join('|') === 'Product|How it works|Developers|Documentation|Launch App');
   await m.keyboard.press('Escape');
   ok('phone menu: Escape closes it', !(await m.locator('#site-menu').isVisible()));
   await m.getByRole('button', { name: 'Menu' }).click();

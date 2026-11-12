@@ -27,7 +27,9 @@ Network names, network counts and asset counts are read from the registries at b
 
 | Route | Content | Change |
 | --- | --- | --- |
-| `/` | Marketing homepage | New. The app used to be here |
+| `/` | Short homepage: hero, What is SPak?, core capabilities, trust and verification, final CTA | New. The app used to be here |
+| `/product` | The six modules (Agent, Intelligence, Guard, Payments, Conditional Execution, Connect), each marked live or planned, and developer infrastructure | New |
+| `/how-it-works` | The full journey: intent, plan, quote, approval, deposit and execution, destination verification, failures and refunds, with the product screens | New. Moved from the homepage |
 | `/developers` | Developer infrastructure | New |
 | `/docs` | Public documentation | New |
 | `/app` | The SPak application | Moved from `/`. Code unchanged |
@@ -37,6 +39,9 @@ Network names, network counts and asset counts are read from the registries at b
 The move to `/app` changed three things only: the file location, `start_url` in the web manifest, and the app logo now returns to the homepage. Sign-in messages use the origin, not the path, so authentication is unaffected.
 
 ## 3. Homepage sections
+
+The homepage was shortened. The journey, cross-chain detail, network coverage, product screens and the security section moved to `/how-it-works`. The module detail and the developer block moved to `/product`. Nothing was deleted.
+
 
 | Section | Anchor | Notes |
 | --- | --- | --- |
