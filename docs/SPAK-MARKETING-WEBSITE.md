@@ -56,6 +56,14 @@ The homepage was shortened. The journey, cross-chain detail, network coverage, p
 | Final CTA | | The page's one Forest Green block. Users and developers |
 | Footer | | Product, Platform, Developers |
 
+## 3b. Internal pages
+
+`/how-it-works` and `/product` share the homepage's palette, type and geometry but each tells its own story.
+
+- **/how-it-works:** a Graphite opening with the transfer drawn across the landscape inside a diagonal band (intent, plan, your approval at the leaf, NEAR Intents settles, delivery verified; dotted until approval, solid after). Then a numbered spine for the seven stages. The spine is dotted until approval and solid after, and the visuals alternate sides: chat screen, the plan's steps, the quote, the approval, tracking, coverage lists and the refund screen. Details follow: who acts, the route, coverage, what SPak verifies, and the verification table.
+- **/product:** opens with the architecture as one path (Connect, Intelligence, Guard, NEAR Intents, verification) with Agent, Payments and Conditional Execution beside it. Each module has a different treatment: Intelligence is a parsed sentence; Guard is the one photographic dark band with the approval screen; Payments is a route diagram; Connect and Agent share an account diagram; Conditional Execution is muted and framed by a dashed line because it is planned. The developer block closes the page.
+- Status is shown with `StatusMark` (`src/components/marketing/internal.tsx`): words plus a filled, half or hollow circle. "Planned, not available yet" is never shown as live.
+
 ## 4. Components
 
 | Component | File | Job |

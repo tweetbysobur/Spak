@@ -23,6 +23,8 @@
 .mkt-prose { max-width: 38rem; }
 .mkt :target { scroll-margin-top: 6rem; }
 .mkt-art text { font-family: var(--spak-font-mono); font-size: 13px; font-weight: 500; fill: var(--art-ink-2); }
+.mkt-art.jb text { font-size: 15px; }
+@media (max-width: 639px) { .mkt-art.jb text { font-size: 19px; } }
 .mkt-art .t-strong { fill: var(--art-ink); }
 .mkt-art .t-on-forest { fill: var(--art-on-forest); }
 

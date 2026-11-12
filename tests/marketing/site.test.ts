@@ -163,8 +163,14 @@ describe("marketing site: honesty and brand rules in the source", () => {
     expect(ids).toEqual(["-", "product", "capabilities", "trust", "-"]);
     expect(HOME).toContain('href="/product"');
     expect(HOME).toContain('href="/how-it-works"');
-    for (const id of ["intent", "plan", "quote", "approval", "deposit", "verification", "refunds"]) expect(HOW, id).toContain(`id="${id}"`);
-    expect(PRODUCT).toContain("PILLARS.map");
+    // The seven stages, in order, each rendered with its own anchor (id={s.id}).
+    expect([...HOW.matchAll(/\{ id: "([a-z]+)", title:/g)].map((m) => m[1])).toEqual(["intent", "plan", "quote", "approval", "deposit", "verification", "refunds"]);
+    expect(HOW).toContain("id={s.id}");
+    expect(HOW).toContain('id="verification"');
+    // Every module has its own section and shows its status in words.
+    for (const p of PILLARS) expect(PRODUCT, p.id).toMatch(new RegExp(`id="${p.id}"`));
+    expect(PRODUCT.match(/<ModuleHead p=\{/g)).toHaveLength(PILLARS.length);
+    expect(read("src/components/marketing/internal.tsx")).toContain('"Planned, not available yet"');
     // Every product screen still has a home somewhere on the site.
     for (const n of ["chat", "plan", "approval", "tracking", "refund"]) expect([HOME, HOW, PRODUCT].some((t) => t.includes(`name="${n}"`)), n).toBe(true);
   });

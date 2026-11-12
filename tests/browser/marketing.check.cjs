@@ -111,7 +111,7 @@ async function settle(page) {
     if (size === 'desktop' && theme === 'light') {
       await sp.locator('#product a', { hasText: 'See how it works' }).click(); await sp.waitForTimeout(400);
       await sp.waitForURL('**/how-it-works');
-      ok('What is SPak?: "See how it works" opens the How it works page', (await sp.locator('h1').innerText()) === 'How it works');
+      ok('What is SPak?: "See how it works" opens the How it works page', new URL(sp.url()).pathname === '/how-it-works' && (await sp.locator('#intent').count()) === 1);
     }
     await sctx.close();
   }
