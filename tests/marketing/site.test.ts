@@ -104,7 +104,9 @@ describe("marketing site: honesty and brand rules in the source", () => {
     const at = [/<BuiltOnNear\b/, /<h1/, /\{SITE\.description\}/, /href=\{SITE\.appPath\}[^>]*>Launch SPak/, /href="\/developers"[^>]*>Explore Developers/].map((t) => hero.search(t));
     expect(at.every((i) => i >= 0), JSON.stringify(at)).toBe(true);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
-    expect(hero).toContain(">Intelligent execution across chains.</h1>");
+    // The exact headline, as rendered (the phone layout splits it into two line spans).
+    const h1 = hero.slice(hero.indexOf("<h1"), hero.indexOf("</h1>")).replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+    expect(h1.slice(h1.indexOf("Intelligent"))).toBe("Intelligent execution across chains.");
     expect(SITE.description).toBe("SPak turns your intentions into controlled, verifiable actions across blockchain networks.");
     expect(hero).toMatch(/items-center justify-center[^"]*text-center/);
     expect(HOME).not.toContain("HeroComposition");
