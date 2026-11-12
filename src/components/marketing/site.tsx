@@ -24,7 +24,7 @@ export function CtaLink({ href, children, variant = "primary", className = "" }:
  * documentation site). Black artwork on light surfaces, the reversed file on dark ones. The mark is never
  * redrawn or recoloured.
  */
-export function BuiltOnNear() {
+export function BuiltOnNear({ className = "" }: { className?: string }) {
   const mark = (file: string, show: string) => (
     <span aria-hidden="true" className={`${show} h-4 w-4 shrink-0 overflow-hidden`}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -32,7 +32,7 @@ export function BuiltOnNear() {
     </span>
   );
   return (
-    <p className="type-label inline-flex items-center gap-2 rounded-full border border-line-strong py-1.5 pl-3 pr-3.5 text-fg">
+    <p className={`type-label inline-flex items-center gap-2 rounded-full border border-line-strong py-1.5 pl-3 pr-3.5 text-fg ${className}`}>
       {mark("near-logo.svg", "logo-light")}
       {mark("near-logo-rev.svg", "logo-dark")}
       Built on NEAR

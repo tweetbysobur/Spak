@@ -99,13 +99,25 @@ describe("marketing site: honesty and brand rules in the source", () => {
 
   it("hero: badge, headline, paragraph, buttons, in that order, with the exact copy and destinations", () => {
     const hero = HOME.slice(HOME.indexOf("<section"), HOME.indexOf("</section>"));
-    const at = ["<BuiltOnNear />", "<h1", "{SITE.description}", "href={SITE.appPath}>Launch SPak", 'href="/developers" variant="ghost">Explore Developers'].map((t) => hero.indexOf(t));
+    const at = [/<BuiltOnNear\b/, /<h1/, /\{SITE\.description\}/, /href=\{SITE\.appPath\}[^>]*>Launch SPak/, /href="\/developers"[^>]*>Explore Developers/].map((t) => hero.search(t));
     expect(at.every((i) => i >= 0), JSON.stringify(at)).toBe(true);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
     expect(hero).toContain(">Intelligent execution across chains.</h1>");
     expect(SITE.description).toBe("SPak turns your intentions into controlled, verifiable actions across blockchain networks.");
     expect(hero).toMatch(/items-center justify-center[^"]*text-center/);
     expect(HOME).not.toContain("HeroComposition");
+  });
+
+  it("hero background is the owner-supplied landscape, listed in the brand inventory, shown with a real image element", () => {
+    const hero = HOME.slice(HOME.indexOf("<section"), HOME.indexOf("</section>"));
+    expect(HOME).toContain('const HERO_IMAGE = "/brand/images/spak-hero-landscape.png"');
+    expect(hero).toMatch(/<Image src=\{HERO_IMAGE\} alt="" fill priority[^>]*object-cover/);
+    expect(existsSync(join(ROOT, "public/brand/images/spak-hero-landscape.png"))).toBe(true);
+    const inventory = JSON.parse(read("public/brand/manifest.json")) as { assets: { path: string; approved: boolean }[] };
+    expect(inventory.assets.find((a) => a.path === "public/brand/images/spak-hero-landscape.png")?.approved).toBe(true);
+    // A flat tint only: no gradient stands in for, or sits over, the photograph.
+    expect(read("src/app/(marketing)/marketing.css")).not.toMatch(/gradient/);
+    expect(hero).toContain('data-theme="dark"');
   });
 
   it("the NEAR mark is NEAR's own file, byte for byte, never redrawn in code", () => {

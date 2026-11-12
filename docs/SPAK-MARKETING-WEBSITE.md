@@ -41,7 +41,7 @@ The move to `/app` changed three things only: the file location, `start_url` in 
 | Section | Anchor | Notes |
 | --- | --- | --- |
 | Navigation | | Logo, Product, Developers, Documentation, theme toggle, Launch App |
-| Hero | | Centred: Built on NEAR badge, approved tagline in Sora, supporting sentence, two CTAs. No illustration. Plain page background |
+| Hero | | Centred over the landscape photograph: Built on NEAR badge, approved tagline in Sora, supporting sentence, two CTAs |
 | Product introduction | `#product` | What SPak is, the problem, the coordination argument, the NEAR Intents relationship |
 | How SPak works | `#how-it-works` | Five steps as a lane diagram. Dotted line before approval, solid after |
 | Cross-chain execution | `#cross-chain` | Route diagram, five capabilities, the two network groups, three product screens |
@@ -79,7 +79,18 @@ The lane and route diagrams are structured diagrams of real behaviour. Step orde
 
 Motion: sections fade up on scroll. The hero does not animate. Hover feedback is colour only. With `prefers-reduced-motion`, nothing animates. Without JavaScript, all content is visible.
 
-The hero was first built with an intent-path illustration on the right. It was replaced by a centred text composition on the plain page background, and the illustration and its animation styles were removed.
+The hero was first built with an intent-path illustration on the right. It was replaced by a centred text composition, and the illustration and its animation styles were removed.
+
+### Hero landscape
+
+The hero background is a misty mountain landscape supplied by the brand owner: `public/brand/images/spak-hero-landscape.png` (1774 x 887, the original upload, listed in the brand asset inventory). It is an owner-approved exception to the imagery rules in the brand guidelines, section 5.
+
+- It is a real image element (`next/image`, `fill`, `object-cover`, loaded with priority), so Next.js serves resized, compressed versions. The source file is not edited.
+- A flat Forest Green tint at 38% sits over it. There is no gradient. The tint and the two chip fills are the only styles added (`.mkt-hero-tint`, `.mkt-hero-chip` in `marketing.css`).
+- The hero always uses the dark theme tokens, because the photograph is dark in both themes: Warm White text, the reversed NEAR mark, and the Warm White primary button.
+- Height: `clamp(34rem, 50vw, 50rem)`. At 1280 px this is 640 px, which is the photograph's own 2:1 ratio, so the full composition shows.
+- Focal point: centre from 768 px up, so the mountain stays on the right. 30% from the left on phones, where the open sky sits behind the text.
+- Measured contrast of Warm White text against the pixels behind it, worst pixel: headline 4.58 desktop, 3.63 tablet, 8.94 phone (large text needs 3). Paragraph 5.88 desktop, 4.75 tablet, 10.22 phone (needs 4.5).
 
 ### Third-party mark
 
@@ -111,6 +122,7 @@ Each screen exists in light and dark, at desktop width and at phone width (`-m`)
 - Under 768 px the navigation becomes a menu button. Launch App stays in the menu.
 - Under 1024 px the lane diagram is replaced by a vertical list with the same dotted and solid rule.
 - Under 640 px the screens swap to phone-width captures, and the two hero buttons stack at full width.
+- The hero photograph is cropped, never stretched. Tablet and phone show less of the mountain than desktop.
 - The hero is centred at every width. Its headline is capped at 42rem and wraps to two lines on desktop and tablet, three on phones.
 - Tables scroll sideways inside their own box. The page never scrolls sideways.
 - Checked at 1280, 820 and 390 px in both themes.

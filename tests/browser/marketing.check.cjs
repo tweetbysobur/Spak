@@ -54,7 +54,8 @@ async function settle(page) {
     const hp = await hctx.newPage(); watch(hp, `hero ${size}/${theme}`);
     await hp.goto(BASE, { waitUntil: 'networkidle' }); await hp.evaluate(() => document.fonts.ready);
     const h = await hp.evaluate(() => {
-      const sec = document.querySelector('main > section'); const box = (e) => e.getBoundingClientRect();
+      const hero = document.querySelector('main > section'); const sec = hero.querySelector('[data-hero-content]'); const box = (e) => e.getBoundingClientRect();
+      const bg = hero.querySelector('img[src*="spak-hero-landscape"], img[srcset*="spak-hero-landscape"]');
       const kids = [...sec.children]; const centre = (e) => box(e).left + box(e).width / 2;
       const marks = [...sec.querySelectorAll('p img')].filter((i) => i.offsetParent !== null); const logo = marks[0];
       const win = logo ? box(logo.parentElement) : null;
@@ -68,12 +69,16 @@ async function settle(page) {
         // The window is square and shows only the icon: the wordmark part of the file starts beyond its right edge.
         iconOnly: !!win && Math.abs(win.width - win.height) < 0.5 && box(logo).width > win.width * 3 && getComputedStyle(logo.parentElement).overflow === 'hidden',
         para: kids[2].textContent, links: links.map((l) => `${l.textContent.trim()}=${l.getAttribute('href')}`).join('|'),
-        stacked: box(links[1]).top > box(links[0]).bottom - 1, svgs: sec.querySelectorAll('svg.mkt-art').length, vCentre: Math.abs((box(kids[0]).top - box(sec).top) - (box(sec).bottom - box(kids[kids.length - 1]).bottom)),
+        stacked: box(links[1]).top > box(links[0]).bottom - 1,
+        bgOk: !!bg && bg.complete && bg.naturalWidth > 0 && getComputedStyle(bg).objectFit === 'cover' && box(bg).width >= box(hero).width - 1 && box(bg).height >= box(hero).height - 1,
+        bgRatio: bg ? (bg.naturalWidth / bg.naturalHeight).toFixed(2) : '', heroH: Math.round(box(hero).height), textColor: getComputedStyle(sec.querySelector('h1')).color, svgs: sec.querySelectorAll('svg.mkt-art').length, // Bottom gap minus top gap. The content sits a little above centre, in the open sky above the mist.
+        vCentre: (box(sec).bottom - box(kids[kids.length - 1]).bottom) - (box(kids[0]).top - box(sec).top),
       };
     });
-    const wantLogo = theme === 'light' ? '/marketing/partners/near-logo.svg' : '/marketing/partners/near-logo-rev.svg';
+    const wantLogo = '/marketing/partners/near-logo-rev.svg'; // the landscape is dark in both themes
+    ok(`hero ${size} ${theme}: the landscape photograph covers the hero (${h.heroH}px tall), undistorted, with light text`, h.bgOk && h.bgRatio === '2.00' && h.textColor === 'rgb(247, 246, 240)', `${h.bgRatio} ${h.textColor}`);
     ok(`hero ${size} ${theme}: badge, headline, paragraph, buttons in order; centred; inside the screen`,
-      h.order === 'P:Built on > H1 > P:SPak tur > DIV' && h.offCentre <= 1 && h.vCentre <= 2 && h.fits && h.svgs === 0, JSON.stringify({ order: h.order, off: h.offCentre, v: h.vCentre }));
+      h.order === 'P:Built on > H1 > P:SPak tur > DIV' && h.offCentre <= 1 && h.vCentre >= 0 && h.vCentre <= 64 && h.fits && h.svgs === 0, JSON.stringify({ order: h.order, off: h.offCentre, v: h.vCentre }));
     ok(`hero ${size} ${theme}: exact copy, headline on ${h.lines} lines, official NEAR logo for this theme`,
       h.headline === 'Intelligent execution across chains.' && h.para === 'SPak turns your intentions into controlled, verifiable actions across blockchain networks.' && h.lines >= 2 && h.lines <= 3 && h.logoOk && h.visibleLogos === 1 && h.logoSrc === wantLogo && h.iconOnly && h.badge === 'Built on NEAR', `${h.logoSrc} ${h.lines}`);
     ok(`hero ${size} ${theme}: both buttons keep their destinations${size === 'phone' ? ' and stack' : ''}`, h.links === 'Launch SPak=/app|Explore Developers=/developers' && h.stacked === (size === 'phone'), h.links);

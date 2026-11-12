@@ -29,6 +29,13 @@
 /* Status badges on the documentation page are reference material: the processing icon does not spin there. */
 .mkt .spak-spin { animation: none; }
 
+/*
+ * Hero landscape. A flat Forest Green tint keeps white text readable without hiding the mountain or the mist.
+ * Chips (the badge and the outlined button) get a Forest Green fill so their labels do not sit directly on mist.
+ */
+.mkt-hero-tint { background: color-mix(in srgb, var(--spak-brand-forest-green) 38%, transparent); }
+.mkt-hero-chip { background: color-mix(in srgb, var(--spak-brand-forest-green) 72%, transparent); }
+
 /* Theme-specific product screens (same switch as the logo files). */
 .only-dark { display: none; }
 [data-theme=dark] .only-light { display: none; }

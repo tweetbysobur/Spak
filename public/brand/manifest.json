@@ -283,6 +283,16 @@
       "approved": true
     },
     {
+      "path": "public/brand/images/spak-hero-landscape.png",
+      "kind": "image",
+      "format": "png",
+      "dimensions": "1774x887",
+      "bytes": 2068039,
+      "sha256": "13dca72f3e3af42e4d17c2a3cd73044941cbac18c649b1a5912401160c1d4ddc",
+      "purpose": "Homepage hero background: misty mountain landscape, supplied and approved by the brand owner (original upload, uncompressed)",
+      "approved": true
+    },
+    {
       "path": "public/brand/board/spak-brand-board.html",
       "kind": "board",
       "format": "html",
