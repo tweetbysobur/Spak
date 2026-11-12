@@ -153,6 +153,7 @@ describe("marketing site: honesty and brand rules in the source", () => {
     const art = read("src/components/marketing/art.tsx");
     expect(art).toContain('src="/brand/images/spak-hero-landscape.png"');
     expect(art).toContain('clipPath: "url(#what-upper)"');
+    expect(art).toContain('readFileSync(join(process.cwd(), "public/brand/logo/spak-symbol.svg")');
   });
 
   it("labels simulated product screens", () => {

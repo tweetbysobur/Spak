@@ -67,7 +67,7 @@ export default function HomePage() {
             </a>
           </div>
           <div data-reveal className="flex justify-center">
-            <WhatIsComposition className="w-full max-w-md md:max-w-none" />
+            <WhatIsComposition className="w-full max-w-sm md:w-[80%] md:max-w-none" />
           </div>
         </div>
       </section>

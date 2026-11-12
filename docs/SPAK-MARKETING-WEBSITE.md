@@ -70,7 +70,7 @@ All artwork is SVG drawn in code from the approved symbol geometry: the 51.8 deg
 
 | Composition | Explains |
 | --- | --- |
-| What is SPak? composition | Three separate forms built from the symbol's construction (51.8 degree diagonal, the leaf), not the logo itself: an upper ribbon with the hero landscape clipped inside (scaled 2x so the rock face and mist show), the leaf in the primary colour, and a flat Muted Sage lower ribbon |
+| What is SPak? composition | The symbol's three forms, read from `public/brand/logo/spak-symbol.svg` at build time and pulled apart along the 51.8 degree diagonal: the upper ribbon with the hero landscape clipped inside, the leaf (vertical left edge, curved right edge) in the primary colour, and the lower ribbon (flat base, diagonal right edge, rounded corner, curved rise to the leaf) in Muted Sage |
 | Execution lanes | Who acts at each of the five steps: you, SPak, NEAR Intents. Dotted until approval, solid after |
 | Route diagram | Wallet to deposit address to recipient. A dotted refund route returns to the wallet that sent the deposit |
 | Evidence field | A halftone field (12 px grid, radius 0.4 to 4.6) around the leaf. Dense where SPak has read the chain, sparse where it has not |

@@ -3,6 +3,8 @@
  * diagonals at 51.8 degrees (dx/dy 0.786), flat-topped bands, and the concave leaf. Palette tokens only.
  * These are illustrations of the visual language. None of them is a logo.
  */
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import Image from "next/image";
 import { STEPS } from "@/marketing/content";
 
@@ -118,30 +120,40 @@ export function BandField({ className = "" }: { className?: string }) {
 }
 
 /**
- * "What is SPak?" composition: three separate forms built from the symbol's construction (the 51.8 degree
- * diagonal and the leaf), not the logo itself. Upper ribbon: the hero landscape clipped inside. Centre: the
- * symbol's leaf in the primary colour. Lower ribbon: flat Muted Sage.
+ * "What is SPak?" composition. The three forms come from the approved symbol file (public/brand/logo/spak-symbol.svg,
+ * read at build time, never redrawn): the upper ribbon, the leaf (vertical left edge, curved right edge) and the
+ * lower ribbon (flat base, diagonal right edge, rounded corner, curved rise to the leaf). They are pulled apart
+ * along the diagonal so the negative space between them opens up. Upper: the hero landscape clipped inside.
+ * Leaf: primary colour (Forest Green, Light Forest in dark). Lower: Muted Sage.
  */
-const VB = { w: 520, h: 380 };
-const UPPER = { x: 26, y: 10, w: 484, h: 260 };
-const UPPER_PATH = "M230 10H510L398 156C376 186 344 204 300 206C248 208 206 228 162 270H26Z";
+const SPREAD = 7; // symbol units each outer form moves away from the leaf, along the diagonal
+function symbolForms() {
+  const svg = readFileSync(join(process.cwd(), "public/brand/logo/spak-symbol.svg"), "utf8");
+  const vb = /viewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(svg)!;
+  const [upper, leaf, lower] = /\sd="([^"]+)"/.exec(svg)![1].split(/(?=M)/);
+  return { w: Number(vb[1]), h: Number(vb[2]), upper, leaf, lower };
+}
 export function WhatIsComposition({ className = "" }: { className?: string }) {
-  const u = UPPER;
+  const f = symbolForms();
+  const pad = SPREAD + 1, W = f.w + pad * 2, H = f.h + pad * 2;
+  const dx = SPREAD * 0.62, dy = SPREAD * 0.78; // along the 51.8 degree diagonal
+  // Upper form box in symbol units (x 9.35 to 113.6, y 0 to 52.45), moved up and right.
+  const ub = { x: 9.35 + dx + pad, y: -dy + pad, w: 104.25, h: 52.45 };
   return (
-    <div className={`relative ${className}`} style={{ aspectRatio: `${VB.w} / ${VB.h}` }} role="img" aria-label="Abstract SPak shapes: a ribbon showing a misty mountain landscape, a green leaf and a sage ribbon.">
-      <svg viewBox={`0 0 ${VB.w} ${VB.h}`} className="absolute inset-0 h-full w-full" aria-hidden="true" focusable="false">
+    <div className={`relative ${className}`} style={{ aspectRatio: `${W} / ${H}` }} role="img" aria-label="Abstract SPak forms: a ribbon showing a misty mountain landscape, a green leaf and a sage ribbon.">
+      <svg viewBox={`0 0 ${W} ${H}`} className="absolute inset-0 h-full w-full" aria-hidden="true" focusable="false">
         <defs>
           <clipPath id="what-upper" clipPathUnits="objectBoundingBox">
-            <path d={UPPER_PATH} transform={`scale(${1 / u.w} ${1 / u.h}) translate(${-u.x} ${-u.y})`} />
+            <path d={f.upper} transform={`scale(${1 / ub.w} ${1 / ub.h}) translate(-9.35 0)`} />
           </clipPath>
         </defs>
-        <path d={LEAF} transform={leafTransform(368, 246, 2.4)} fill="var(--spak-primary)" />
-        <polygon points={band(286, 298, 214, 72)} fill="var(--spak-brand-muted-sage)" />
+        <path d={f.leaf} transform={`translate(${pad} ${pad})`} fill="var(--spak-primary)" />
+        <path d={f.lower} transform={`translate(${pad - dx} ${pad + dy})`} fill="var(--spak-brand-muted-sage)" />
       </svg>
-      <div className="absolute" aria-hidden="true" style={{ left: `${(u.x / VB.w) * 100}%`, top: `${(u.y / VB.h) * 100}%`, width: `${(u.w / VB.w) * 100}%`, height: `${(u.h / VB.h) * 100}%`, clipPath: "url(#what-upper)" }}>
-        {/* Scaled 2x (uniformly) and offset so the rock face and mist fill the ribbon instead of open sky. */}
-        <div className="absolute" style={{ left: "-100%", top: "-55%", width: "200%", height: "200%" }}>
-          <Image src="/brand/images/spak-hero-landscape.png" alt="" fill sizes="(min-width: 1024px) 960px, 170vw" quality={80} className="object-cover" />
+      <div className="absolute" aria-hidden="true" style={{ left: `${(ub.x / W) * 100}%`, top: `${(ub.y / H) * 100}%`, width: `${(ub.w / W) * 100}%`, height: `${(ub.h / H) * 100}%`, clipPath: "url(#what-upper)" }}>
+        {/* Scaled 1.6x (uniformly, the box keeps the photo ratio) and offset so the rock face fills the top band and the mist runs down the arm. */}
+        <div className="absolute" style={{ left: "-54.7%", top: "-37%", width: "160%", height: "160%" }}>
+          <Image src="/brand/images/spak-hero-landscape.png" alt="" fill sizes="(min-width: 1024px) 720px, 130vw" quality={80} className="object-cover" />
         </div>
       </div>
     </div>
