@@ -283,6 +283,16 @@
       "approved": true
     },
     {
+      "path": "public/brand/images/spak-footer-landscape.jpg",
+      "kind": "image",
+      "format": "jpg",
+      "dimensions": "1536x864",
+      "bytes": 283022,
+      "sha256": "d97760cd57e91e6120aa8865810c018e771a1b9c348bf29a5065ea2b957b838c",
+      "purpose": "Footer background: rolling hills and a winding path under a quiet sky (generated, approved by the brand owner)",
+      "approved": true
+    },
+    {
       "path": "public/brand/images/spak-hero-landscape-mobile.jpg",
       "kind": "image",
       "format": "jpg",

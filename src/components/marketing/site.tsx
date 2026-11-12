@@ -60,30 +60,42 @@ export function SiteNav() {
 }
 
 const FOOTER = [
-  { title: "Product", links: [{ label: "What SPak is", href: "/#product" }, { label: "Core capabilities", href: "/#capabilities" }, { label: "How it works", href: "/#how-it-works" }, { label: "Trust and control", href: "/#trust" }] },
+  { title: "Product", links: [{ label: "What is SPak?", href: "/#product" }, { label: "Core capabilities", href: "/#capabilities" }, { label: "How it works", href: "/#how-it-works" }, { label: "Trust and control", href: "/#trust" }] },
   { title: "Resources", links: [{ label: "Documentation", href: "/docs" }, { label: "Execution lifecycle", href: "/docs#lifecycle" }, { label: "Verification", href: "/docs#verification" }, { label: "Developers", href: "/developers" }] },
   { title: "App", links: [{ label: "Launch SPak", href: SITE.appPath }] },
 ] as const;
 
+/**
+ * Footer: the brand landscape (public/brand/images/spak-footer-landscape.jpg) fills the section; a Warm White panel
+ * sits over its quiet sky, and the hills and path show below. The panel always uses the light tokens, so it reads
+ * the same in both themes. No social links: no official accounts are confirmed yet.
+ */
 export function SiteFooter() {
   return (
-    <footer className="border-t border-line">
-      <div className="mkt-wrap grid gap-12 py-16 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
-        <div>
-          <Link href="/" aria-label="SPak home" className="inline-block"><Logo className="h-7" /></Link>
-          <p className="type-body-sm mt-4 max-w-xs text-fg-2">Built on NEAR. Transfers are executed through NEAR Intents.</p>
-        </div>
-        {FOOTER.map((col) => (
-          <nav key={col.title} aria-label={col.title}>
-            <h2 className="type-label text-fg">{col.title}</h2>
-            <ul className="mt-3 flex flex-col gap-1">
-              {col.links.map((l) => <li key={l.href}><Link href={l.href} className="type-body-sm inline-block py-1 text-fg-2 transition-colors hover:text-fg">{l.label}</Link></li>)}
-            </ul>
-          </nav>
-        ))}
+    <footer className="relative isolate overflow-hidden">
+      <div aria-hidden="true" className="absolute inset-0 -z-10 bg-[var(--spak-brand-forest-green)]">
+        <Image src="/brand/images/spak-footer-landscape.jpg" alt="" fill sizes="100vw" quality={80} className="object-cover object-[50%_80%]" />
       </div>
-      <div className="mkt-wrap border-t border-line py-6">
-        <p className="type-caption text-fg-2">© 2026 SPak</p>
+      <div className="mkt-wrap pb-[clamp(10rem,24vw,22rem)] pt-10 md:pt-16">
+        <div data-theme="light" className="rounded-[1.5rem] bg-[var(--spak-brand-warm-white)] px-6 py-10 text-fg md:px-12 md:py-14">
+          <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.6fr_1fr_1fr_0.8fr] lg:gap-12">
+            <div className="sm:col-span-2 lg:col-span-1">
+              <Link href="/" aria-label="SPak home" className="inline-block"><Logo className="h-8" /></Link>
+              <p className="type-body-sm mt-5 max-w-xs text-fg-2">Intelligent execution across chains. Built on NEAR. Transfers are executed through NEAR Intents.</p>
+            </div>
+            {FOOTER.map((col) => (
+              <nav key={col.title} aria-label={col.title}>
+                <h2 className="type-label text-fg">{col.title}</h2>
+                <ul className="mt-4 flex flex-col gap-1">
+                  {col.links.map((l) => <li key={l.href}><Link href={l.href} className="type-body-sm inline-flex min-h-9 items-center text-fg-2 underline-offset-4 transition-colors hover:text-[var(--spak-brand-forest-green)] hover:underline">{l.label}</Link></li>)}
+                </ul>
+              </nav>
+            ))}
+          </div>
+          <div className="mt-12 border-t border-line pt-6">
+            <p className="type-caption text-fg-2">© 2026 SPak</p>
+          </div>
+        </div>
       </div>
     </footer>
   );
