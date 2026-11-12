@@ -3,6 +3,7 @@ import { useState } from "react";
 import { getNetwork } from "@/spak-in/registries/networks";
 import { api, store, type IntentResult, type ProviderQuote, type Submission, type TxRecord } from "@/lib/client";
 import { Button, Card, Row } from "./ui";
+import { Icon } from "./Icon";
 
 const net = (id: string | null) => (id ? getNetwork(id)?.name ?? id : "");
 const usd = (v: string | null) => (v ? ` ($${Number(v).toFixed(2)})` : "");
@@ -38,7 +39,7 @@ export function Review({ intent, quote, onApproved, onCancel }: {
   return (
     <Card>
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="font-semibold">Review transaction</h3>
+        <h3 className="flex items-center gap-2 font-semibold" data-icon-hover><Icon name="approve" size={22} />Review transaction</h3>
         <span className="rounded-full bg-amber-400/15 px-2.5 py-1 text-xs text-amber-300">Awaiting approval</span>
       </div>
       <Row k="Type" v={intent.intentType.replaceAll("_", " ").toLowerCase()} />

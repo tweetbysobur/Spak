@@ -4,6 +4,7 @@ import { getNetwork } from "@/spak-in/registries/networks";
 import type { ExecutionState } from "@/spak-in/types-client";
 import { api, store, type Submission, type TxRecord } from "@/lib/client";
 import { Button, Card, Row } from "./ui";
+import { Icon } from "./Icon";
 
 const LABEL: Record<ExecutionState, string> = {
   PREPARING: "Preparing", AWAITING_DEPOSIT: "Waiting for your deposit", PROCESSING: "Processing", COMPLETED: "Completed",
@@ -47,12 +48,12 @@ export function Tracker({ initial }: { initial: TxRecord }) {
   return (
     <Card>
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="font-semibold">Execution</h3>
+        <h3 className="flex items-center gap-2 font-semibold" data-icon-hover><Icon name="delivery" size={22} active={s.state === "COMPLETED"} />Execution</h3>
         <StateBadge state={s.state} />
       </div>
       {s.state === "AWAITING_DEPOSIT" && d && (
         <div className="mb-4 rounded-xl border border-amber-400/30 bg-amber-400/5 p-4 text-sm">
-          <p className="mb-2 text-amber-200">From your wallet, send exactly {d.amount} {tx.intent.source.asset?.symbol} on {getNetwork(d.network)?.name} to:</p>
+          <p className="mb-2 flex items-start gap-2 text-amber-200" data-icon-hover><Icon name="deposit" size={20} className="mt-0.5" />From your wallet, send exactly {d.amount} {tx.intent.source.asset?.symbol} on {getNetwork(d.network)?.name} to:</p>
           <p className="break-all font-mono text-xs text-white">{d.address}</p>
           {d.memo && <p className="mt-2 font-mono text-xs">Memo: {d.memo}</p>}
           <p className="mt-2 text-xs text-white/50">Send before {new Date(d.deadline).toLocaleTimeString()}. SPak watches this address and updates when NEAR Intents sees the deposit.</p>

@@ -6,12 +6,13 @@ import { Review } from "@/components/Review";
 import { Tracker } from "@/components/Tracker";
 import { History } from "@/components/History";
 import { Addresses } from "@/components/Addresses";
+import { Icon, type IconName } from "@/components/Icon";
 import { store, type IntentResult, type ProviderQuote, type TxRecord } from "@/lib/client";
 
 type Tab = "chat" | "manual" | "history" | "addresses";
-const TABS: { id: Tab; label: string }[] = [
-  { id: "chat", label: "SPak Chat" }, { id: "manual", label: "Manual Swap" },
-  { id: "history", label: "History" }, { id: "addresses", label: "Your addresses" },
+const TABS: { id: Tab; label: string; icon: IconName }[] = [
+  { id: "chat", label: "SPak Chat", icon: "chat" }, { id: "manual", label: "Manual Swap", icon: "swap" },
+  { id: "history", label: "History", icon: "history" }, { id: "addresses", label: "Your addresses", icon: "addresses" },
 ];
 
 export default function Home() {
@@ -31,15 +32,19 @@ export default function Home() {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col gap-6 px-4 py-10">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">SPak</h1>
-        <p className="text-sm text-white/50">Cross-chain execution on NEAR Intents</p>
+      <header className="flex items-center gap-3" data-icon-hover>
+        <Icon name="crosschain" size={40} />
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">SPak</h1>
+          <p className="text-sm text-white/50">Cross-chain execution on NEAR Intents</p>
+        </div>
       </header>
 
       <nav className="flex gap-1 overflow-x-auto rounded-xl border border-white/10 p-1">
         {TABS.map((t) => (
           <button key={t.id} onClick={() => { setTab(t.id); if (t.id === "history") setHistory(store.history()); }}
-            className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm ${tab === t.id ? "bg-white/10 text-white" : "text-white/50 hover:text-white"}`}>
+            className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm ${tab === t.id ? "bg-white/10 text-white" : "text-white/50 hover:text-white"}`}>
+            <Icon name={t.icon} size={20} active={tab === t.id} />
             {t.label}
           </button>
         ))}
