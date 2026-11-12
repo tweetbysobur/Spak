@@ -1,6 +1,7 @@
 import { getImageProps } from "next/image";
 import { Icon } from "@/components/icons";
 import { BandField, EvidenceField, ExecutionLanes, RouteDiagram, WhatIsComposition } from "@/components/marketing/art";
+import { InView } from "@/components/marketing/InView";
 import { BuiltOnNear, CtaLink, LivePlanned, Screen } from "@/components/marketing/site";
 import { ASSET_COUNT, NETWORK_COUNT, NETWORKS_REVIEWED, NETWORKS_VERIFIED, PILLARS, SECURITY, SITE, STEPS, VERIFICATION_ROWS } from "@/marketing/content";
 
@@ -66,9 +67,10 @@ export default function HomePage() {
               See how it works<Icon name="arrow" size={18} aria-hidden="true" />
             </a>
           </div>
-          <div data-reveal className="flex justify-center">
-            <WhatIsComposition className="w-full max-w-sm md:w-[80%] md:max-w-none" />
-          </div>
+          {/* A framed rectangle: the forms assemble on scroll-in, then the photograph drifts inside the upper form. */}
+          <InView className="what-frame flex aspect-[4/3] items-center justify-center overflow-hidden rounded-card border border-line bg-elevated dark:bg-surface">
+            <WhatIsComposition className="h-[74%]" />
+          </InView>
         </div>
       </section>
 

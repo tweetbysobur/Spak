@@ -78,7 +78,7 @@ All artwork is SVG drawn in code from the approved symbol geometry: the 51.8 deg
 
 The lane and route diagrams are structured diagrams of real behaviour. Step order, actors and the "moves funds" flag come from `STEPS` in `content.ts`.
 
-Motion: sections fade up on scroll. The hero does not animate. Hover feedback is colour only. With `prefers-reduced-motion`, nothing animates. Without JavaScript, all content is visible.
+Motion: sections fade up on scroll. In "What is SPak?" the artwork sits in a framed 4:3 rectangle: on scroll-in the three forms slide together along the 51.8 degree diagonal (leaf last, about 1.6 s), then the photograph drifts slowly inside the upper form (16 s, back and forth). The drift runs only while the frame is on screen (`InView.tsx`). Transform and opacity only. The hero does not animate. Hover feedback is colour only. With `prefers-reduced-motion`, nothing animates. Without JavaScript, all content is visible.
 
 The hero was first built with an intent-path illustration on the right. It was replaced by a centred text composition, and the illustration and its animation styles were removed.
 
