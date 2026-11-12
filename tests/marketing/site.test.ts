@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -94,6 +95,29 @@ describe("marketing site: honesty and brand rules in the source", () => {
     const art = read("src/components/marketing/art.tsx");
     expect(art).not.toMatch(/M65\.2 0L113\.6 0/); // the full symbol outline is never rebuilt in artwork
     expect(read("src/components/marketing/site.tsx")).toContain('from "@/components/Logo"');
+  });
+
+  it("hero: badge, headline, paragraph, buttons, in that order, with the exact copy and destinations", () => {
+    const hero = HOME.slice(HOME.indexOf("<section"), HOME.indexOf("</section>"));
+    const at = ["<BuiltOnNear />", "<h1", "{SITE.description}", "href={SITE.appPath}>Launch SPak", 'href="/developers" variant="ghost">Explore Developers'].map((t) => hero.indexOf(t));
+    expect(at.every((i) => i >= 0), JSON.stringify(at)).toBe(true);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+    expect(hero).toContain("Intelligent execution <em");
+    expect(hero).toContain("across chains.</em>");
+    expect(SITE.description).toBe("SPak turns your intentions into controlled, verifiable actions across blockchain networks.");
+    expect(hero).toMatch(/items-center justify-center[^"]*text-center/);
+    expect(HOME).not.toContain("HeroComposition");
+  });
+
+  it("the NEAR mark is NEAR's own file, byte for byte, never redrawn in code", () => {
+    // Checksums of logo.svg and logo_rev.svg as served by NEAR's official documentation site.
+    const official = { "near-logo.svg": "41538b7792a49c4c9826fe022e5672829444c80e0293d22443d81d0639a3335c", "near-logo-rev.svg": "f76009dce4c0d4bbd4bda6c485e50b0376f3814d60ec73feb2a0e46a85873ca6" };
+    for (const [file, sha] of Object.entries(official)) {
+      expect(createHash("sha256").update(readFileSync(join(ROOT, "public/marketing/partners", file))).digest("hex"), file).toBe(sha);
+    }
+    const site = read("src/components/marketing/site.tsx");
+    for (const file of Object.keys(official)) expect(site).toContain(`/marketing/partners/${file}`);
+    for (const { f, text } of ALL) expect(/m421\.61,108|M13\.9017/.test(text), `${f}: NEAR path data in source`).toBe(false);
   });
 
   it("labels simulated product screens", () => {

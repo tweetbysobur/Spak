@@ -18,6 +18,22 @@ export function CtaLink({ href, children, variant = "primary", className = "" }:
   return <Link href={href} className={`type-cta inline-flex min-h-12 items-center justify-center rounded-control px-6 transition-colors duration-[var(--spak-motion-fast)] ${VARIANT[variant]} ${className}`}>{children}</Link>;
 }
 
+/**
+ * "Built on NEAR" badge. The mark is NEAR's own logo file, unmodified (public/marketing/partners, taken from
+ * NEAR's official documentation site). Black artwork on light surfaces, the reversed file on dark ones.
+ */
+export function BuiltOnNear() {
+  return (
+    <p className="type-label inline-flex items-center gap-2 rounded-full border border-line-strong px-3.5 py-1.5 text-fg-2">
+      Built on
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/marketing/partners/near-logo.svg" alt="NEAR" width={57} height={14} className="logo-light h-3.5 w-auto" />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/marketing/partners/near-logo-rev.svg" alt="NEAR" width={57} height={14} className="logo-dark h-3.5 w-auto" />
+    </p>
+  );
+}
+
 export function SiteNav() {
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-bg">

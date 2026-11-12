@@ -16,6 +16,7 @@ The site lives in the same Next.js app as the product. It shares the root layout
 | Styles | `src/app/(marketing)/marketing.css` (token variables only) |
 | Product screens | `public/marketing/screens/`, sizes in `src/marketing/screens.json` |
 | Share image | `public/marketing/spak-og.png` |
+| Third-party marks | `public/marketing/partners/` |
 | Scripts | `scripts/marketing/capture.cjs`, `scripts/marketing/build_og.cjs` |
 
 All marketing pages are server components and prerender as static pages. Two small client components exist: the phone menu and the scroll reveal.
@@ -40,7 +41,7 @@ The move to `/app` changed three things only: the file location, `start_url` in 
 | Section | Anchor | Notes |
 | --- | --- | --- |
 | Navigation | | Logo, Product, Developers, Documentation, theme toggle, Launch App |
-| Hero | | Approved tagline, two CTAs, hero composition |
+| Hero | | Centred: Built on NEAR badge, approved tagline, supporting sentence, two CTAs. No illustration |
 | Product introduction | `#product` | What SPak is, the problem, the coordination argument, the NEAR Intents relationship |
 | How SPak works | `#how-it-works` | Five steps as a lane diagram. Dotted line before approval, solid after |
 | Cross-chain execution | `#cross-chain` | Route diagram, five capabilities, the two network groups, three product screens |
@@ -57,10 +58,11 @@ The move to `/app` changed three things only: the file location, `start_url` in 
 | SiteNav, SiteFooter | site.tsx | Header with skip link, footer |
 | MobileMenu | MobileMenu.tsx | Disclosure menu under 768 px. Closes on Escape and on navigation |
 | CtaLink | site.tsx | Link styled as a button. Four variants |
+| BuiltOnNear | site.tsx | Hero badge. Uses NEAR's own logo files, unmodified |
 | Screen | site.tsx | Product screenshot with caption. Switches by theme and by width |
 | LivePlanned | site.tsx | Two lists: live and not live. Labelled in words, not only by colour |
 | Reveal | Reveal.tsx | Scroll reveal for `data-reveal` elements |
-| HeroComposition, ExecutionLanes, RouteDiagram, EvidenceField, BandField | art.tsx | Artwork (section 5) |
+| ExecutionLanes, RouteDiagram, EvidenceField, BandField | art.tsx | Artwork (section 5) |
 
 ## 5. Art direction
 
@@ -68,7 +70,6 @@ All artwork is SVG drawn in code from the approved symbol geometry: the 51.8 deg
 
 | Composition | Explains |
 | --- | --- |
-| Hero | One path from intent to verified delivery. It stops at the leaf, the point where the user approves, then crosses onto the destination band |
 | Execution lanes | Who acts at each of the five steps: you, SPak, NEAR Intents. Dotted until approval, solid after |
 | Route diagram | Wallet to deposit address to recipient. A dotted refund route returns to the wallet that sent the deposit |
 | Evidence field | A halftone field (12 px grid, radius 0.4 to 4.6) around the leaf. Dense where SPak has read the chain, sparse where it has not |
@@ -76,7 +77,13 @@ All artwork is SVG drawn in code from the approved symbol geometry: the 51.8 deg
 
 The lane and route diagrams are structured diagrams of real behaviour. Step order, actors and the "moves funds" flag come from `STEPS` in `content.ts`.
 
-Motion: the hero bands settle, the path draws once, and a small marker travels the path and pauses inside the leaf. Sections fade up on scroll. Hover feedback is colour only. With `prefers-reduced-motion`, nothing animates and the marker is removed. Without JavaScript, all content is visible.
+Motion: sections fade up on scroll. The hero does not animate. Hover feedback is colour only. With `prefers-reduced-motion`, nothing animates. Without JavaScript, all content is visible.
+
+The hero was first built with an intent-path illustration on the right. It was replaced by a centred text composition on the plain page background, and the illustration and its animation styles were removed.
+
+### Third-party mark
+
+The hero badge shows the NEAR logo. The files are NEAR's own, copied byte for byte from NEAR's official documentation site (docs.near.org): `public/marketing/partners/near-logo.svg` (black, light theme) and `near-logo-rev.svg` (white, dark theme). They are never redrawn or recoloured, and a test pins their checksums. To update them, download the new files from NEAR and update the checksums in `tests/marketing/site.test.ts`.
 
 ## 6. Product screens
 
@@ -103,14 +110,15 @@ Each screen exists in light and dark, at desktop width and at phone width (`-m`)
 - Content width 76rem. Gutters 20 px on phones, 40 px from 768 px.
 - Under 768 px the navigation becomes a menu button. Launch App stays in the menu.
 - Under 1024 px the lane diagram is replaced by a vertical list with the same dotted and solid rule.
-- Under 640 px the screens swap to phone-width captures, and the hero labels are hidden because they would be too small to read.
+- Under 640 px the screens swap to phone-width captures, and the two hero buttons stack at full width.
+- The hero is centred at every width. Its headline is capped at 42rem and wraps to two lines on desktop and tablet, three on phones.
 - Tables scroll sideways inside their own box. The page never scrolls sideways.
 - Checked at 1280, 820 and 390 px in both themes.
 
 ## 9. Testing
 
-- `tests/marketing/site.test.ts` (18 tests): network groups match the registry, "verified on chain" is claimed only where verifiers exist, approval is step three and nothing moves before it, plan steps exist in the planner, every state is documented, banned phrases, no autonomy claims, no hex colours, no external links, links and anchors resolve, screens exist, metadata is wired.
-- `tests/browser/marketing.check.cjs`: 47 browser checks. Layout and images at three widths in two themes, accessibility structure, SEO tags, every link, navigation and CTAs, keyboard access, the phone menu, reduced motion, console errors.
+- `tests/marketing/site.test.ts` (20 tests): hero order and exact copy, NEAR logo checksums, network groups match the registry, "verified on chain" is claimed only where verifiers exist, approval is step three and nothing moves before it, plan steps exist in the planner, every state is documented, banned phrases, no autonomy claims, no hex colours, no external links, links and anchors resolve, screens exist, metadata is wired.
+- `tests/browser/marketing.check.cjs`: 65 browser checks. The hero is checked for order, centring, exact copy, the right NEAR file per theme and button destinations at three widths in two themes. Layout and images at three widths in two themes, accessibility structure, SEO tags, every link, navigation and CTAs, keyboard access, the phone menu, reduced motion, console errors.
 - `tests/browser/app-branding.check.cjs` now targets `/app` and confirms the application still works.
 
 ## 10. Remaining limitations
@@ -122,6 +130,8 @@ Each screen exists in light and dark, at desktop width and at phone width (`-m`)
 - Product screens are static captures. They must be recaptured when the app UI changes.
 - The screens total 4.9 MB as PNG sources. Next.js serves them resized and compressed. They are not hand-optimised.
 - Artwork is two-dimensional SVG. No 3D or raster compositions were produced.
+- The share image (`public/marketing/spak-og.png`) still shows the earlier hero illustration. It needs an approved new design before `build_og.cjs` is rerun.
+- NEAR publishes no brand kit page that could be found. The logo files come from NEAR's official documentation site, and NEAR's usage terms for the mark were not reviewed.
 - Contrast was not re-measured for the marketing pages. They use only pairings already validated in the colour system.
 - No automated accessibility audit tool was run. The checks cover structure, names, focus and keyboard use.
 - Indexing: old links to `/` now show the marketing page. Signed-in users reach the app at `/app`.

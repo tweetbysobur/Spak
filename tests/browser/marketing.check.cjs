@@ -48,6 +48,36 @@ async function settle(page) {
     await ctx.close();
   }
 
+  // 1b. Hero: centred, in the agreed order, at every width and in both themes
+  for (const [size, [width, height]] of Object.entries(SIZES)) for (const theme of ['light', 'dark']) {
+    const hctx = await browser.newContext({ viewport: { width, height }, colorScheme: theme, deviceScaleFactor: size === 'tablet' ? 1 : 2 });
+    const hp = await hctx.newPage(); watch(hp, `hero ${size}/${theme}`);
+    await hp.goto(BASE, { waitUntil: 'networkidle' }); await hp.evaluate(() => document.fonts.ready);
+    const h = await hp.evaluate(() => {
+      const sec = document.querySelector('main > section'); const box = (e) => e.getBoundingClientRect();
+      const kids = [...sec.children]; const centre = (e) => box(e).left + box(e).width / 2;
+      const logo = [...sec.querySelectorAll('img[alt="NEAR"]')].find((i) => i.offsetParent !== null);
+      const links = [...sec.querySelectorAll('a')];
+      return {
+        order: kids.map((k) => k.tagName + (k.tagName === 'P' ? ':' + k.textContent.trim().slice(0, 8) : '')).join(' > '),
+        offCentre: Math.max(...kids.map((k) => Math.abs(centre(k) - window.innerWidth / 2))),
+        fits: kids.every((k) => box(k).left >= 0 && box(k).right <= window.innerWidth),
+        headline: sec.querySelector('h1').textContent, lines: Math.round(box(sec.querySelector('h1')).height / parseFloat(getComputedStyle(sec.querySelector('h1')).lineHeight)),
+        logoOk: !!logo && logo.complete && logo.naturalWidth > 0, logoSrc: logo ? logo.getAttribute('src') : '', visibleLogos: [...sec.querySelectorAll('img[alt="NEAR"]')].filter((i) => i.offsetParent !== null).length,
+        para: kids[2].textContent, links: links.map((l) => `${l.textContent.trim()}=${l.getAttribute('href')}`).join('|'),
+        stacked: box(links[1]).top > box(links[0]).bottom - 1, svgs: sec.querySelectorAll('svg.mkt-art').length, vCentre: Math.abs((box(kids[0]).top - box(sec).top) - (box(sec).bottom - box(kids[kids.length - 1]).bottom)),
+      };
+    });
+    const wantLogo = theme === 'light' ? '/marketing/partners/near-logo.svg' : '/marketing/partners/near-logo-rev.svg';
+    ok(`hero ${size} ${theme}: badge, headline, paragraph, buttons in order; centred; inside the screen`,
+      h.order === 'P:Built on > H1 > P:SPak tur > DIV' && h.offCentre <= 1 && h.vCentre <= 2 && h.fits && h.svgs === 0, JSON.stringify({ order: h.order, off: h.offCentre, v: h.vCentre }));
+    ok(`hero ${size} ${theme}: exact copy, headline on ${h.lines} lines, official NEAR logo for this theme`,
+      h.headline === 'Intelligent execution across chains.' && h.para === 'SPak turns your intentions into controlled, verifiable actions across blockchain networks.' && h.lines >= 2 && h.lines <= 3 && h.logoOk && h.visibleLogos === 1 && h.logoSrc === wantLogo, `${h.logoSrc} ${h.lines}`);
+    ok(`hero ${size} ${theme}: both buttons keep their destinations${size === 'phone' ? ' and stack' : ''}`, h.links === 'Launch SPak=/app|Explore Developers=/developers' && h.stacked === (size === 'phone'), h.links);
+    await hp.screenshot({ path: `${OUT}/hero-${size}-${theme}.png` });
+    await hctx.close();
+  }
+
   // 2. Accessibility structure
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage(); watch(page, 'a11y');
@@ -140,9 +170,9 @@ async function settle(page) {
   // 7. Reduced motion: nothing is hidden waiting for an animation
   const rctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce' });
   const r = await rctx.newPage(); await r.goto(BASE, { waitUntil: 'networkidle' });
-  const hidden = await r.evaluate(() => [...document.querySelectorAll('[data-reveal], .hero-fade, .hero-band, .hero-path')].filter((e) => getComputedStyle(e).opacity === '0').length);
-  const runner = await r.evaluate(() => getComputedStyle(document.querySelector('.hero-runner')).display);
-  ok('reduced motion: all content visible, moving marker removed', hidden === 0 && runner === 'none', `${hidden} hidden, runner ${runner}`);
+  const hidden = await r.evaluate(() => [...document.querySelectorAll('[data-reveal]')].filter((e) => getComputedStyle(e).opacity === '0').length);
+  const moving = await r.evaluate(() => document.getAnimations().length);
+  ok('reduced motion: all content visible, nothing animating', hidden === 0 && moving === 0, `${hidden} hidden, ${moving} animations`);
   await rctx.close();
   // With motion allowed, everything reveals after scrolling.
   const actx = await browser.newContext({ viewport: { width: 1280, height: 900 } });

@@ -34,51 +34,6 @@ function Halftone({ x, y, cols, rows, flip = false, fill = "var(--art-rule-stron
 }
 
 /**
- * Hero. One path from an intent to a verified delivery. It stops at the leaf, the single point where the user
- * approves, then crosses onto the destination band.
- */
-export function HeroComposition({ className = "" }: { className?: string }) {
-  const a = band(430, 30, 190, 150);
-  const before = "M30 410H140L257.9 260H285";
-  const after = "M381.3 260H400L502.2 130H566";
-  const k = { ["--k" as string]: K };
-  return (
-    <svg viewBox="0 0 640 520" className={`mkt-art mkt-art-lg ${className}`} role="img" aria-labelledby="hero-art-title hero-art-desc">
-      <title id="hero-art-title">One path from intent to verified delivery</title>
-      <desc id="hero-art-desc">A line starts at a point labelled intent, rises to a leaf shape labelled you approve, and continues across a green band to a point labelled delivery verified.</desc>
-      <defs><clipPath id="hero-band-a"><polygon points={a} /></clipPath></defs>
-      <g className="hero-fade" style={{ ["--d" as string]: "900ms" }}><Halftone x={446} y={338} cols={16} rows={14} /></g>
-      <polygon className="hero-band" style={{ ...k, ["--d" as string]: "0ms" }} points={band(190, 300, 330, 190)} fill="var(--art-soft)" />
-      <polygon className="hero-band" style={{ ...k, ["--d" as string]: "120ms" }} points={band(205, 80, 56, 170)} fill="var(--art-sage)" />
-      <g className="hero-band" style={{ ...k, ["--d" as string]: "240ms" }}>
-        <polygon points={a} fill="var(--art-forest)" />
-        <polygon points={band(575, 30, 45, 150)} fill="var(--art-tone)" />
-      </g>
-      <g fill="none" strokeWidth="2" strokeLinejoin="round">
-        <path className="hero-path" pathLength={1} d={before} stroke="var(--art-line)" />
-        <path className="hero-path" pathLength={1} d={after} stroke="var(--art-line)" />
-        <path className="hero-path" pathLength={1} d={after} stroke="var(--art-on-forest)" clipPath="url(#hero-band-a)" />
-      </g>
-      <path className="hero-fade" style={{ ["--d" as string]: "1300ms" }} d={LEAF} transform={leafTransform(381.3, 260, 4.4)} fill="var(--art-line)" />
-      <g className="hero-fade" style={{ ["--d" as string]: "500ms" }}>
-        <circle cx="30" cy="410" r="6" fill="var(--art-paper)" stroke="var(--art-line)" strokeWidth="2" />
-        <text x="20" y="442">intent</text>
-      </g>
-      <g className="hero-fade" style={{ ["--d" as string]: "1500ms" }}>
-        <text x="92" y="394" textAnchor="middle">plan</text>
-        <text x="333" y="350" textAnchor="middle" className="t-strong">you approve</text>
-      </g>
-      <g className="hero-fade" style={{ ["--d" as string]: "2000ms" }}>
-        <circle cx="566" cy="130" r="6" fill="var(--art-line)" />
-        <text x="636" y="162" textAnchor="end" className="t-strong">delivery</text>
-        <text x="636" y="182" textAnchor="end" className="t-strong">verified</text>
-      </g>
-      <circle className="hero-runner" r="4" fill="var(--art-line)" style={{ offsetPath: `path("${before}H381.3${after.slice(after.indexOf("H"))}")` }} />
-    </svg>
-  );
-}
-
-/**
  * How SPak works, as a lane diagram: who acts at each step. The line is dashed while nothing has moved and
  * solid once the user has approved and signed. Step order and actors come from STEPS.
  */

@@ -1,5 +1,6 @@
-import { BandField, EvidenceField, ExecutionLanes, HeroComposition, RouteDiagram } from "@/components/marketing/art";
-import { CtaLink, LivePlanned, Screen } from "@/components/marketing/site";
+import { Icon } from "@/components/icons";
+import { BandField, EvidenceField, ExecutionLanes, RouteDiagram } from "@/components/marketing/art";
+import { BuiltOnNear, CtaLink, LivePlanned, Screen } from "@/components/marketing/site";
 import { ASSET_COUNT, NETWORK_COUNT, NETWORKS_REVIEWED, NETWORKS_VERIFIED, PILLARS, SECURITY, SITE, STEPS, VERIFICATION_ROWS } from "@/marketing/content";
 
 const CROSS_CHAIN = [
@@ -14,17 +15,14 @@ export default function HomePage() {
   return (
     <>
       {/* B. Hero */}
-      <section className="mkt-wrap grid items-center gap-10 pb-16 pt-14 md:pt-20 lg:grid-cols-[1.05fr_1fr] lg:gap-6 lg:pb-24">
-        <div>
-          <h1 className="type-display-xl text-fg">Intelligent execution <em className="type-editorial-accent">across chains.</em></h1>
-          <p className="type-lead mt-6 max-w-xl text-fg-2">{SITE.description}</p>
-          <div className="mt-9 flex flex-wrap gap-3">
-            <CtaLink href={SITE.appPath}>Launch SPak</CtaLink>
-            <CtaLink href="/developers" variant="ghost">Explore Developers</CtaLink>
-          </div>
-          <p className="type-body-sm mt-5 text-fg-2">Sign in with an EVM, Solana or NEAR wallet. Nothing moves until you approve it.</p>
+      <section className="mkt-wrap flex min-h-[clamp(30rem,72vh,44rem)] flex-col items-center justify-center py-16 text-center md:py-24">
+        <BuiltOnNear />
+        <h1 className="type-display-lg mt-7 max-w-2xl text-fg">Intelligent execution <em className="type-editorial-accent">across chains.</em></h1>
+        <p className="type-lead mt-6 max-w-xl text-fg-2">{SITE.description}</p>
+        <div className="mt-9 flex w-full flex-col items-stretch justify-center gap-3 sm:w-auto sm:flex-row sm:items-center">
+          <CtaLink href={SITE.appPath}>Launch SPak<Icon name="arrow" size={18} aria-hidden="true" className="ml-2 -rotate-45" /></CtaLink>
+          <CtaLink href="/developers" variant="ghost">Explore Developers</CtaLink>
         </div>
-        <HeroComposition className="h-auto w-full" />
       </section>
 
       {/* C. Product introduction */}
