@@ -54,8 +54,8 @@ export function Agent({ session, refresh, signedOut }: { session: Session; refre
       <Card>
         <SectionTitle>Manual Access and SPak Agent</SectionTitle>
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="rounded-card border border-primary p-4"><p className="type-app-subheading text-fg">Manual Access <span className="type-status ml-1 text-primary">· in use</span></p><p className="type-body-sm mt-1 text-fg-2">You approve each transfer and your wallet signs it. This is how SPak works today.</p></div>
-          <div className="rounded-card border border-dashed border-line-strong p-4"><p className="type-app-subheading text-fg">SPak Agent <span className="type-status ml-1 text-fg-2">· foundation</span></p><p className="type-body-sm mt-1 text-fg-2">An identity you prove you own with a NEAR key. It has no permissions yet: you still approve every transfer.</p></div>
+          <div className="rounded-card border border-primary p-4"><p className="type-app-subheading text-fg">Manual Access <span className="type-status ml-1 text-primary">· in use</span></p><p className="type-body-sm mt-1 text-fg-2">You approve each transfer and your wallet signs it. This is the default.</p></div>
+          <div className="rounded-card border border-dashed border-line-strong p-4"><p className="type-app-subheading text-fg">SPak Agent <span className="type-status ml-1 text-fg-2">· optional</span></p><p className="type-body-sm mt-1 text-fg-2">An identity you prove you own with a NEAR key. With a permission you sign, it can approve quotes within your limits. Your wallet still signs every deposit.</p></div>
         </div>
       </Card>
       <AgentIdentity session={session} />

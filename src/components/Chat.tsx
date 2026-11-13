@@ -22,6 +22,17 @@ export function Chat({ timezone, onReady, onInterpret, initial }: {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [busy, setBusy] = useState(false);
   const sessionId = useRef(`chat_${Math.random().toString(36).slice(2, 14)}`);
+  // Stage 10: offered only when the server says the Agent has an ACTIVE signed permission. Off by default (manual).
+  const [agent, setAgent] = useState<{ id: string } | null>(null);
+  const [viaAgent, setViaAgent] = useState(false);
+  useEffect(() => {
+    (async () => {
+      const a = (await api<{ agent: { id: string; ownership: { state: string } } | null }>("/api/agents").catch(() => null))?.agent;
+      if (!a || a.ownership.state !== "VERIFIED") return;
+      const p = await api<{ mode: string }>(`/api/agents/${a.id}/permissions`).catch(() => null);
+      if (p?.mode === "PREAUTHORIZED") setAgent({ id: a.id });
+    })();
+  }, []);
 
   async function send(input: string) {
     if (!input.trim() || busy) return;
@@ -44,7 +55,7 @@ export function Chat({ timezone, onReady, onInterpret, initial }: {
         add({ from: "spak", text: b.title, detail: [...b.reasons, "Nothing was quoted or created. You can change this in SPak Guard."], guard: true });
       } else {
         add({ from: "spak", text: `Understood in ${r.meta.processingMs}ms. Getting a NEAR Intents quote for ${net(r.source.network)} → ${net(r.destination.network)}.`, detail: r.assumptions });
-        const { execution, quote: q } = await startExecution(r.plan.hash);
+        const { execution, quote: q } = await startExecution(r.plan.hash, viaAgent && agent ? agent.id : null);
         add({ from: "spak", text: `Quote ready: about ${formatUnits(q.destination.amountOut, q.destination.assetId)}. Review it below.` });
         onReady(r, execution, q);
       }
@@ -91,6 +102,12 @@ export function Chat({ timezone, onReady, onInterpret, initial }: {
         <input id="spak-intent" value={text} onChange={(e) => setText(e.target.value)} placeholder="For example: Swap 50 USDC on Base to SOL on Solana" className={`${inputCls} flex-1`} />
         <Button type="submit" disabled={busy || !text.trim()}>{busy ? "Working" : "Send"}</Button>
       </form>
+      {agent && (
+        <label className="type-body-sm inline-flex items-center gap-2 text-fg-2" data-via-agent>
+          <input type="checkbox" checked={viaAgent} onChange={(e) => setViaAgent(e.target.checked)} className="h-4 w-4 accent-[var(--spak-primary)]" />
+          Start through my Agent. It may approve the quote within the limits you signed; your wallet still signs the deposit.
+        </label>
+      )}
     </Card>
   );
 }

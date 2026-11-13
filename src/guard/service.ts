@@ -354,6 +354,22 @@ export class GuardService {
     return decision;
   }
 
+  /**
+   * Stage 10, for transfers the Agent approved: before deposit instructions, the full approval-stage policy again
+   * (limits, recipients, tokens, slippage, pause), so a policy change after the Agent approved applies at once.
+   * Spending excludes this execution's own reservation.
+   */
+  async recheckApproval(row: ExecutionRow, quote: QuoteRow): Promise<GuardDecision> {
+    let d: GuardDecision;
+    try {
+      const policy = await this.ensure(row.userId);
+      d = evaluateGuard({ policy, subject: subjectOf(row, quote), spending: await this.spending(row.userId, this.d.db, row.id), stage: "APPROVAL", ceilingUsd: this.ceilingUsd(), now: this.clock(), quoteChecked: true });
+      await this.record(row.userId, d);
+    } catch (e) { throw e instanceof ExecutionError ? e : this.fail(e); }
+    if (d.outcome !== "ALLOWED") throw guardError(d);
+    return d;
+  }
+
   /** Before deposit instructions are prepared: emergency controls, networks, and a live reservation for this execution. */
   async enforceDeposit(row: ExecutionRow, quote: QuoteRow): Promise<GuardDecision> {
     let d: GuardDecision;

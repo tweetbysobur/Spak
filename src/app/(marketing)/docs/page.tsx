@@ -228,7 +228,7 @@ export default function DocsPage() {
             <li className={LI}>Portfolio balances and prices.</li>
             <li className={LI}>Scheduled, conditional and rebalancing transfers. SPak understands them and does not run them.</li>
             <li className={LI}>Saved Guard settings such as daily limits and approved recipients.</li>
-            <li className={LI}>Execution by the agent without your approval. Every transfer needs you.</li>
+            <li className={LI}>Agent transfers without your wallet. Your agent can approve a quote only inside limits you signed, and your wallet signs every deposit.</li>
             <li className={LI}>A public API and SDK. See <Link href="/developers" className="text-primary underline underline-offset-4">Developers</Link>.</li>
           </ul>
         </section>

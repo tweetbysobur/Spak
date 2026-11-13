@@ -49,10 +49,10 @@ export const PILLARS: Pillar[] = [
     live: [
       "Mark one verified NEAR wallet as your agent identity. This records the link only.",
       "The agent identity is tied to your account and checked on every request.",
+      "Your agent can approve a quote for you, only inside limits you sign with your NEAR key. Your wallet still signs every deposit.",
     ],
     planned: [
       "A dedicated NEAR account created for your agent.",
-      "Execution by the agent inside limits you set. Today nothing signs on your behalf.",
     ],
   },
   {

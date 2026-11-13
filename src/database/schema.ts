@@ -272,7 +272,12 @@ export const approvals = pgTable("spak_approvals", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   invalidatedAt: timestamp("invalidated_at", { withTimezone: true }),
   invalidationReason: text("invalidation_reason"),
+  /** Stage 10: USER (the user approved this exact quote) or AGENT_GRANT (approved under the Agent grant named below). */
+  approvedBy: text("approved_by").notNull().default("USER"),
+  grantId: text("grant_id"),
+  grantVersion: integer("grant_version"),
 }, (t) => [
+  index("spak_approvals_grant_idx").on(t.grantId),
   // At most one live approval per execution: concurrent approvals cannot both succeed.
   uniqueIndex("spak_approvals_active_uq").on(t.executionId).where(sql`invalidated_at is null`),
   index("spak_approvals_quote_idx").on(t.quoteId),
@@ -825,3 +830,62 @@ export const agentFundingChecks = pgTable("spak_agent_funding_checks", {
   minimumYocto: text("minimum_yocto").notNull(),
   checkedAt: timestamp("checked_at", { withTimezone: true }).notNull(),
 }, (t) => [index("spak_agent_funding_checks_agent_idx").on(t.agentId, t.checkedAt)]);
+
+/* ------------------------------------------------------------ Agent permission grants ------------------------------------------------------------ */
+
+/**
+ * Stage 10: what an Agent may approve without asking the user each time. Default is no grant (manual: the user
+ * approves every quote). A grant is created only from a NEP-413 signature by the Agent owner's verified key over the
+ * exact scope; a session alone cannot create or widen one. It only narrows Guard: Guard still checks every transfer.
+ * Versions are immutable: a change creates a new version and supersedes the old one. Pause and revoke need only a
+ * session, because they take authority away. The user's wallet still signs every deposit; SPak signs nothing.
+ */
+export const agentGrants = pgTable("spak_agent_grants", {
+  id: text("id").primaryKey(),
+  agentId: text("agent_id").notNull().references(() => agents.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  version: integer("version").notNull(),
+  status: text("status").notNull(), // ACTIVE | PAUSED | REVOKED | SUPERSEDED
+  scope: jsonb("scope").notNull(),
+  scopeHash: text("scope_hash").notNull(),
+  maxTransactionUsd: text("max_transaction_usd").notNull(),
+  dailyLimitUsd: text("daily_limit_usd").notNull(),
+  maxTransactions: integer("max_transactions").notNull(),
+  validFrom: timestamp("valid_from", { withTimezone: true }).notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  ownerAccountId: text("owner_account_id").notNull(),
+  signerPublicKey: text("signer_public_key").notNull(),
+  challengeId: text("challenge_id").notNull(),
+  messageSha256: text("message_sha256").notNull(),
+  signature: text("signature").notNull(),
+  pausedAt: timestamp("paused_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  endReason: text("end_reason"),
+  rowVersion: integer("row_version").notNull().default(1),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+}, (t) => [
+  uniqueIndex("spak_agent_grants_version_uq").on(t.agentId, t.version),
+  uniqueIndex("spak_agent_grants_live_uq").on(t.agentId).where(sql`status in ('ACTIVE','PAUSED')`),
+  uniqueIndex("spak_agent_grants_challenge_uq").on(t.challengeId),
+]);
+
+/** One-time grant challenges: the exact scope and message the owner signs. Verification uses this stored copy only. */
+export const agentGrantChallenges = pgTable("spak_agent_grant_challenges", {
+  id: text("id").primaryKey(),
+  agentId: text("agent_id").notNull().references(() => agents.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  version: integer("version").notNull(),
+  scope: jsonb("scope").notNull(),
+  scopeHash: text("scope_hash").notNull(),
+  ownerAccountId: text("owner_account_id").notNull(),
+  ownerPublicKey: text("owner_public_key").notNull(),
+  domain: text("domain").notNull(),
+  nonce: text("nonce").notNull(),
+  message: text("message").notNull(),
+  grantExpiresAt: timestamp("grant_expires_at", { withTimezone: true }).notNull(),
+  issuedAt: timestamp("issued_at", { withTimezone: true }).notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  outcome: text("outcome"),
+}, (t) => [uniqueIndex("spak_agent_grant_challenges_nonce_uq").on(t.nonce), index("spak_agent_grant_challenges_agent_idx").on(t.agentId, t.issuedAt)]);

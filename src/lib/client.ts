@@ -26,8 +26,9 @@ export interface Prepared { execution: ExecutionView; quote: QuoteView }
  * Hand a validated SPak-in plan to SPak Execution. The idempotency key is derived from the plan hash,
  * so pressing the button twice returns the same execution instead of creating two.
  */
-export function startExecution(planHash: string): Promise<Prepared> {
-  return api<Prepared>("/api/executions", { planHash }, "POST", { "idempotency-key": `ui-${planHash.slice(0, 40)}` });
+export function startExecution(planHash: string, agentId?: string | null): Promise<Prepared> {
+  // An Agent transfer uses its own key: the server refuses to re-attribute a plan between manual and Agent.
+  return api<Prepared>("/api/executions", agentId ? { planHash, agentId } : { planHash }, "POST", { "idempotency-key": `ui-${agentId ? "a-" : ""}${planHash.slice(0, 40)}` });
 }
 
 /** Smallest units to a readable decimal, using the verified registry decimals. */

@@ -36,6 +36,8 @@ export interface DepositDeps {
   guard: GuardService;
   /** Stage 9: an Agent transfer prepares a deposit only while its Agent can still act. Missing means refuse. */
   agents?: AgentGate;
+  /** Stage 10: re-checks an Agent approval's exact grant version at deposit. Missing means an Agent approval is refused. */
+  grants?: { assertStillValid(userId: string, row: ExecutionRow, approval: NonNullable<Awaited<ReturnType<ExecutionRecords["activeApproval"]>>>): Promise<void> };
 }
 
 /**
@@ -67,6 +69,13 @@ export class DepositService {
     if (!ok) throw new ExecutionError("WALLET_NOT_VERIFIED", "The wallet that must send this deposit is no longer verified on the source network.");
     // Stage 9: a suspended, revoked or expired Agent stops its transfers before any deposit instruction is issued.
     if (checkGuard) await assertAgent(this.d.agents, userId, ex.agentId);
+    // Stage 10: an approval made by the Agent counts only while its exact grant still stands, and Guard's full policy
+    // is applied again, so pausing, revoking or narrowing anything after the Agent approved stops the deposit here.
+    if (checkGuard && approval.approvedBy === "AGENT_GRANT") {
+      if (!this.d.grants) throw new ExecutionError("AGENT_GRANT_CHANGED", "Agent approvals cannot be checked on this server. Cancel and approve the transfer yourself.");
+      await this.d.grants.assertStillValid(userId, ex, approval);
+      await this.d.guard.recheckApproval(ex, quote!);
+    }
     // Guard: emergency controls, disabled networks and a live spending reservation.
     if (checkGuard) await this.d.guard.enforceDeposit(ex, quote);
     return { ex, approval, quote };

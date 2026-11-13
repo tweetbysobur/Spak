@@ -8,6 +8,7 @@ import { discoverNearWallets, signNear } from "@/wallets/near";
 import type { AgentView } from "@/agents/service";
 import { AgentWallets } from "./AgentWallets";
 import { AgentAccount } from "./AgentAccount";
+import { AgentPermissions } from "./AgentPermissions";
 
 interface Events { items: { id: number; event: string; fromStatus: string | null; toStatus: string | null; at: string }[] }
 const EVENT: Record<string, string> = {
@@ -108,6 +109,7 @@ export function AgentIdentity({ session }: { session: Session }) {
           )}
 
           <AgentAccount agent={agent} />
+          <AgentPermissions agent={agent} />
           <AgentWallets agent={agent} session={session} />
 
           {result && <Notice role={result.ok ? "success" : "error"} title={result.ok ? "Done" : "Not verified"}>{result.text}</Notice>}

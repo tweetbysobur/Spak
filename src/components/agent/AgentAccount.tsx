@@ -6,6 +6,7 @@ import { Notice } from "@/components/status";
 import type { AgentView } from "@/agents/service";
 import type { AccountView } from "@/agents/accounts";
 import { discoverNearWallets, signNear } from "@/wallets/near";
+import { AgentFunding } from "./AgentFunding";
 
 interface Rotation { id: string; status: string; newPublicKey: string; oldPublicKey: string; accountId: string; failureReason: string | null }
 interface Infra { state: "NOT_CONFIGURED" | "UNAVAILABLE" | "READY"; reason: string | null; network: string | null; parentAccountId: string | null; sponsorship: { remainingYocto: string; sponsoredAccounts: number; maxSponsoredAccounts: number; initialBalanceYocto: string } | null }
@@ -110,6 +111,7 @@ export function AgentAccount({ agent }: { agent: AgentView }) {
           <div><dt className="type-label text-fg-2">Created</dt><dd className="type-body-sm mt-1 text-fg">{a.createdOnChainAt ? new Date(a.createdOnChainAt).toLocaleString() : "–"}</dd><p className="type-caption text-fg-2">Sponsored by SPak on testnet · {a.sponsorship.toLowerCase().replace("_", " ")}</p></div>
           {a.status !== "REVOKED" && a.status !== "ACTIVE" && <div className="sm:col-span-2"><Button size="sm" variant="ghost" disabled={busy} onClick={recheck}>{busy ? "Checking NEAR" : "Check on NEAR again"}</Button></div>}
           {a.status === "ACTIVE" && <div className="sm:col-span-2"><Button size="sm" variant="ghost" disabled={busy} onClick={recheck}>{busy ? "Checking NEAR" : "Re-verify ownership"}</Button></div>}
+          {a.status === "ACTIVE" && <AgentFunding agentId={agent.id} accountId={a.accountId} />}
           <div className="sm:col-span-2 border-t border-line pt-3" data-account-checks>
             <p className="type-label text-fg-2">Checks on NEAR</p>
             <ul className="type-caption mt-1 flex flex-col gap-0.5 text-fg-2">

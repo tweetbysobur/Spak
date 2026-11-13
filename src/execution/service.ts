@@ -8,6 +8,7 @@ import { validateExecutionPlan, type PlanStore, type ValidatedPlan, type Verifie
 import { compareDecimal } from "../spak-in/lib/decimal";
 import { QuoteService, newId, providerError } from "./quote-service";
 import type { ExecutionRecords, ExecutionRow, QuoteRow } from "./records";
+import type { Db } from "../database/repositories";
 import { GuardDecisionError, guardError, type GuardService } from "../guard/service";
 import { cleanUsd } from "../guard/engine";
 import { DELAYED_AFTER_MS, TERMINAL, stateFromProvider, type ExecutionState } from "./state";
@@ -43,6 +44,14 @@ export interface ExecutionDeps {
   guard: GuardService;
   /** Stage 9: checks that an Agent may act for its owner. Without it, any Agent execution is refused (fail closed). */
   agents?: AgentGate;
+  /** Stage 10: Agent permissions. Without it, an Agent can never approve; the user approves every transfer. */
+  grants?: GrantAuthority;
+}
+
+/** Stage 10: the Agent's permission, checked before and inside an Agent approval. Implemented by AgentGrantService. */
+export interface GrantAuthority {
+  precheck(userId: string, row: ExecutionRow, firm: QuoteRow): Promise<{ grantId: string; grantVersion: number }>;
+  authorizeInTx(tx: Db, userId: string, row: ExecutionRow, firm: QuoteRow, expect: { grantId: string; grantVersion: number }): Promise<void>;
 }
 
 /** Can this user's Agent act right now? Throws ExecutionError AGENT_NOT_AUTHORIZED when not. Read from the server's own records. */
@@ -187,21 +196,54 @@ export class ExecutionService {
     const a = approvalSchema.parse(args.approval);
     const now = this.clock();
     const row = await this.mustGet(args.executionId, args.userId);
-    if (row.state === "AWAITING_DEPOSIT" || TERMINAL.has(row.state as ExecutionState) || ["PROCESSING", "FAILED", "REFUNDING", "VERIFYING_DESTINATION", "UNKNOWN"].includes(row.state)) {
-      const active = await this.d.records.activeApproval(row.id);
-      if (row.firmQuoteId && active?.quoteId === args.quoteId) return { execution: row, quote: await this.d.records.getQuote(row.firmQuoteId), duplicate: true };
-      throw new ExecutionError("INVALID_STATE", `This execution is ${row.state.toLowerCase().replaceAll("_", " ")}.`);
-    }
-    if (row.state !== "AWAITING_APPROVAL") throw new ExecutionError("INVALID_STATE", "This execution has no quote to approve yet.");
+    const done = await this.alreadyApproved(row, args.quoteId);
+    if (done) return done;
     if (a.planHash !== row.planHash || a.planRevision !== row.planRevision) throw new ExecutionError("APPROVAL_MISMATCH", "The approval is for a different plan or plan version.");
     const age = now.getTime() - Date.parse(a.approvedAt);
     if (age > APPROVAL_TTL_MS || age < -60_000) throw new ExecutionError("APPROVAL_EXPIRED", "The approval expired. Review the quote and approve again.");
-    if (row.currentQuoteId !== args.quoteId || row.firmQuoteId !== args.quoteId) {
-      const q = await this.d.records.getQuote(args.quoteId);
-      if (q?.executionId === row.id && q.kind === "INDICATIVE" && row.currentQuoteId === args.quoteId) throw new ExecutionError("FIRM_QUOTE_REQUIRED", "Review the firm quote before approving.");
+    const firm = await this.approvableFirm(row, args.userId, args.quoteId, args.wallets, a.allowDuplicate, now);
+    return this.commitApproval({ row, firm, userId: args.userId, approvedAt: new Date(a.approvedAt), allowDuplicate: a.allowDuplicate, now, actor: `user:${args.userId}`, reason: "Firm quote approved by the user." });
+  }
+
+  /**
+   * Stage 10: the Agent approves the firm quote under the user's signed permission, without the user reviewing it.
+   * Only for transfers started through the Agent, only within the grant AND Guard (both checked again inside the
+   * approval transaction with the Agent, grant and Guard rows locked), never for a suspected duplicate. Anything
+   * outside the grant is AGENT_APPROVAL_REQUIRED: the user approves it themselves with approve(). The deposit still
+   * needs the user's wallet signature.
+   */
+  async approveByAgent(args: { userId: string; executionId: string; quoteId: string; wallets: VerifiedWallet[] }) {
+    const now = this.clock();
+    const row = await this.mustGet(args.executionId, args.userId);
+    const done = await this.alreadyApproved(row, args.quoteId);
+    if (done) return done;
+    if (!row.agentId) throw new ExecutionError("AGENT_APPROVAL_REQUIRED", "This transfer was not started through your Agent. Approve it yourself.");
+    if (!this.d.grants) throw new ExecutionError("AGENT_APPROVAL_REQUIRED", "Agent approvals are not available on this server. Approve it yourself.");
+    const firm = await this.approvableFirm(row, args.userId, args.quoteId, args.wallets, false, now);
+    let grant: { grantId: string; grantVersion: number };
+    try { grant = await this.d.grants.precheck(args.userId, row, firm); } catch (e) { throw asApprovalRequired(e); }
+    return this.commitApproval({ row, firm, userId: args.userId, approvedAt: now, allowDuplicate: false, now, actor: `agent:${row.agentId}`, reason: `Firm quote approved by the Agent under permission version ${grant.grantVersion}.`, grant });
+  }
+
+  /** A repeat approval of an execution already past approval returns it as a duplicate, or is refused. */
+  private async alreadyApproved(row: ExecutionRow, quoteId: string) {
+    if (row.state === "AWAITING_DEPOSIT" || TERMINAL.has(row.state as ExecutionState) || ["PROCESSING", "FAILED", "REFUNDING", "VERIFYING_DESTINATION", "UNKNOWN"].includes(row.state)) {
+      const active = await this.d.records.activeApproval(row.id);
+      if (row.firmQuoteId && active?.quoteId === quoteId) return { execution: row, quote: await this.d.records.getQuote(row.firmQuoteId), duplicate: true as const };
+      throw new ExecutionError("INVALID_STATE", `This execution is ${row.state.toLowerCase().replaceAll("_", " ")}.`);
+    }
+    if (row.state !== "AWAITING_APPROVAL") throw new ExecutionError("INVALID_STATE", "This execution has no quote to approve yet.");
+    return null;
+  }
+
+  /** Every check on the firm quote shared by user and Agent approvals. Returns the firm quote. */
+  private async approvableFirm(row: ExecutionRow, userId: string, quoteId: string, wallets: VerifiedWallet[], allowDuplicate: boolean, now: Date): Promise<QuoteRow> {
+    if (row.currentQuoteId !== quoteId || row.firmQuoteId !== quoteId) {
+      const q = await this.d.records.getQuote(quoteId);
+      if (q?.executionId === row.id && q.kind === "INDICATIVE" && row.currentQuoteId === quoteId) throw new ExecutionError("FIRM_QUOTE_REQUIRED", "Review the firm quote before approving.");
       throw new ExecutionError("QUOTE_NOT_CURRENT", "That quote was replaced. Review the latest quote.");
     }
-    const firm = await this.d.records.getQuote(args.quoteId);
+    const firm = await this.d.records.getQuote(quoteId);
     if (!firm || firm.kind !== "FIRM" || firm.status !== "VALID") throw new ExecutionError("QUOTE_NOT_CURRENT", "That quote can no longer be approved.");
     if (now.getTime() - firm.createdAt.getTime() > FIRM_APPROVAL_TTL_MS || (firm.providerDeadline && firm.providerDeadline.getTime() <= now.getTime())) {
       await this.d.records.setQuoteStatus(firm.id, "EXPIRED", "VALID");
@@ -217,40 +259,50 @@ export class ExecutionService {
     if (!usdIn || compareDecimal(usdIn, limit) > 0) {
       throw new ExecutionError("AMOUNT_LIMIT_EXCEEDED", firm.amountInUsd ? `This is about $${Number(firm.amountInUsd).toFixed(2)}, above the $${limit} limit per execution.` : "The USD value of this execution is unknown, so it cannot be checked against the limit.");
     }
-    await this.prepare(args.userId, row.planHash, args.wallets);
+    await this.prepare(userId, row.planHash, wallets);
     // An Agent transfer is approved only while the Agent can still act: a suspended or revoked Agent stops it here.
-    await assertAgent(this.d.agents, args.userId, row.agentId);
-    if (!a.allowDuplicate) {
-      const recent = await this.d.records.recentSameTransfer(args.userId, row.fingerprint, new Date(now.getTime() - DUPLICATE_WINDOW_MS), row.id);
+    await assertAgent(this.d.agents, userId, row.agentId);
+    if (!allowDuplicate) {
+      const recent = await this.d.records.recentSameTransfer(userId, row.fingerprint, new Date(now.getTime() - DUPLICATE_WINDOW_MS), row.id);
       if (recent.length) throw new ExecutionError("DUPLICATE_SUSPECTED", "You started the same transfer less than 2 minutes ago. Confirm to do it again.", { existing: recent[0].id });
     }
+    return firm;
+  }
 
+  private async commitApproval(c: { row: ExecutionRow; firm: QuoteRow; userId: string; approvedAt: Date; allowDuplicate: boolean; now: Date; actor: string; reason: string; grant?: { grantId: string; grantVersion: number } }) {
+    const { row, firm, now } = c;
     const approval = await this.d.records.insertApproval({
-      id: newId("apv"), executionId: row.id, userId: args.userId, quoteId: firm.id, planHash: row.planHash, planRevision: row.planRevision,
-      approvedAt: new Date(a.approvedAt), createdAt: now,
+      id: newId("apv"), executionId: row.id, userId: c.userId, quoteId: firm.id, planHash: row.planHash, planRevision: row.planRevision,
+      approvedAt: c.approvedAt, createdAt: now,
+      ...(c.grant ? { approvedBy: "AGENT_GRANT", grantId: c.grant.grantId, grantVersion: c.grant.grantVersion } : { approvedBy: "USER" }),
     });
     if (!approval) throw new ExecutionError("APPROVAL_IN_PROGRESS", "This execution is already approved.");
     const claimed = await this.d.records.claimApproval(row.id);
     if (!claimed) { await this.d.records.invalidateApprovals(row.id, "Lost approval race."); throw new ExecutionError("APPROVAL_IN_PROGRESS", "This execution is already being approved."); }
-    // Guard reserves spending in the same database transaction as the state change. If Guard blocks, nothing is approved.
+    // The Agent's permission (when used) and Guard are both checked in the same database transaction as the state
+    // change, and Guard reserves spending there. If either refuses, nothing is approved.
     let r: ExecutionRow | null;
     try {
-      r = await this.d.records.transition(row.id, "AWAITING_APPROVAL", "AWAITING_DEPOSIT", "Firm quote approved by the user.", {
+      r = await this.d.records.transition(row.id, "AWAITING_APPROVAL", "AWAITING_DEPOSIT", c.reason, {
         depositAddress: firm.depositAddress, depositMemo: firm.depositMemo, depositDeadline: firm.providerDeadline,
-      }, { approvalId: approval.id, firmQuoteId: firm.id, allowDuplicate: a.allowDuplicate }, async (tx, updated) => { await this.d.guard.reserveInTx(tx, updated, firm); });
+      }, { approvalId: approval.id, firmQuoteId: firm.id, allowDuplicate: c.allowDuplicate, approvedBy: approval.approvedBy, ...(c.grant ?? {}) }, async (tx, updated) => {
+        if (c.grant) await this.d.grants!.authorizeInTx(tx, c.userId, updated, firm, c.grant);
+        await this.d.guard.reserveInTx(tx, updated, firm);
+      });
     } catch (e) {
-      await this.d.records.invalidateApprovals(row.id, e instanceof GuardDecisionError ? "Blocked by Guard." : "Approval failed.");
+      await this.d.records.invalidateApprovals(row.id, e instanceof GuardDecisionError ? "Blocked by Guard." : (e as Error).name === "GrantDecisionError" ? "Outside the Agent's permission." : "Approval failed.");
       await this.d.records.releaseApproval(row.id);
       if (e instanceof GuardDecisionError) {
-        await this.d.guard.record(args.userId, e.decision).catch(() => {});
+        await this.d.guard.record(c.userId, e.decision).catch(() => {});
         throw guardError(e.decision);
       }
+      if ((e as Error).name === "GrantDecisionError") throw asApprovalRequired(e);
       if (e instanceof ExecutionError) throw e;
       console.error("[spak-execution] approval failed", e);
       throw new ExecutionError("GUARD_UNAVAILABLE", "Guard could not check this transfer, so it was not approved. Try again shortly.");
     }
     if (!r) throw new ExecutionError("INVALID_STATE", "The execution changed during approval. Reload it.");
-    await this.d.audit?.record({ at: now.toISOString(), actor: `user:${args.userId}`, event: "EXECUTION_APPROVED", ref: row.id, data: { approvalId: approval.id, planHash: row.planHash, planRevision: row.planRevision, firmQuoteId: firm.id, depositAddress: firm.depositAddress, amountInUsd: firm.amountInUsd } });
+    await this.d.audit?.record({ at: now.toISOString(), actor: c.actor, event: "EXECUTION_APPROVED", ref: row.id, data: { approvalId: approval.id, approvedBy: approval.approvedBy, grantId: approval.grantId, grantVersion: approval.grantVersion, planHash: row.planHash, planRevision: row.planRevision, firmQuoteId: firm.id, depositAddress: firm.depositAddress, amountInUsd: firm.amountInUsd } });
     return { execution: r, quote: firm, duplicate: false, approval };
   }
 
@@ -377,6 +429,13 @@ export class ExecutionService {
   async history(userId: string, opts: { limit: number; before?: Date }) {
     return (await this.d.records.list(userId, opts)).map((r) => toExecutionView(r, [], [], this.clock()));
   }
+}
+
+/** A grant refusal becomes "approve it yourself", with the reasons. Anything else passes through unchanged. */
+function asApprovalRequired(e: unknown): unknown {
+  const g = e as { name?: string; message?: string; reasons?: string[]; rules?: unknown[] };
+  if (g?.name !== "GrantDecisionError") return e;
+  return new ExecutionError("AGENT_APPROVAL_REQUIRED", `${g.message} Approve this transfer yourself.`, { reasons: g.reasons ?? [], rules: g.rules ?? [] });
 }
 
 function fingerprint(userId: string, v: ValidatedPlan): string {

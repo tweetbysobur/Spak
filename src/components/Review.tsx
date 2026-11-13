@@ -27,6 +27,7 @@ export function Review({ intent, execution, quote: initial, onApproved, onCancel
   const [ack, setAck] = useState(false);
   const [dupe, setDupe] = useState(false);
   const [stale, setStale] = useState(false);
+  const [needsYou, setNeedsYou] = useState<string[] | null>(null);
   const firm = quote.kind === "FIRM";
 
   const run = async (fn: () => Promise<void>) => {
@@ -35,6 +36,8 @@ export function Review({ intent, execution, quote: initial, onApproved, onCancel
       const k = classifyWalletError(e);
       if ((e as { code?: string }).code === "DUPLICATE_SUSPECTED") setDupe(true);
       if (k.kind === "QUOTE_EXPIRED") setStale(true);
+      const d = e as { code?: string; details?: { reasons?: string[] } };
+      if (d.code === "AGENT_APPROVAL_REQUIRED") { setNeedsYou(d.details?.reasons ?? []); return; }
       setError(k.message);
     } finally { setBusy(false); }
   };
@@ -50,6 +53,12 @@ export function Review({ intent, execution, quote: initial, onApproved, onCancel
     const r = await api<{ execution: ExecutionView }>(`/api/executions/${execution.id}/approve`, {
       quoteId: quote.id, approval: { planHash: execution.plan.planHash, planRevision: execution.plan.revision, approvedAt: new Date().toISOString(), allowDuplicate },
     });
+    onApproved(r.execution);
+  });
+
+  /** Stage 10: the Agent approves under the signed permission. Outside it, the server says so and the user approves below. */
+  const agentApprove = () => run(async () => {
+    const r = await api<{ execution: ExecutionView }>(`/api/executions/${execution.id}/agent-approve`, { quoteId: quote.id });
     onApproved(r.execution);
   });
 
@@ -120,13 +129,20 @@ export function Review({ intent, execution, quote: initial, onApproved, onCancel
           <span>I approve exactly this transaction: send <b className="type-amount">{formatUnits(quote.source.amountIn, src)}</b> to the deposit address above, delivering at least <b className="type-amount">{formatUnits(quote.destination.minAmountOut, dst)}</b> to the recipient. My wallet will still ask me to sign the deposit.</span>
         </label>
       )}
+      {needsYou && <Notice role="warning" title="Your Agent cannot approve this one" className="mt-4">
+        {needsYou.length ? <ul className="list-disc pl-4">{needsYou.map((x) => <li key={x}>{x}</li>)}</ul> : null}
+        <p className="mt-1">Review it and approve it yourself, or cancel.</p>
+      </Notice>}
       {dupe && <Notice role="warning" title="You started the same transfer recently" className="mt-4">Approve again only if you really want to send it twice.</Notice>}
       {error && <ErrorText>{error}</ErrorText>}
       <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap">
         <Button variant="ghost" onClick={async () => { await api(`/api/executions/${execution.id}/cancel`, {}).catch(() => {}); onCancel(); }}>Cancel</Button>
         {dupe && <Button variant="secondary" onClick={() => approve(true)} disabled={busy}>Yes, do it again</Button>}
         {stale ? <Button onClick={requote} disabled={busy}>Get a new quote</Button>
-          : firm ? <Button onClick={() => approve(false)} disabled={!ack || busy}>{busy ? "Approving" : "Approve"}</Button>
+          : firm ? <>
+            {execution.agentId && !needsYou && <Button variant="secondary" onClick={agentApprove} disabled={busy} data-agent-approve>{busy ? "Asking your Agent" : "Let my Agent approve"}</Button>}
+            <Button onClick={() => approve(false)} disabled={!ack || busy}>{busy ? "Approving" : "Approve"}</Button>
+          </>
           : <Button onClick={getFirm} disabled={busy}>{busy ? "Getting firm quote" : "Get firm quote"}</Button>}
       </div>
     </Card>

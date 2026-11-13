@@ -11,6 +11,7 @@ import { FailureRecords, FailureService, RefundVerifier, ReviewService } from "@
 import { AuthError } from "@/auth/types";
 import { GuardService } from "@/guard";
 import { DbAgentGate } from "@/agents/gate";
+import { AgentGrantService } from "@/agents/grants";
 import { actingProblem } from "@/agents/authority";
 import { agents as agentsTable } from "@/database/schema";
 import { and, eq } from "drizzle-orm";
@@ -36,11 +37,13 @@ async function build() {
   const guard = new GuardService({ db, audit });
   // Stage 9: Agent authority is read from the database at create, approval and deposit.
   const agentGate = new DbAgentGate(db);
-  const execution = new ExecutionService({ client, records: executionRecords, plans: new IntentLogPlanStore(db), audit, guard, agents: agentGate });
+  // Stage 10: the Agent's signed permission. Checked before and inside an Agent approval, and again at deposit.
+  const grants = new AgentGrantService({ db });
+  const execution = new ExecutionService({ client, records: executionRecords, plans: new IntentLogPlanStore(db), audit, guard, agents: agentGate, grants });
   // Deposits extend the same execution engine: same records, same provider client, plus source-chain RPC.
   const rpc = httpChainRpc();
   const depositRecords = new DepositRecords(db);
-  const deposits = new DepositService({ records: depositRecords, executions: executionRecords, executionService: execution, rpc, client, audit, guard, agents: agentGate });
+  const deposits = new DepositService({ records: depositRecords, executions: executionRecords, executionService: execution, rpc, client, audit, guard, agents: agentGate, grants });
   // Tracking: background monitor and destination-chain verification over the same records. Not a second engine.
   const tracking = new TrackingRecords(db);
   const destination = new DestinationVerifier({ executions: executionRecords, tracking, rpc, audit });
@@ -54,7 +57,7 @@ async function build() {
     log: (msg, data) => console.warn(`[spak-monitor] ${msg}`, JSON.stringify(data ?? {})),
   });
   const trackingService = new TrackingService({ executions: executionRecords, execution, tracking, depositRecords, destination, failures });
-  return { engine, execution, deposits, monitor, tracking: trackingService, failures, reviews, guard };
+  return { engine, execution, deposits, monitor, tracking: trackingService, failures, reviews, guard, grants };
 }
 
 const g = globalThis as unknown as { __spak?: ReturnType<typeof build> };

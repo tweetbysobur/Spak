@@ -2,6 +2,7 @@ import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { Db } from "../database/repositories";
 import { agentEvents, agentWalletChallenges, agentWallets } from "../database/schema";
 import { cascadeAgentAccount } from "./accounts";
+import { cascadeAgentGrants } from "./grants";
 
 /**
  * How an Agent's lifecycle change applies to its wallet associations. Runs inside the Agent's own state-change
@@ -12,6 +13,8 @@ import { cascadeAgentAccount } from "./accounts";
  */
 export async function cascadeAgentStatus(tx: Db, a: { id: string; userId: string }, from: string, to: string, now: Date) {
   await cascadeAgentAccount(tx, a, from, to, now);
+  // Stage 10: a suspended Agent's permission is paused (resuming it is a separate, explicit step); a revoked one is revoked.
+  await cascadeAgentGrants(tx, a, to, now);
   const log = async (rows: { id: string }[], event: string, toStatus: string) => {
     for (const r of rows) await tx.insert(agentEvents).values({ agentId: a.id, userId: a.userId, event, fromStatus: null, toStatus, data: { associationId: r.id, cause: `AGENT_${to}` }, at: now });
   };
