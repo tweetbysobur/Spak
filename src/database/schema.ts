@@ -602,3 +602,61 @@ export const guardReservations = pgTable("spak_guard_reservations", {
   settledAt: timestamp("settled_at", { withTimezone: true }),
   settleReason: text("settle_reason"),
 }, (t) => [uniqueIndex("spak_guard_reservations_exec_uq").on(t.executionId), index("spak_guard_reservations_user_idx").on(t.userId, t.status, t.reservedAt)]);
+
+/* ------------------------------------------------------------ SPak Agent identity ------------------------------------------------------------ */
+
+/**
+ * SPak Agent identity (Stage 5). Independent of connected wallets. Creating one grants no transaction permission.
+ * Ownership is proven by a NEP-413 signature from a full-access key of the owner's NEAR account (checked on chain).
+ * Owner fields are set only by a successful proof; nothing a client sends sets them directly.
+ */
+export const agents = pgTable("spak_agents", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  displayName: text("display_name").notNull(),
+  status: text("status").notNull(), // CREATED | PENDING_VERIFICATION | VERIFIED | SUSPENDED | REVOKED
+  ownerNetwork: text("owner_network"), // near
+  ownerAccountId: text("owner_account_id"),
+  ownerPublicKey: text("owner_public_key"),
+  verificationMethod: text("verification_method"), // NEAR_NEP413_FULL_ACCESS_KEY
+  verifiedAt: timestamp("verified_at", { withTimezone: true }),
+  verificationExpiresAt: timestamp("verification_expires_at", { withTimezone: true }),
+  /** sha256 of the canonical attestation record for the last successful proof. Off-chain evidence, not an on-chain proof. */
+  attestationHash: text("attestation_hash"),
+  attestation: jsonb("attestation"),
+  suspendedAt: timestamp("suspended_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  schemaVersion: integer("schema_version").notNull().default(1),
+  version: integer("version").notNull().default(1),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+}, (t) => [index("spak_agents_user_idx").on(t.userId)]);
+
+/** One-time ownership challenges. The exact message is stored; the server verifies against its own copy. */
+export const agentChallenges = pgTable("spak_agent_challenges", {
+  id: text("id").primaryKey(),
+  agentId: text("agent_id").notNull().references(() => agents.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  purpose: text("purpose").notNull(), // AGENT_OWNERSHIP
+  method: text("method").notNull(), // NEAR_NEP413_FULL_ACCESS_KEY
+  ownerAccountId: text("owner_account_id").notNull(),
+  recipient: text("recipient").notNull(),
+  nonce: text("nonce").notNull(), // 32 bytes, hex
+  message: text("message").notNull(),
+  issuedAt: timestamp("issued_at", { withTimezone: true }).notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  outcome: text("outcome"), // VERIFIED | FAILED
+}, (t) => [uniqueIndex("spak_agent_challenges_nonce_uq").on(t.nonce), index("spak_agent_challenges_agent_idx").on(t.agentId, t.issuedAt)]);
+
+/** Append-only identity audit trail. Updates are refused by a database trigger. */
+export const agentEvents = pgTable("spak_agent_events", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  agentId: text("agent_id").notNull().references(() => agents.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull(),
+  event: text("event").notNull(),
+  fromStatus: text("from_status"),
+  toStatus: text("to_status"),
+  data: jsonb("data").notNull().default({}),
+  at: timestamp("at", { withTimezone: true }).notNull(),
+}, (t) => [index("spak_agent_events_agent_idx").on(t.agentId, t.at)]);

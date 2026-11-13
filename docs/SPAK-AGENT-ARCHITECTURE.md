@@ -10,7 +10,8 @@ Related: [Identity model](SPAK-AGENT-IDENTITY-MODEL.md), [Permissions](SPAK-AGEN
 |---|---|---|
 | Wallet sign-in and linking | Live. EVM (EIP-4361 style), Solana (SIWS style), NEAR (NEP-413). One-time challenges, 5 minute expiry, server-side verification, unique `(family, address)` | `src/auth/`, `docs/AUTH.md` |
 | Sessions | Live. HttpOnly cookie, hashed token, 7 day absolute and 24 hour idle expiry, logout and logout-all | `src/auth/service.ts` |
-| Agent identity | Foundation only. Table `spak_agent_identities` (one row per user, status `NOT_LINKED` or `LINKED`, optional `nearAccountId` taken from a verified NEAR wallet). No keys, no signing, no permissions | `src/database/schema.ts`, `src/app/api/agent/identity/route.ts` |
+| Agent identity (Stage 5) | Implemented: `spak_agents`, NEP-413 ownership proof checked on chain, off-chain attestation, lifecycle, audit trail. See identity model section 8 |
+| Linked NEAR wallet (earlier) | Foundation only. Table `spak_agent_identities` (one row per user, status `NOT_LINKED` or `LINKED`, optional `nearAccountId` taken from a verified NEAR wallet). No keys, no signing, no permissions | `src/database/schema.ts`, `src/app/api/agent/identity/route.ts` |
 | Access mode | SPak-in accepts `MANUAL` or `AGENT`. `AGENT` is only honoured when the identity is `LINKED`, and autonomy is forced off on the server | `src/app/api/spak-in/interpret/route.ts` |
 | SPak Guard | Live in code, not deployed. Per-user policy, server-side enforcement at plan, quote, firm quote, approval and deposit, spending reservations | `docs/SPAK-GUARD-*.md` |
 | Execution | NEAR Intents 1Click deposit-address flow. The user's own wallet sends every deposit. SPak signs nothing | `docs/SPAK-EXECUTION.md` |

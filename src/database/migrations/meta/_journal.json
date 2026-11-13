@@ -71,6 +71,13 @@
       "when": 1794538760137,
       "tag": "0009_guard_policies",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794565482011,
+      "tag": "0010_agent_identity",
+      "breakpoints": true
     }
   ]
 }

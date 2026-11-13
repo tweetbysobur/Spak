@@ -6,6 +6,7 @@ import { WalletsPanel } from "@/components/WalletsPanel";
 import { Card, SectionTitle } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { GuardPage } from "@/components/guard/GuardPage";
+import { AgentIdentity } from "@/components/agent/AgentIdentity";
 
 function Lists({ live, planned }: { live: readonly string[]; planned: readonly string[] }) {
   return (
@@ -54,9 +55,10 @@ export function Agent({ session, refresh, signedOut }: { session: Session; refre
         <SectionTitle>Manual Access and SPak Agent</SectionTitle>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="rounded-card border border-primary p-4"><p className="type-app-subheading text-fg">Manual Access <span className="type-status ml-1 text-primary">· in use</span></p><p className="type-body-sm mt-1 text-fg-2">You approve each transfer and your wallet signs it. This is how SPak works today.</p></div>
-          <div className="rounded-card border border-dashed border-line-strong p-4"><p className="type-app-subheading text-fg">SPak Agent <span className="type-status ml-1 text-fg-2">· {session.agent.status === "LINKED" ? "identity linked" : "not linked"}</span></p><p className="type-body-sm mt-1 text-fg-2">A NEAR identity linked to your account. Acting within your limits is planned; today it cannot sign or move funds.</p></div>
+          <div className="rounded-card border border-dashed border-line-strong p-4"><p className="type-app-subheading text-fg">SPak Agent <span className="type-status ml-1 text-fg-2">· foundation</span></p><p className="type-body-sm mt-1 text-fg-2">An identity you prove you own with a NEAR key. It has no permissions yet: you still approve every transfer.</p></div>
         </div>
       </Card>
+      <AgentIdentity session={session} />
       <WalletsPanel session={session} refresh={refresh} signedOut={signedOut} />
     </Module>
   );

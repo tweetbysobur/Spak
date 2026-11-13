@@ -61,7 +61,7 @@ export function WalletsPanel({ session, refresh, signedOut }: { session: Session
       {linking && <WalletPicker purpose="LINK" onDone={async () => { setLinking(false); await refresh(); }} />}
 
       <Card>
-        <SectionTitle sub="Your agent identity is a NEAR account you own. Linking it does not give SPak any key or signing power. Autonomous execution is not available yet.">SPak Agent identity</SectionTitle>
+        <SectionTitle sub="Marks one of your connected NEAR wallets for Agent mode in instructions. It is a connected wallet, not a dedicated SPak Agent account, and gives SPak no key or signing power. Your Agent identity and its ownership proof are on the Agent page.">Linked NEAR wallet for Agent mode</SectionTitle>
         {session.agent.status === "LINKED" ? (
           <div className="flex flex-wrap items-center justify-between gap-3">
             <Mono value={session.agent.nearAccountId ?? ""} full />

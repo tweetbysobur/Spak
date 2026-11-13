@@ -4,7 +4,8 @@ Status: proposal for review. Identity and wallet association come before permiss
 
 ## Stages
 
-### Stage 5: Agent data model and linked identity (no NEAR creation)
+### Stage 5: Agent data model and linked identity (no NEAR creation) [implemented on feature/spak-agent-identity]
+- **Built**: see [Identity model, section 8](SPAK-AGENT-IDENTITY-MODEL.md#8-stage-5-implementation-built). On-chain attestation is designed there, not built. The legacy `spak_agent_identities` table was kept, not migrated.
 - **Objective**: replace the single-row agent identity with the `spak_agents` model; keep today's linked-NEAR behaviour as identity-only L0.
 - **Scope**: tables `spak_agents`, `spak_agent_events`; migration of `spak_agent_identities`; owner proof by NEP-413 plus on-chain `view_access_key` check.
 - **Dependencies**: existing auth.

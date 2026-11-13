@@ -118,3 +118,110 @@ stateDiagram-v2
 | Recover | Owner | Only through a backup full-access key the owner added. SPak cannot recover a lost key |
 | Migrate identity | Owner | Signatures from both the old and new accounts |
 | Delete | Owner | Session plus confirmation. Deletes SPak records; the NEAR account stays under the owner's keys |
+
+## 8. Stage 5 implementation (built)
+
+This section describes code on `feature/spak-agent-identity`. Everything above it is the target design.
+
+### Implemented vs planned
+
+| Capability | Status |
+|---|---|
+| Agent identity record, independent of wallets, no NEAR account needed | Implemented |
+| Lifecycle `CREATED → PENDING_VERIFICATION → VERIFIED`, `SUSPENDED`, `REVOKED` (terminal) | Implemented |
+| Ownership proof: NEP-413 signature from a full-access key of a NEAR account, checked on chain | Implemented |
+| Off-chain ownership attestation (canonical record + sha256), stored in SPak's database | Implemented, labelled "not on chain" everywhere |
+| Append-only audit trail (database trigger refuses updates) | Implemented |
+| On-chain ownership attestation (registry contract) | Not implemented. Designed below; blocked on decisions |
+| Dedicated Agent NEAR account | Not implemented (Stage 7). The API always returns `dedicatedAccount.state = NOT_AVAILABLE` |
+| Wallet association, permission grants, Chain Signatures, autonomy | Not implemented |
+
+### Separate concepts, kept separate
+
+| Concept | Proves | Implemented by |
+|---|---|---|
+| Application login | The user holds a SPak session | Session cookie (`docs/AUTH.md`) |
+| Ownership proof | The user controls a full-access key of a NEAR account, now | `POST /api/agents/:id/verify` |
+| Off-chain attestation | SPak recorded that proof (hash of the exact record) | `spak_agents.attestation_hash` |
+| On-chain attestation | A public, independently verifiable record | Not built |
+| Wallet association, transaction authorisation | Later stages | Not built |
+
+A login never sets ownership. Only a valid proof sets the owner fields and `VERIFIED`. No step grants permission to move funds.
+
+### Challenge and proof
+
+1. `POST /api/agents/:id/challenge { accountId }` issues a one-time challenge. It stores the exact message, a 32-byte nonce, the recipient (the server's configured origin host, never the request body), purpose `AGENT_OWNERSHIP`, method `NEAR_NEP413_FULL_ACCESS_KEY`, issue and expiry times (5 minutes).
+2. The signed message names: Agent id, a privacy-preserving user reference (`spak-user:` + truncated sha256, never the raw user id), NEAR account, purpose, method, domain, issue and expiry times, challenge id.
+3. The wallet signs it with NEP-413 (`signMessage`, recipient = app host, the challenge nonce).
+4. `POST /api/agents/:id/verify` consumes the challenge atomically (`UPDATE ... WHERE used_at IS NULL AND expires_at > now`), then verifies with the existing `verifyNearSignature`:
+   - ed25519 signature over the NEP-413 payload of the stored message, nonce and recipient;
+   - implicit account: the key must equal the account id;
+   - named account: NEAR RPC `view_access_key` must return `FullAccess` for that key. Function-call keys are refused.
+5. Refused: expired, reused, other Agent's or other user's challenge, account different from the challenge, wrong domain, unsupported method, invalid signature, key not on the account, RPC unavailable (fails closed). A failure consumes the challenge, records `VERIFICATION_FAILED` and leaves the status unchanged.
+6. Success writes owner fields, `verified_at`, `verification_expires_at` (180 days), the attestation record and its hash, and a `VERIFIED` event, in one transaction with compare-and-set on status and version.
+
+### Lifecycle rules
+
+| From | Allowed to | How |
+|---|---|---|
+| CREATED | PENDING_VERIFICATION, SUSPENDED, REVOKED | First challenge; owner session |
+| PENDING_VERIFICATION | VERIFIED, SUSPENDED, REVOKED | Valid proof; owner session |
+| VERIFIED | VERIFIED (re-verify or key rotation on the same account), SUSPENDED, REVOKED | Proof; owner session |
+| SUSPENDED | VERIFIED, REVOKED | Fresh proof only; owner session |
+| REVOKED | none | Terminal. A new Agent can be created |
+
+- The owner NEAR account is locked once verified. Using another account needs a new Agent. This stops a stolen session from suspending an Agent and re-binding it to the attacker's account.
+- The owner public key may change only through a new proof from a current full-access key of the same account.
+- Suspending or revoking closes every open challenge.
+- Ownership counts for later stages only when `ownershipCurrent()` is true: status `VERIFIED` and not past `verification_expires_at`.
+
+### Database (migration `0010_agent_identity`)
+
+| Table | Notes |
+|---|---|
+| `spak_agents` | One live Agent per user (partial unique index where status is not REVOKED). One live Agent per NEAR owner account across users. Check constraints: valid status; `VERIFIED` requires owner account, key, method, `verified_at` and attestation hash; `REVOKED` if and only if `revoked_at` |
+| `spak_agent_challenges` | Unique nonce; purpose and method constrained; `used_at` and `outcome` |
+| `spak_agent_events` | Append-only: a trigger refuses `UPDATE`. Rows go only with their Agent |
+
+The earlier `spak_agent_identities` table (linked NEAR wallet for Agent mode) is unchanged and still gates `mode: AGENT` in SPak-in. It is relabelled in the app as "Linked NEAR wallet for Agent mode", not as the Agent identity. Merging the two is a decision for Stage 6.
+
+### API
+
+All routes need a session, enforce same-origin on writes, validate with strict Zod schemas (unknown fields such as `status` are rejected), and scope every query to the session user. Another user's Agent returns 404.
+
+| Method and path | Body | Result |
+|---|---|---|
+| `GET /api/agents` | | `{ agent, revoked[] }` |
+| `POST /api/agents` | `{ displayName }` | 201 `{ agent }` |
+| `GET /api/agents/:id` | | `{ agent }` with `ownership` status |
+| `POST /api/agents/:id/challenge` | `{ accountId }` | `{ challengeId, method, message, nonce, recipient, accountId, expiresAt }` |
+| `POST /api/agents/:id/verify` | `{ challengeId, method, accountId, publicKey, signature }` | `{ agent }` |
+| `POST /api/agents/:id/suspend` | `{}` | `{ agent }` |
+| `POST /api/agents/:id/revoke` | `{ confirm: "REVOKE" }` | `{ agent }` |
+| `GET /api/agents/:id/events` | | `{ items[] }` |
+
+Errors use `{ error: { code, message } }` with codes `AGENT_*`. Responses never include the user id, nonce or stored signature.
+
+### On-chain attestation: design (not built)
+
+Why not now: the environment has no wasm toolchain or NEAR sandbox, and a registry needs a SPak-owned NEAR account (unresolved decision 1). Nothing was deployed or registered.
+
+Proposed minimal registry contract (`agent-registry.<spak-parent>.near`):
+
+| Method | Caller | Effect |
+|---|---|---|
+| `attest(agent_ref, attestation_hash, version)` | The owner NEAR account (the transaction signer is the proof) | Stores `{ owner: predecessor_account_id, attestation_hash, version, block_timestamp }` under `agent_ref`; emits a NEP-297 event `spak_agent_attested` |
+| `revoke(agent_ref)` | The same owner account only | Marks revoked; emits `spak_agent_revoked` |
+| `get(agent_ref)` | Anyone (view) | Returns the record |
+
+- `agent_ref` = sha256 of the Agent id with a SPak salt; no user data on chain.
+- Duplicate `attest` from another account for the same `agent_ref` is refused; the first owner can update by a new `attest`.
+- The contract holds no funds and gives SPak no authority; SPak only reads it.
+- Open: who pays the storage deposit (the owner, by attaching it, or a SPak relayer via NEP-366), and the parent account.
+
+### Known limitations
+
+- Ownership is checked on chain only at proof time. A key removed later is noticed at the next re-verification or expiry (periodic re-checks are Stage 6 work).
+- NEAR RPC is the public mainnet endpoint unless `NEAR_RPC_URL` is set. It is a trust dependency for named accounts.
+- One live Agent per user for now.
+- The NEAR wallet's redirect fallback is not resumed for Agent proofs; the user restarts verification.
