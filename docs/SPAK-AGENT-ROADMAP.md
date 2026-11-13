@@ -86,3 +86,7 @@ Decisions to make now so it is not blocked later:
 
 ## Recommended next stage
 Stage 5. It removes the current gap (a label without a verified owner key), needs no new NEAR infrastructure, and every later stage depends on it.
+
+## Hardening stage (implemented on feature/spak-agent-account-hardening)
+
+Strict dedicated-account verification with evidence, consent binding, row locking, owner-authorised key rotation, honest lost-key handling, and fresh wallet proofs after Agent suspension. See [Identity model, section 11](SPAK-AGENT-IDENTITY-MODEL.md#11-hardening-feature-spak-agent-account-hardening) and [Security, sections 6 and mainnet blockers](SPAK-AGENT-SECURITY.md#6-hardening-implemented). Nothing here was run against live testnet.

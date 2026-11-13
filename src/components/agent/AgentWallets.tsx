@@ -13,7 +13,7 @@ import { discoverNearWallets, signNear } from "@/wallets/near";
 
 const FAMILY = { evm: "EVM", solana: "Solana", near: "NEAR" } as const;
 const STATUS: Record<AssociationView["status"], { text: string; role: string }> = {
-  PENDING: { text: "Waiting for signature", role: "pending" }, ACTIVE: { text: "Verified by SPak", role: "success" }, SUSPENDED: { text: "Suspended with the Agent", role: "warning" },
+  PENDING: { text: "Waiting for signature", role: "pending" }, ACTIVE: { text: "Verified by SPak", role: "success" }, SUSPENDED: { text: "Suspended, needs a fresh signature", role: "warning" },
   EXPIRED: { text: "Expired, sign again", role: "warning" }, REVOKED: { text: "Removed", role: "neutral" },
 };
 const short = (a: string) => (a.length > 16 ? `${a.slice(0, 8)}…${a.slice(-6)}` : a);
@@ -111,7 +111,7 @@ export function AgentWallets({ agent, session }: { agent: AgentView; session: Se
           {candidates.map((w) => {
             const a = findLive(w.family, w.address);
             const st = a ? STATUS[a.status] : null;
-            const canSign = eligible && (!a || a.status === "PENDING" || a.status === "EXPIRED");
+            const canSign = eligible && (!a || a.status === "PENDING" || a.status === "EXPIRED" || a.status === "SUSPENDED");
             return (
               <li key={w.id} data-association-family={w.family} data-association-status={a?.status ?? "NONE"} className="grid gap-2 border-t border-line py-3 sm:grid-cols-[1fr_auto] sm:items-center">
                 <div className="min-w-0">
@@ -125,7 +125,7 @@ export function AgentWallets({ agent, session }: { agent: AgentView; session: Se
                   ) : <p className="type-caption mt-1 text-fg-2">Connected to your account, not associated with the Agent.</p>}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {canSign && <Button size="sm" variant={a ? "primary" : "ghost"} disabled={!!busy} onClick={() => associate(w)}>{busy === w.id ? "Waiting for your wallet" : a?.status === "EXPIRED" ? "Sign again" : a?.status === "PENDING" ? "Sign to finish" : "Associate"}</Button>}
+                  {canSign && <Button size="sm" variant={a ? "primary" : "ghost"} disabled={!!busy} onClick={() => associate(w)}>{busy === w.id ? "Waiting for your wallet" : a?.status === "EXPIRED" ? "Sign again" : a?.status === "SUSPENDED" ? "Sign again to reactivate" : a?.status === "PENDING" ? "Sign to finish" : "Associate"}</Button>}
                   {a && <Button size="sm" variant="danger" disabled={!!busy} onClick={() => setRemoving(a)}>Remove</Button>}
                 </div>
               </li>

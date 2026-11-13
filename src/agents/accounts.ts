@@ -1,13 +1,14 @@
 import { createHash, randomBytes } from "node:crypto";
-import { and, desc, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
-import { hex } from "@scure/base";
+import { and, desc, eq, gt, inArray, isNull, lte, ne, sql } from "drizzle-orm";
+import { base64, hex } from "@scure/base";
 import type { Db } from "../database/repositories";
-import { agentAccountChallenges, agentAccounts, agentEvents, agents } from "../database/schema";
+import { agentAccountChallenges, agentAccountRotations, agentAccounts, agentEvents, agents } from "../database/schema";
 import { isUniqueViolation } from "../execution/records";
 import { AuthError } from "../auth/types";
-import { nearRpc as defaultNearRpc, verifyNearSignature, type NearRpc } from "../auth/verify/near";
+import { nearRpc as defaultNearRpc, nep413Hash, parseNearPublicKey, verifyNearSignature, type NearRpc } from "../auth/verify/near";
+import { ed25519 } from "@noble/curves/ed25519.js";
 import { AgentError, ownershipCurrent, userRef } from "./service";
-import { NearUnavailable, type AgentAccountConfig, type AgentNearChain } from "./near-chain";
+import type { AccessKeyInfo, AgentAccountConfig, AgentNearChain } from "./near-chain";
 
 export const ACCOUNT_STATUSES = ["NOT_CREATED", "CREATION_PENDING", "CREATED", "OWNERSHIP_VERIFICATION_PENDING", "ACTIVE", "SUSPENDED", "RECOVERY_REQUIRED", "REVOKED", "CREATION_FAILED"] as const;
 export type AccountStatus = (typeof ACCOUNT_STATUSES)[number];
@@ -68,6 +69,8 @@ export interface AccountView {
   sponsorship: string; creationTxHash: string | null; creationOutcome: string | null; creationError: string | null;
   createdOnChainAt: string | null; ownershipVerifiedAt: string | null; activatedAt: string | null; lastVerifiedAt: string | null; recoveryReason: string | null;
   createdAt: string; signingAuthority: "OWNER_ONLY";
+  /** What NEAR showed at the last check: public keys and permissions only. */
+  evidence: { checkedAt: string; decision: string; reason: string | null; keys: { publicKey: string; permission: string }[] } | null;
 }
 export function toAccountView(r: Row): AccountView {
   const iso = (d: Date | null) => (d ? d.toISOString() : null);
@@ -76,6 +79,7 @@ export function toAccountView(r: Row): AccountView {
     sponsorship: r.sponsorship, creationTxHash: r.creationTxHash, creationOutcome: r.creationOutcome, creationError: r.creationError,
     createdOnChainAt: iso(r.createdOnChainAt), ownershipVerifiedAt: iso(r.ownershipVerifiedAt), activatedAt: iso(r.activatedAt), lastVerifiedAt: iso(r.lastVerifiedAt),
     recoveryReason: r.recoveryReason, createdAt: r.createdAt.toISOString(), signingAuthority: "OWNER_ONLY",
+    evidence: r.verificationEvidence ? (({ checkedAt, decision, reason, keys }) => ({ checkedAt, decision, reason, keys }))(r.verificationEvidence as { checkedAt: string; decision: string; reason: string | null; keys: { publicKey: string; permission: string }[] }) : null,
   };
 }
 
@@ -141,6 +145,10 @@ export class AgentAccountService {
     return {
       availability, unavailableReason: this.cfg ? null : (this.d.config as { unavailable: string }).unavailable, network: this.cfg?.network ?? null,
       account: live ? toAccountView(live) : null, failedAttempts: rows.filter((r) => r.status === "CREATION_FAILED").map(toAccountView),
+      rotation: live ? ((x) => (x ? rotationView(x) : null))(await this.openRotation(live.id)) : null,
+      /** Rotation needs the current key on an ACTIVE account. A lost key cannot be rotated or recovered by SPak. */
+      keyRotationAvailable: !!live && live.status === "ACTIVE" && a.status === "VERIFIED",
+      recovery: live?.status === "RECOVERY_REQUIRED" ? (["OWNER_KEY_MISSING", "OWNER_KEY_NOT_FULL_ACCESS"].includes(live.recoveryReason ?? "") ? "KEY_LOST_OR_CHANGED" : live.recoveryReason === "VERIFICATION_UNAVAILABLE" ? "RECHECK" : "OWNER_ACTION_NEEDED") : null,
     };
   }
 
@@ -223,7 +231,7 @@ export class AgentAccountService {
         if (BigInt(spent.split(".")[0]) + BigInt(cfg.initialBalanceYocto) > BigInt(cfg.budgetYocto)) throw new AgentError("AGENT_VERIFICATION_UNAVAILABLE", "The testnet sponsorship budget is used up. Nothing was created.");
         const [r] = await tx.insert(agentAccounts).values({
           id: newId("aga"), agentId: a.id, userId, network: cfg.network, accountId: c.accountId, parentAccountId: cfg.parentAccountId, ownerPublicKey: c.ownerPublicKey,
-          keyType: "ed25519", status: "CREATION_PENDING", sponsorship: "RESERVED", fundingYocto: cfg.initialBalanceYocto, idempotencyKey: input.idempotencyKey, createdAt: now, updatedAt: now,
+          keyType: "ed25519", status: "CREATION_PENDING", sponsorship: "RESERVED", fundingYocto: cfg.initialBalanceYocto, idempotencyKey: input.idempotencyKey, consentChallengeId: c.id, createdAt: now, updatedAt: now,
         }).returning();
         await this.event(tx, a, "ACCOUNT_CREATION_PENDING", "NOT_CREATED", "CREATION_PENDING", { accountRowId: r.id, accountId: r.accountId, consentChallengeId: c.id });
         return r;
@@ -276,32 +284,191 @@ export class AgentAccountService {
     return r; // still unknown: stays CREATION_PENDING, not active
   }
 
+  /** Read everything NEAR can tell us about the account. Any failure to read is recorded, never guessed. */
+  private async evidence(r: Row): Promise<AccountEvidence> {
+    const chain = this.d.chain!;
+    const at = this.clock().toISOString();
+    try {
+      const chainId = await chain.chainId();
+      const exists = chainId === "testnet" ? !!(await chain.viewAccount(r.accountId)) : false;
+      const keys = exists ? await chain.accessKeys(r.accountId) : [];
+      return { readable: true, chainId, exists, keys, checkedAt: at };
+    } catch { return { readable: false, chainId: null, exists: false, keys: [], checkedAt: at }; }
+  }
+
+  /** The consent this account was created under must be for the same Agent, user and account, and for its key. */
+  private async bindingOk(r: Row, q: Db): Promise<boolean> {
+    if (!r.consentChallengeId) return false;
+    const [c] = await q.select().from(agentAccountChallenges).where(eq(agentAccountChallenges.id, r.consentChallengeId)).limit(1);
+    if (!c || c.agentId !== r.agentId || c.userId !== r.userId || c.accountId !== r.accountId) return false;
+    if (c.ownerPublicKey === r.ownerPublicKey) return true;
+    // The installed key changed only through a completed, owner-authorised rotation.
+    const [rot] = await q.select({ id: agentAccountRotations.id }).from(agentAccountRotations)
+      .where(and(eq(agentAccountRotations.accountRowId, r.id), eq(agentAccountRotations.status, "COMPLETED"), eq(agentAccountRotations.newPublicKey, r.ownerPublicKey))).limit(1);
+    return !!rot;
+  }
+
   /**
-   * Independent ownership verification from NEAR: the account exists on testnet, the owner key has full access,
-   * SPak's parent key is absent, and the Agent is still verified and active.
+   * Independent, strict ownership verification. The account must show exactly one access key: the approved owner
+   * key, with full access. Anything else, or anything NEAR cannot confirm, is RECOVERY_REQUIRED with the evidence.
+   * Activation happens in one transaction that locks the Agent and the account and refuses stale reads.
    */
   private async verifyRow(r0: Row): Promise<Row> {
-    const chain = this.d.chain!;
     let r = r0;
-    if (r.status === "CREATED" || r.status === "SUSPENDED" || r.status === "RECOVERY_REQUIRED") r = await this.move(r, "OWNERSHIP_VERIFICATION_PENDING", {});
+    if (r.status === "CREATED" || r.status === "RECOVERY_REQUIRED") r = await this.move(r, "OWNERSHIP_VERIFICATION_PENDING", {});
     if (r.status !== "OWNERSHIP_VERIFICATION_PENDING" && r.status !== "ACTIVE") return r;
-    let keys: { publicKey: string; permission: string }[];
+    const ev = await this.evidence(r);
+    // A rotation the owner authorised and sent: the new key alone on the account completes it.
+    const landed = await this.completeLandedRotation(r, ev);
+    if (landed) r = landed;
+    return this.d.db.transaction(async (t) => {
+      const tx = t as unknown as Db;
+      const [a] = await tx.select().from(agents).where(eq(agents.id, r.agentId)).for("update").limit(1);
+      const [cur] = await tx.select().from(agentAccounts).where(eq(agentAccounts.id, r.id)).for("update").limit(1);
+      // Stale: the account or Agent changed after NEAR was read. Nothing is written from old evidence.
+      if (!cur || cur.version !== r.version || !["OWNERSHIP_VERIFICATION_PENDING", "ACTIVE"].includes(cur.status)) return cur ?? r;
+      if (!a || a.status !== "VERIFIED" || !ownershipCurrent(a, this.clock())) return cur; // Agent suspended, revoked or expired: never activate
+      const decision = assessAccount(ev, { accountId: cur.accountId, ownerPublicKey: cur.ownerPublicKey, parentPublicKey: this.d.chain!.parentPublicKey() }, await this.bindingOk(cur, tx));
+      const evidence = { ...ev, decision: decision.ok ? "VERIFIED" : "RECOVERY_REQUIRED", reason: decision.reason };
+      const now = this.clock();
+      if (!decision.ok) return this.move(cur, "RECOVERY_REQUIRED", { recoveryReason: decision.reason, verificationEvidence: evidence, lastVerifiedAt: now }, { reason: decision.reason }, tx);
+      if (cur.status === "ACTIVE") return this.move(cur, "ACTIVE", { lastVerifiedAt: now, verificationEvidence: evidence }, { reverified: true }, tx);
+      return this.move(cur, "ACTIVE", { ownershipVerifiedAt: now, activatedAt: cur.activatedAt ?? now, lastVerifiedAt: now, recoveryReason: null, verificationEvidence: evidence }, { keys: ev.keys.length }, tx);
+    });
+  }
+
+  /* ------------------------------------------- dedicated account key rotation ------------------------------------------- */
+
+  private async openRotation(accountRowId: string, q: Db = this.d.db) {
+    const [x] = await q.select().from(agentAccountRotations).where(and(eq(agentAccountRotations.accountRowId, accountRowId), inArray(agentAccountRotations.status, ["CHALLENGED", "AUTHORIZED"]))).limit(1);
+    return x ?? null;
+  }
+
+  /**
+   * Start a rotation of the dedicated account's key. Only for an ACTIVE account of a verified Agent. Returns the
+   * NEP-413 message the CURRENT dedicated-account key must sign, and the exact transaction the owner will send from
+   * their own wallet: on the dedicated account, AddKey(new, FullAccess) + DeleteKey(old), atomic in one transaction.
+   * Re-verifying the Agent owner identity does not substitute for this: different account, different key.
+   */
+  async prepareRotation(userId: string, agentId: string, input: { newPublicKey: string; domain: string }) {
+    if (!this.d.chain) this.unavailable();
+    const a = await this.agent(userId, agentId);
+    this.eligible(a);
+    const r = await this.live(agentId, userId);
+    if (!r || r.status !== "ACTIVE") throw new AgentError("AGENT_INVALID_STATE", "Key rotation needs an active dedicated account. Verify it on NEAR first.");
+    if (!parseNearPublicKey(input.newPublicKey)) throw new AgentError("AGENT_BAD_REQUEST", "The new key must be an ed25519 NEAR public key.");
+    if (input.newPublicKey === r.ownerPublicKey) throw new AgentError("AGENT_BAD_REQUEST", "The new key is the key already installed.");
+    if (input.newPublicKey === this.d.chain!.parentPublicKey()) throw new AgentError("AGENT_BAD_REQUEST", "SPak's key can never be installed on an Agent account.");
+    const now = this.clock(), id = newId("akr"), expiresAt = new Date(now.getTime() + ACCOUNT_CHALLENGE_TTL_MS);
+    const message = [
+      "SPak dedicated Agent account key rotation", "", "Sign with the key currently on this account to authorise replacing it.",
+      "This is not the transaction. You send the transaction yourself; SPak cannot.", "",
+      `Agent: ${a.id}`, `Owner: ${userRef(userId)}`, `Account: ${r.accountId}`, `Network: ${r.network}`, `Current key: ${r.ownerPublicKey}`,
+      `New key: ${input.newPublicKey}`, "Purpose: AGENT_ACCOUNT_KEY_ROTATION", `Domain: ${input.domain}`, `Issued At: ${now.toISOString()}`,
+      `Expires At: ${expiresAt.toISOString()}`, `Rotation: ${id}`,
+    ].join("\n");
+    const nonce = hex.encode(randomBytes(32));
     try {
-      if ((await chain.chainId()) !== "testnet") return r;
-      if (!(await chain.viewAccount(r.accountId))) return this.move(r, "RECOVERY_REQUIRED", { recoveryReason: "ACCOUNT_NOT_FOUND", lastVerifiedAt: this.clock() });
-      keys = await chain.accessKeys(r.accountId);
-    } catch (e) { if (e instanceof NearUnavailable) return r; throw e; }
-    const [a] = await this.d.db.select().from(agents).where(eq(agents.id, r.agentId)).limit(1);
-    if (!a || a.status !== "VERIFIED" || !ownershipCurrent(a, this.clock())) return r; // the Agent must be active for the account to be
-    const ownerOk = keys.some((k) => k.publicKey === r.ownerPublicKey && k.permission === "FullAccess");
-    const spakKey = keys.some((k) => k.publicKey === chain.parentPublicKey());
-    if (!ownerOk || spakKey) return this.move(r, "RECOVERY_REQUIRED", { recoveryReason: spakKey ? "UNEXPECTED_SPAK_KEY" : "OWNER_KEY_MISSING", lastVerifiedAt: this.clock() });
-    const now = this.clock();
-    if (r.status === "ACTIVE") {
-      const [u] = await this.d.db.update(agentAccounts).set({ lastVerifiedAt: now, updatedAt: now }).where(eq(agentAccounts.id, r.id)).returning();
-      return u;
+      // Expire a stale challenge so a new one can be issued; an AUTHORIZED rotation must be completed or fail first.
+      await this.d.db.update(agentAccountRotations).set({ status: "EXPIRED", updatedAt: now })
+        .where(and(eq(agentAccountRotations.accountRowId, r.id), eq(agentAccountRotations.status, "CHALLENGED"), lte(agentAccountRotations.expiresAt, now)));
+      await this.d.db.insert(agentAccountRotations).values({ id, accountRowId: r.id, agentId: a.id, userId, accountId: r.accountId, oldPublicKey: r.ownerPublicKey, newPublicKey: input.newPublicKey, status: "CHALLENGED", domain: input.domain, nonce, message, expiresAt, createdAt: now, updatedAt: now });
+    } catch (e) {
+      if (isUniqueViolation(e)) throw new AgentError("AGENT_EXISTS", "A key rotation is already in progress for this account.");
+      throw e;
     }
-    return this.move(r, "ACTIVE", { ownershipVerifiedAt: now, activatedAt: r.activatedAt ?? now, lastVerifiedAt: now, recoveryReason: null }, { keys: keys.length });
+    await this.event(this.d.db, a, "ACCOUNT_KEY_ROTATION_REQUESTED", null, null, { rotationId: id, accountId: r.accountId, newPublicKey: input.newPublicKey });
+    return {
+      rotationId: id, accountId: r.accountId, network: r.network, currentPublicKey: r.ownerPublicKey, newPublicKey: input.newPublicKey,
+      message, nonce: Buffer.from(nonce, "hex").toString("base64"), recipient: input.domain, expiresAt: expiresAt.toISOString(),
+      transaction: { signerId: r.accountId, receiverId: r.accountId, actions: [{ type: "AddKey", publicKey: input.newPublicKey, permission: "FullAccess" }, { type: "DeleteKey", publicKey: r.ownerPublicKey }] },
+    };
+  }
+
+  /** Proof of authority from the key installed on the dedicated account now, confirmed on NEAR. */
+  async authorizeRotation(userId: string, agentId: string, input: { rotationId: string; publicKey: string; signature: string; domain: string }) {
+    if (!this.d.chain) this.unavailable();
+    const a = await this.agent(userId, agentId);
+    this.eligible(a);
+    const r = await this.live(agentId, userId);
+    const now = this.clock();
+    const [rot] = await this.d.db.select().from(agentAccountRotations).where(eq(agentAccountRotations.id, input.rotationId)).limit(1);
+    if (!rot || !r || rot.accountRowId !== r.id || rot.userId !== userId || rot.agentId !== a.id) throw new AgentError("AGENT_CHALLENGE_INVALID", "That rotation is not valid for this account.");
+    if (rot.domain !== input.domain) throw new AgentError("AGENT_DOMAIN_MISMATCH", "That rotation was issued for another site.");
+    if (r.status !== "ACTIVE" || rot.oldPublicKey !== r.ownerPublicKey) throw new AgentError("AGENT_INVALID_STATE", "The account changed since the rotation was requested. Start again.");
+    const [claimed] = await this.d.db.update(agentAccountRotations).set({ usedAt: now, updatedAt: now })
+      .where(and(eq(agentAccountRotations.id, rot.id), eq(agentAccountRotations.status, "CHALLENGED"), isNull(agentAccountRotations.usedAt), gt(agentAccountRotations.expiresAt, now))).returning();
+    if (!claimed) throw new AgentError(rot.usedAt ? "AGENT_CHALLENGE_USED" : "AGENT_CHALLENGE_EXPIRED", "That rotation request was used or expired. Start again.");
+    const failRot = async (reason: string, code: "AGENT_PROOF_INVALID" | "AGENT_KEY_NOT_AUTHORIZED" | "AGENT_VERIFICATION_UNAVAILABLE", msg: string) => {
+      await this.d.db.update(agentAccountRotations).set({ status: "FAILED", failureReason: reason, updatedAt: this.clock() }).where(eq(agentAccountRotations.id, rot.id));
+      await this.event(this.d.db, a, "ACCOUNT_KEY_ROTATION_FAILED", null, null, { rotationId: rot.id, reason });
+      return new AgentError(code, msg);
+    };
+    // Signed by the key installed on the dedicated account (not the owner identity's key unless they are the same key).
+    if (input.publicKey !== r.ownerPublicKey) throw await failRot("NOT_CURRENT_KEY", "AGENT_PROOF_INVALID", "Sign with the key currently on the dedicated account.");
+    const pub = parseNearPublicKey(input.publicKey);
+    let sig: Uint8Array | null = null;
+    try { sig = base64.decode(input.signature); } catch { sig = null; }
+    if (!pub || !sig || sig.length !== 64 || !ed25519.verify(sig, nep413Hash(rot.message, hex.decode(rot.nonce), rot.domain), pub)) throw await failRot("SIGNATURE_INVALID", "AGENT_PROOF_INVALID", "The signature does not match this rotation.");
+    let keys: AccessKeyInfo[];
+    try { keys = await this.d.chain!.accessKeys(r.accountId); } catch { throw await failRot("VERIFICATION_UNAVAILABLE", "AGENT_VERIFICATION_UNAVAILABLE", "SPak could not confirm the key on NEAR. Nothing changed."); }
+    if (!keys.some((k) => k.publicKey === input.publicKey && k.permission === "FullAccess")) throw await failRot("KEY_NOT_ON_ACCOUNT", "AGENT_KEY_NOT_AUTHORIZED", "That key is not a full-access key on the dedicated account.");
+    const [u] = await this.d.db.update(agentAccountRotations).set({ status: "AUTHORIZED", updatedAt: this.clock() }).where(and(eq(agentAccountRotations.id, rot.id), isNull(agentAccountRotations.txHash))).returning();
+    await this.event(this.d.db, a, "ACCOUNT_KEY_ROTATION_AUTHORIZED", null, null, { rotationId: rot.id });
+    return rotationView(u);
+  }
+
+  /**
+   * After the owner sent the transaction: read the account from NEAR. Completed only when the new key is the only
+   * key, with full access. Old key still alone: failed (or still pending if NEAR does not know the outcome).
+   * Any other key set: the rotation failed and the account needs recovery.
+   */
+  async completeRotation(userId: string, agentId: string, input: { rotationId: string; txHash?: string }) {
+    if (!this.d.chain) this.unavailable();
+    await this.agent(userId, agentId);
+    const r = await this.live(agentId, userId);
+    const [rot] = await this.d.db.select().from(agentAccountRotations).where(eq(agentAccountRotations.id, input.rotationId)).limit(1);
+    if (!rot || !r || rot.accountRowId !== r.id || rot.userId !== userId) throw new AgentError("AGENT_CHALLENGE_INVALID", "That rotation is not valid for this account.");
+    if (rot.status !== "AUTHORIZED") return rotationView(rot);
+    if (input.txHash) await this.d.db.update(agentAccountRotations).set({ txHash: input.txHash, updatedAt: this.clock() }).where(eq(agentAccountRotations.id, rot.id));
+    const ev = await this.evidence(r);
+    if (!ev.readable || ev.chainId !== "testnet") throw new AgentError("AGENT_VERIFICATION_UNAVAILABLE", "SPak could not read the account on NEAR. The rotation is still pending.");
+    const done = await this.completeLandedRotation(r, ev);
+    if (done) await this.verifyRow(done);
+    if (done) return rotationView((await this.d.db.select().from(agentAccountRotations).where(eq(agentAccountRotations.id, rot.id)))[0]);
+    const onlyOld = ev.keys.length === 1 && ev.keys[0].publicKey === rot.oldPublicKey && ev.keys[0].permission === "FullAccess";
+    if (onlyOld) {
+      const st = input.txHash ? await this.d.chain!.txStatus(input.txHash, r.accountId) : "UNKNOWN";
+      if (st === "FAILURE") {
+        const [u] = await this.d.db.update(agentAccountRotations).set({ status: "FAILED", failureReason: "TRANSACTION_FAILED", evidence: ev, updatedAt: this.clock() }).where(eq(agentAccountRotations.id, rot.id)).returning();
+        await this.event(this.d.db, { id: r.agentId, userId }, "ACCOUNT_KEY_ROTATION_FAILED", null, null, { rotationId: rot.id, reason: "TRANSACTION_FAILED" });
+        return rotationView(u);
+      }
+      return rotationView((await this.d.db.select().from(agentAccountRotations).where(eq(agentAccountRotations.id, rot.id)))[0]); // not landed yet: still AUTHORIZED
+    }
+    // Neither the old key alone nor the new key alone: unexpected key set.
+    const [u] = await this.d.db.update(agentAccountRotations).set({ status: "FAILED", failureReason: "UNEXPECTED_KEYS", evidence: ev, updatedAt: this.clock() }).where(eq(agentAccountRotations.id, rot.id)).returning();
+    await this.event(this.d.db, { id: r.agentId, userId }, "ACCOUNT_KEY_ROTATION_FAILED", null, null, { rotationId: rot.id, reason: "UNEXPECTED_KEYS" });
+    await this.verifyRow(r);
+    return rotationView(u);
+  }
+
+  /** If an authorised rotation's new key is now the only key, record the rotation and the new installed key. */
+  private async completeLandedRotation(r: Row, ev: AccountEvidence): Promise<Row | null> {
+    if (!ev.readable || ev.chainId !== "testnet" || ev.keys.length !== 1 || ev.keys[0].permission !== "FullAccess") return null;
+    const rot = await this.openRotation(r.id);
+    if (!rot || rot.status !== "AUTHORIZED" || rot.newPublicKey !== ev.keys[0].publicKey || rot.oldPublicKey !== r.ownerPublicKey) return null;
+    return this.d.db.transaction(async (t) => {
+      const tx = t as unknown as Db;
+      const [cur] = await tx.select().from(agentAccounts).where(eq(agentAccounts.id, r.id)).for("update").limit(1);
+      if (!cur || cur.ownerPublicKey !== rot.oldPublicKey || !["ACTIVE", "OWNERSHIP_VERIFICATION_PENDING", "RECOVERY_REQUIRED"].includes(cur.status)) return null;
+      const now = this.clock();
+      await tx.update(agentAccountRotations).set({ status: "COMPLETED", evidence: ev, updatedAt: now }).where(and(eq(agentAccountRotations.id, rot.id), eq(agentAccountRotations.status, "AUTHORIZED")));
+      const [u] = await tx.update(agentAccounts).set({ ownerPublicKey: rot.newPublicKey, version: cur.version + 1, updatedAt: now }).where(and(eq(agentAccounts.id, cur.id), eq(agentAccounts.version, cur.version))).returning();
+      if (!u) return null;
+      await this.event(tx, { id: cur.agentId, userId: cur.userId }, "ACCOUNT_KEY_ROTATED", cur.status, cur.status, { rotationId: rot.id, oldPublicKey: rot.oldPublicKey, newPublicKey: rot.newPublicKey });
+      return u;
+    });
   }
 
   /** Re-check the account on NEAR: reconcile a pending creation, or re-verify ownership. */
@@ -313,6 +480,34 @@ export class AgentAccountService {
     if (r.status === "REVOKED") return toAccountView(r);
     return toAccountView(r.status === "CREATION_PENDING" ? await this.reconcile(r) : await this.verifyRow(r));
   }
+}
+
+export function rotationView(x: typeof agentAccountRotations.$inferSelect) {
+  return { id: x.id, status: x.status, accountId: x.accountId, oldPublicKey: x.oldPublicKey, newPublicKey: x.newPublicKey, txHash: x.txHash, failureReason: x.failureReason, createdAt: x.createdAt.toISOString(), updatedAt: x.updatedAt.toISOString() };
+}
+
+export interface AccountEvidence { readable: boolean; chainId: string | null; exists: boolean; keys: AccessKeyInfo[]; checkedAt: string }
+export type AccountReason =
+  | "VERIFICATION_UNAVAILABLE" | "WRONG_NETWORK" | "ACCOUNT_NOT_FOUND" | "BINDING_MISMATCH" | "PARENT_KEY_PRESENT" | "OWNER_KEY_MISSING"
+  | "OWNER_KEY_NOT_FULL_ACCESS" | "UNEXPECTED_FULL_ACCESS_KEY" | "UNEXPECTED_FUNCTION_CALL_KEY";
+
+/**
+ * The exact authority a dedicated account must have under the Stage 7 model: on testnet, it exists, it was created
+ * under this Agent's consent, and its only access key is the approved owner key with full access. Pure function.
+ */
+export function assessAccount(ev: AccountEvidence, expect: { accountId: string; ownerPublicKey: string; parentPublicKey: string }, bound: boolean): { ok: boolean; reason: AccountReason | null } {
+  if (!ev.readable) return { ok: false, reason: "VERIFICATION_UNAVAILABLE" };
+  if (ev.chainId !== "testnet") return { ok: false, reason: "WRONG_NETWORK" };
+  if (!ev.exists) return { ok: false, reason: "ACCOUNT_NOT_FOUND" };
+  if (!bound) return { ok: false, reason: "BINDING_MISMATCH" };
+  if (ev.keys.some((k) => k.publicKey === expect.parentPublicKey)) return { ok: false, reason: "PARENT_KEY_PRESENT" };
+  const owner = ev.keys.find((k) => k.publicKey === expect.ownerPublicKey);
+  if (!owner) return { ok: false, reason: "OWNER_KEY_MISSING" };
+  if (owner.permission !== "FullAccess") return { ok: false, reason: "OWNER_KEY_NOT_FULL_ACCESS" };
+  const others = ev.keys.filter((k) => k.publicKey !== expect.ownerPublicKey);
+  if (others.some((k) => k.permission === "FullAccess")) return { ok: false, reason: "UNEXPECTED_FULL_ACCESS_KEY" };
+  if (others.length) return { ok: false, reason: "UNEXPECTED_FUNCTION_CALL_KEY" };
+  return { ok: true, reason: null };
 }
 
 /** Agent lifecycle applied to its dedicated account, inside the Agent's transaction. The NEAR account is never deleted. */

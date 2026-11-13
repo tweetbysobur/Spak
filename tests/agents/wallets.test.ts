@@ -243,7 +243,7 @@ describe("lifecycle", () => {
     expect(re.c.associationId).toBe(a.c.associationId);
     expect((await svc.verify(u.userId, u.agentId, re.proof)).status).toBe("ACTIVE");
   });
-  it("Agent suspension suspends associations; a fresh Agent proof restores in-date ones; revocation revokes all", async () => {
+  it("Agent suspension suspends associations; a fresh Agent proof does not reactivate them; revocation revokes all", async () => {
     const u = await setup();
     await svc.verify(u.userId, u.agentId, (await associate(u, "solana")).proof);
     const open = await associate(u, "evm");
@@ -253,9 +253,9 @@ describe("lifecycle", () => {
     const ch = await agentsSvc.challenge(u.userId, u.agentId, { accountId: u.owner.address, domain: DOMAIN });
     const s = await u.owner.sign(ch.message, hex.encode(base64.decode(ch.nonce)), ch.recipient);
     await agentsSvc.verify(u.userId, u.agentId, { challengeId: ch.challengeId, method: ch.method, accountId: u.owner.address, publicKey: s.publicKey, signature: s.signature, domain: DOMAIN });
+    // Hardening: a fresh Agent proof reactivates nothing. Each association needs its own fresh wallet signature.
     const after = await svc.list(u.userId, u.agentId);
-    expect(after.find((x) => x.family === "solana")!.status).toBe("ACTIVE");
-    expect(after.find((x) => x.family === "evm")!.status).toBe("REVOKED"); // was never verified
+    expect(after.map((x) => x.status).sort()).toEqual(["SUSPENDED", "SUSPENDED"]);
     await agentsSvc.revoke(u.userId, u.agentId, "REVOKE");
     expect((await svc.list(u.userId, u.agentId)).every((x) => x.status === "REVOKED")).toBe(true);
   });
@@ -288,4 +288,91 @@ describe("lifecycle", () => {
     await expect(db.execute(sql`insert into spak_agent_wallets (id, agent_id, user_id, family, network, address, method, status, created_at, updated_at) select 'awa_x', agent_id, user_id, family, network, address, method, 'PENDING', now(), now() from spak_agent_wallets where id = ${c.associationId}`)).rejects.toThrow();
   });
   it("the per-Agent limit is enforced", () => { expect(MAX_ASSOCIATIONS).toBe(20); });
+});
+
+/* ------------------------------------- hardening: fresh wallet proof after Agent suspension ------------------------------------- */
+
+describe("hardening: no automatic reactivation", () => {
+  async function reverifyAgent(u: U) {
+    const ch = await agentsSvc.challenge(u.userId, u.agentId, { accountId: u.owner.address, domain: DOMAIN });
+    const s = await u.owner.sign(ch.message, hex.encode(base64.decode(ch.nonce)), ch.recipient);
+    await agentsSvc.verify(u.userId, u.agentId, { challengeId: ch.challengeId, method: ch.method, accountId: u.owner.address, publicKey: s.publicKey, signature: s.signature, domain: DOMAIN });
+  }
+  async function suspendedCycle() {
+    const u = await setup();
+    const first = await associate(u, "solana");
+    const a = await svc.verify(u.userId, u.agentId, first.proof);
+    await agentsSvc.suspend(u.userId, u.agentId);
+    await reverifyAgent(u);
+    return { u, a };
+  }
+  it("Agent suspension then re-verification: association stays SUSPENDED, expiry not extended", async () => {
+    const { u, a } = await suspendedCycle();
+    const now = await svc.get(u.userId, u.agentId, a.id);
+    expect(now).toMatchObject({ status: "SUSPENDED", expiresAt: a.expiresAt, verifiedAt: a.verifiedAt });
+  });
+  for (const fam of ["evm", "solana", "near"] as const) {
+    it(`${fam}: a fresh signature reactivates with a new verification date and 90-day expiry`, async () => {
+      const u = await setup();
+      const a = await svc.verify(u.userId, u.agentId, (await associate(u, fam)).proof);
+      await agentsSvc.suspend(u.userId, u.agentId);
+      clock.now += 3600_000;
+      await reverifyAgent(u);
+      expect((await svc.get(u.userId, u.agentId, a.id)).status).toBe("SUSPENDED");
+      const r = await svc.verify(u.userId, u.agentId, (await associate(u, fam)).proof);
+      expect(r.id).toBe(a.id);
+      expect(r.status).toBe("ACTIVE");
+      expect(Date.parse(r.verifiedAt!)).toBe(clock.now);
+      expect(Date.parse(r.expiresAt!) - Date.parse(r.verifiedAt!)).toBe(ASSOCIATION_VALID_MS);
+      expect((await svc.events(u.userId, u.agentId, a.id)).map((e) => e.event)).toContain("WALLET_REACTIVATED_BY_PROOF");
+    });
+  }
+  it("an invalid signature does not reactivate", async () => {
+    const { u, a } = await suspendedCycle();
+    expect(await code(svc.verify(u.userId, u.agentId, (await associate(u, "solana", { signer: solanaWallet() })).proof))).toBe("AGENT_PROOF_INVALID");
+    expect((await svc.get(u.userId, u.agentId, a.id)).status).toBe("SUSPENDED");
+  });
+  it("no association can be reactivated while the Agent is still suspended", async () => {
+    const u = await setup();
+    await svc.verify(u.userId, u.agentId, (await associate(u, "solana")).proof);
+    await agentsSvc.suspend(u.userId, u.agentId);
+    expect(await code(svc.challenge(u.userId, u.agentId, { walletId: u.ids.solana, domain: DOMAIN, uri: URI }))).toBe("AGENT_INVALID_STATE");
+  });
+  it("Agent suspended between challenge and signature: no reactivation", async () => {
+    const { u, a } = await suspendedCycle();
+    const c = await associate(u, "solana");
+    await db.execute(sql`update spak_agents set status = 'SUSPENDED', suspended_at = now() where id = ${u.agentId}`);
+    expect(await code(svc.verify(u.userId, u.agentId, c.proof))).toBe("AGENT_INVALID_STATE");
+    expect((await svc.get(u.userId, u.agentId, a.id)).status).toBe("SUSPENDED");
+  });
+  it("suspended past its expiry: still needs a fresh proof, which then gives a fresh expiry", async () => {
+    const { u, a } = await suspendedCycle();
+    clock.now += ASSOCIATION_VALID_MS + 1;
+    await reverifyAgent(u);
+    expect((await svc.get(u.userId, u.agentId, a.id)).status).toBe("SUSPENDED");
+    const r = await svc.verify(u.userId, u.agentId, (await associate(u, "solana")).proof);
+    expect(Date.parse(r.expiresAt!)).toBe(clock.now + ASSOCIATION_VALID_MS);
+  });
+  it("revoked and compromised associations never reactivate; a new record is required", async () => {
+    const u = await setup();
+    const first = await associate(u, "solana");
+    const a = await svc.verify(u.userId, u.agentId, first.proof);
+    await svc.remove(u.userId, u.agentId, a.id, "COMPROMISED");
+    await agentsSvc.suspend(u.userId, u.agentId);
+    await reverifyAgent(u);
+    expect((await svc.get(u.userId, u.agentId, a.id)).status).toBe("REVOKED");
+    expect(await code(svc.verify(u.userId, u.agentId, first.proof))).toBe("AGENT_CHALLENGE_USED");
+    const fresh = await associate(u, "solana");
+    expect(fresh.c.associationId).not.toBe(a.id);
+    await svc.verify(u.userId, u.agentId, fresh.proof);
+    expect((await svc.get(u.userId, u.agentId, a.id)).status).toBe("REVOKED");
+  });
+  it("concurrent reactivation attempts: one succeeds, one record", async () => {
+    const { u, a } = await suspendedCycle();
+    const c1 = await associate(u, "solana"), c2 = await associate(u, "solana");
+    const r = await Promise.all([code(svc.verify(u.userId, u.agentId, c1.proof)), code(svc.verify(u.userId, u.agentId, c2.proof))]);
+    expect(r).toContain("OK");
+    expect((await svc.list(u.userId, u.agentId)).filter((x) => x.status !== "REVOKED")).toHaveLength(1);
+    expect((await svc.get(u.userId, u.agentId, a.id)).status).toBe("ACTIVE");
+  });
 });

@@ -110,3 +110,7 @@ All must be true before L3 ships. None is built now.
 7. Emergency stop: Guard "disable all execution" stops autonomous signing too, and the owner can delete the SPak function-call key on chain without SPak's help.
 8. No self-expansion: a grant can only be widened by a new owner signature. The Agent cannot sign grants.
 9. Independent security review of the contract and signing path.
+
+## 8. Preconditions for any future grant (from the hardening stage)
+
+A future permission grant must require, at grant time and at use time: Agent ownership current, dedicated account ACTIVE with fresh evidence (exact owner key only), and each wallet it names ACTIVE by its own fresh proof (`associationUsable()`). A suspended, expired or recovery-required component blocks the grant. None of this exists yet.

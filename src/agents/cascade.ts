@@ -1,4 +1,4 @@
-import { and, eq, gt, inArray, isNull, lte } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { Db } from "../database/repositories";
 import { agentEvents, agentWalletChallenges, agentWallets } from "../database/schema";
 import { cascadeAgentAccount } from "./accounts";
@@ -8,8 +8,7 @@ import { cascadeAgentAccount } from "./accounts";
  * transaction, so the Agent and its associations never disagree.
  * - SUSPENDED: live associations are suspended; open association challenges are closed.
  * - REVOKED: every association is revoked (history is kept).
- * - VERIFIED after a suspension: associations suspended with the Agent return to ACTIVE if still in date, else EXPIRED.
- *   (Expired ones never come back without a fresh wallet signature.)
+ * - VERIFIED after a suspension: nothing changes. Suspended associations need a fresh wallet signature each.
  */
 export async function cascadeAgentStatus(tx: Db, a: { id: string; userId: string }, from: string, to: string, now: Date) {
   await cascadeAgentAccount(tx, a, from, to, now);
@@ -28,16 +27,7 @@ export async function cascadeAgentStatus(tx: Db, a: { id: string; userId: string
     const rows = await tx.update(agentWallets).set({ status: "REVOKED", revokedAt: now, revokeReason: "AGENT_REVOKED", updatedAt: now })
       .where(and(eq(agentWallets.agentId, a.id), inArray(agentWallets.status, ["PENDING", "ACTIVE", "SUSPENDED", "EXPIRED"]))).returning({ id: agentWallets.id });
     await log(rows, "WALLET_REVOKED", "REVOKED");
-  } else if (to === "VERIFIED" && from === "SUSPENDED") {
-    const back = await tx.update(agentWallets).set({ status: "ACTIVE", updatedAt: now })
-      .where(and(eq(agentWallets.agentId, a.id), eq(agentWallets.status, "SUSPENDED"), gt(agentWallets.expiresAt, now))).returning({ id: agentWallets.id });
-    await log(back, "WALLET_RESTORED_WITH_AGENT", "ACTIVE");
-    const stale = await tx.update(agentWallets).set({ status: "EXPIRED", updatedAt: now })
-      .where(and(eq(agentWallets.agentId, a.id), eq(agentWallets.status, "SUSPENDED"), lte(agentWallets.expiresAt, now))).returning({ id: agentWallets.id });
-    await log(stale, "WALLET_EXPIRED", "EXPIRED");
-    // Suspended before they were ever verified: they need a fresh proof, so they are closed.
-    const never = await tx.update(agentWallets).set({ status: "REVOKED", revokedAt: now, revokeReason: "UNVERIFIED_AT_SUSPENSION", updatedAt: now })
-      .where(and(eq(agentWallets.agentId, a.id), eq(agentWallets.status, "SUSPENDED"))).returning({ id: agentWallets.id });
-    await log(never, "WALLET_REVOKED", "REVOKED");
   }
+  // Agent re-verified after a suspension: associations stay SUSPENDED. A fresh Agent proof does not show the user
+  // still controls each wallet, so every association needs its own fresh wallet signature to become ACTIVE again.
 }

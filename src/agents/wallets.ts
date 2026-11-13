@@ -169,7 +169,7 @@ export class AgentWalletService {
     const now = this.clock();
     await this.expire(agentId, userId);
     // Reuse the live association for this wallet (re-verification), or create a PENDING one.
-    let [assoc] = await this.db.select().from(agentWallets).where(and(eq(agentWallets.agentId, a.id), eq(agentWallets.family, family), eq(agentWallets.address, w.address), inArray(agentWallets.status, ["PENDING", "ACTIVE", "EXPIRED"]))).limit(1);
+    let [assoc] = await this.db.select().from(agentWallets).where(and(eq(agentWallets.agentId, a.id), eq(agentWallets.family, family), eq(agentWallets.address, w.address), inArray(agentWallets.status, ["PENDING", "ACTIVE", "SUSPENDED", "EXPIRED"]))).limit(1);
     if (!assoc) {
       const [{ n }] = await this.db.select({ n: sql<number>`count(*)::int` }).from(agentWallets).where(and(eq(agentWallets.agentId, a.id), inArray(agentWallets.status, ["PENDING", "ACTIVE", "SUSPENDED", "EXPIRED"])));
       if (n >= MAX_ASSOCIATIONS) throw new AgentError("AGENT_BAD_REQUEST", `An Agent can have at most ${MAX_ASSOCIATIONS} associated wallets.`);
@@ -186,7 +186,7 @@ export class AgentWalletService {
       } catch (e) {
         if (!isUniqueViolation(e)) throw e;
         // The same wallet is live on another Agent (another user), or a concurrent request created it.
-        const [mine] = await this.db.select().from(agentWallets).where(and(eq(agentWallets.agentId, a.id), eq(agentWallets.family, family), eq(agentWallets.address, w.address), inArray(agentWallets.status, ["PENDING", "ACTIVE", "EXPIRED"]))).limit(1);
+        const [mine] = await this.db.select().from(agentWallets).where(and(eq(agentWallets.agentId, a.id), eq(agentWallets.family, family), eq(agentWallets.address, w.address), inArray(agentWallets.status, ["PENDING", "ACTIVE", "SUSPENDED", "EXPIRED"]))).limit(1);
         if (!mine) throw new AgentError("AGENT_OWNER_IN_USE", "This wallet is already associated with another SPak Agent.");
         assoc = mine;
       }
@@ -254,7 +254,7 @@ export class AgentWalletService {
       const locked = await this.agent(userId, agentId, tx, true);
       this.eligible(locked); // suspended, revoked or expired since the challenge: nothing becomes active
       const [cur] = await tx.select().from(agentWallets).where(eq(agentWallets.id, c.associationId)).for("update").limit(1);
-      if (!cur || !["PENDING", "ACTIVE", "EXPIRED"].includes(cur.status)) throw new AgentError("AGENT_INVALID_STATE", "This association was removed. Start a new one.");
+      if (!cur || !["PENDING", "ACTIVE", "SUSPENDED", "EXPIRED"].includes(cur.status)) throw new AgentError("AGENT_INVALID_STATE", "This association was removed. Start a new one.");
       // The wallet must still be on the user's account.
       const [w] = await tx.select({ id: wallets.id }).from(wallets).where(and(eq(wallets.userId, userId), eq(wallets.family, cur.family), eq(wallets.address, cur.address))).limit(1);
       if (!w) throw new AgentError("AGENT_INVALID_STATE", "This wallet is no longer connected to your account.");
@@ -263,7 +263,7 @@ export class AgentWalletService {
       }).where(and(eq(agentWallets.id, cur.id), eq(agentWallets.version, cur.version))).returning();
       if (!u) throw new AgentError("AGENT_CONCURRENT_UPDATE", "This association changed in another request. Try again.");
       await tx.update(agentWalletChallenges).set({ outcome: "VERIFIED" }).where(eq(agentWalletChallenges.id, c.id));
-      await this.event(tx, a, cur.status === "PENDING" ? "WALLET_ASSOCIATED" : "WALLET_REVERIFIED", cur.status, "ACTIVE", { associationId: cur.id, family: cur.family, network: cur.network, method: cur.method, messageSha256: sha256(c.message) });
+      await this.event(tx, a, cur.status === "PENDING" ? "WALLET_ASSOCIATED" : cur.status === "SUSPENDED" ? "WALLET_REACTIVATED_BY_PROOF" : "WALLET_REVERIFIED", cur.status, "ACTIVE", { associationId: cur.id, family: cur.family, network: cur.network, method: cur.method, messageSha256: sha256(c.message) });
       return u;
     });
     return toAssociationView(r);

@@ -53,3 +53,23 @@ Status: threat model for the proposed architecture.
 - No association grants signing authority, adds recipients or changes Guard. Execution code does not read associations.
 - Removal is immediate in every state; a compromised wallet is cut off without touching the Agent.
 - Database constraints make an ACTIVE association without proof fields, an unknown family, or two live associations for one wallet impossible.
+
+## 6. Hardening (implemented)
+
+| Issue found | Correction |
+|---|---|
+| Dedicated account became ACTIVE when the owner key was present and the parent key absent, even with extra keys | Exact authority required: only the approved owner key, full access; any other key or permission is RECOVERY_REQUIRED |
+| No record of why an account was trusted | Evidence stored per check: chain id, all public keys and permissions, decision, reason |
+| Consent and account not cross-checked after creation | Consent record must match Agent, user, account id and key (or a completed rotation) |
+| Activation could race with Agent suspension | Activation locks Agent and account rows and refuses stale reads |
+| Unreachable NEAR left an account in an ambiguous pending state | Unverifiable evidence is RECOVERY_REQUIRED with reason VERIFICATION_UNAVAILABLE; a re-check can restore ACTIVE |
+| No safe key rotation for the dedicated account | Owner-authorised rotation, proven by the installed key and confirmed on NEAR; the owner sends the atomic AddKey+DeleteKey transaction |
+| Agent re-verification silently reactivated wallet associations | Suspended associations stay suspended until each wallet signs again |
+
+## Mainnet blockers
+
+1. A SPak-owned mainnet parent account and its key management (HSM or equivalent), separate from testnet.
+2. Account recovery design for lost keys (decision on second keys or a recovery contract); today there is none.
+3. Production sponsorship amounts, budgets and monitoring.
+4. Live testnet run of creation and rotation with an authorised parent account.
+5. Periodic background re-verification of dedicated accounts and associations.

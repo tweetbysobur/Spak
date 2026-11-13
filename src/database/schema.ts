@@ -737,6 +737,10 @@ export const agentAccounts = pgTable("spak_agent_accounts", {
   activatedAt: timestamp("activated_at", { withTimezone: true }),
   lastVerifiedAt: timestamp("last_verified_at", { withTimezone: true }),
   recoveryReason: text("recovery_reason"),
+  /** The owner consent this account was created under (binds Agent, account id and approved key). */
+  consentChallengeId: text("consent_challenge_id"),
+  /** Last verification evidence read from NEAR: chain id, every access key and permission, decision, reason. Public data only. */
+  verificationEvidence: jsonb("verification_evidence"),
   schemaVersion: integer("schema_version").notNull().default(1),
   version: integer("version").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
@@ -757,3 +761,29 @@ export const agentAccountChallenges = pgTable("spak_agent_account_challenges", {
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   usedAt: timestamp("used_at", { withTimezone: true }),
 }, (t) => [uniqueIndex("spak_agent_account_challenges_nonce_uq").on(t.nonce)]);
+
+/**
+ * Key rotation for a dedicated Agent account. The owner proves authority with the key currently installed on the
+ * dedicated account, then signs and sends, from their own wallet, one transaction on that account:
+ * AddKey(new, FullAccess) + DeleteKey(old). SPak never signs it and never holds either private key.
+ */
+export const agentAccountRotations = pgTable("spak_agent_account_rotations", {
+  id: text("id").primaryKey(),
+  accountRowId: text("account_row_id").notNull().references(() => agentAccounts.id, { onDelete: "cascade" }),
+  agentId: text("agent_id").notNull().references(() => agents.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  accountId: text("account_id").notNull(),
+  oldPublicKey: text("old_public_key").notNull(),
+  newPublicKey: text("new_public_key").notNull(),
+  status: text("status").notNull(), // CHALLENGED | AUTHORIZED | COMPLETED | FAILED | EXPIRED
+  domain: text("domain").notNull(),
+  nonce: text("nonce").notNull(),
+  message: text("message").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  txHash: text("tx_hash"),
+  evidence: jsonb("evidence"),
+  failureReason: text("failure_reason"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+}, (t) => [uniqueIndex("spak_agent_account_rotations_nonce_uq").on(t.nonce), index("spak_agent_account_rotations_acct_idx").on(t.accountRowId, t.createdAt)]);

@@ -171,7 +171,8 @@ describe("creation", () => {
     const orig = near.accessKeys.bind(near);
     let calls = 0;
     near.accessKeys = async (id: string) => { if (id !== PARENT && ++calls) throw new NearUnavailable("down"); return orig(id); };
-    expect((await svc.create(u.userId, u.agentId, body)).status).toBe("OWNERSHIP_VERIFICATION_PENDING");
+    // Unverifiable evidence is never activation: the account needs a re-check (hardening: RECOVERY_REQUIRED, reason recorded).
+    expect(await svc.create(u.userId, u.agentId, body)).toMatchObject({ status: "RECOVERY_REQUIRED", recoveryReason: "VERIFICATION_UNAVAILABLE" });
     near.accessKeys = orig;
     expect((await svc.verify(u.userId, u.agentId)).status).toBe("ACTIVE");
   });
@@ -181,7 +182,7 @@ describe("ownership verification", () => {
   it("a SPak key on the account is refused: RECOVERY_REQUIRED, never ACTIVE", async () => {
     const u = await verifiedUser();
     near.mode = "adds-parent-key";
-    expect(await svc.create(u.userId, u.agentId, (await consent(u)).body)).toMatchObject({ status: "RECOVERY_REQUIRED", recoveryReason: "UNEXPECTED_SPAK_KEY" });
+    expect(await svc.create(u.userId, u.agentId, (await consent(u)).body)).toMatchObject({ status: "RECOVERY_REQUIRED", recoveryReason: "PARENT_KEY_PRESENT" });
   });
   it("owner key removed or account gone: RECOVERY_REQUIRED; restoring the key re-verifies", async () => {
     const u = await verifiedUser();
@@ -281,5 +282,180 @@ describe("lifecycle", () => {
     await expect(db.execute(sql`update spak_agent_accounts set ownership_verified_at = null where id = ${a.id}`)).rejects.toThrow();
     await expect(db.execute(sql`update spak_agent_accounts set status = 'LIVE' where id = ${a.id}`)).rejects.toThrow();
     await expect(db.execute(sql`insert into spak_agent_accounts select 'aga_x', agent_id, user_id, network, 'b' || account_id, parent_account_id, owner_public_key, key_type, 'CREATION_PENDING', 'RESERVED', funding_yocto, null, null, null, 'k2', null, null, null, null, null, 1, 1, now(), now() from spak_agent_accounts where id = ${a.id}`)).rejects.toThrow();
+  });
+});
+
+/* ------------------------------------------------ hardening: strict verification ------------------------------------------------ */
+
+describe("hardening: exact account authority", () => {
+  const OWNER = "ed25519:Owner111111111111111111111111111111111111111";
+  const ev = (keys: { publicKey: string; permission: "FullAccess" | "FunctionCall" }[], o: Partial<import("@/agents/accounts").AccountEvidence> = {}) => ({ readable: true, chainId: "testnet", exists: true, keys, checkedAt: "t", ...o });
+  const expectAuth = { accountId: "a.p.testnet", ownerPublicKey: OWNER, parentPublicKey: PARENT_PK };
+  it("assessAccount: only the approved owner key with full access passes", async () => {
+    const { assessAccount } = await import("@/agents/accounts");
+    expect(assessAccount(ev([{ publicKey: OWNER, permission: "FullAccess" }]), expectAuth, true)).toEqual({ ok: true, reason: null });
+    const cases: [ReturnType<typeof ev>, boolean, string][] = [
+      [ev([{ publicKey: OWNER, permission: "FullAccess" }, { publicKey: "ed25519:Other", permission: "FullAccess" }]), true, "UNEXPECTED_FULL_ACCESS_KEY"],
+      [ev([{ publicKey: OWNER, permission: "FullAccess" }, { publicKey: "ed25519:Fc", permission: "FunctionCall" }]), true, "UNEXPECTED_FUNCTION_CALL_KEY"],
+      [ev([{ publicKey: "ed25519:Other", permission: "FullAccess" }]), true, "OWNER_KEY_MISSING"],
+      [ev([{ publicKey: OWNER, permission: "FunctionCall" }]), true, "OWNER_KEY_NOT_FULL_ACCESS"],
+      [ev([{ publicKey: OWNER, permission: "FullAccess" }, { publicKey: PARENT_PK, permission: "FullAccess" }]), true, "PARENT_KEY_PRESENT"],
+      [ev([], { readable: false }), true, "VERIFICATION_UNAVAILABLE"],
+      [ev([], { exists: false }), true, "ACCOUNT_NOT_FOUND"],
+      [ev([{ publicKey: OWNER, permission: "FullAccess" }], { chainId: "mainnet" }), true, "WRONG_NETWORK"],
+      [ev([{ publicKey: OWNER, permission: "FullAccess" }]), false, "BINDING_MISMATCH"],
+    ];
+    for (const [e, bound, reason] of cases) expect(assessAccount(e, expectAuth, bound)).toEqual({ ok: false, reason });
+  });
+
+  async function active() {
+    const u = await verifiedUser();
+    const a = await svc.create(u.userId, u.agentId, (await consent(u)).body);
+    expect(a.status).toBe("ACTIVE");
+    return { u, a };
+  }
+  const reverify = (u: { userId: string; agentId: string }) => svc.verify(u.userId, u.agentId);
+
+  it("active account records evidence: exactly the owner key with full access", async () => {
+    const { a } = await active();
+    expect(a.evidence).toMatchObject({ decision: "VERIFIED", reason: null, keys: [{ publicKey: a.ownerPublicKey, permission: "FullAccess" }] });
+  });
+  for (const [label, keys, reason] of [
+    ["unexpected additional full-access key", (o: string) => [{ publicKey: o, permission: "FullAccess" }, { publicKey: "ed25519:Backup", permission: "FullAccess" }], "UNEXPECTED_FULL_ACCESS_KEY"],
+    ["unexpected function-call key", (o: string) => [{ publicKey: o, permission: "FullAccess" }, { publicKey: "ed25519:Fc", permission: "FunctionCall" }], "UNEXPECTED_FUNCTION_CALL_KEY"],
+    ["missing owner key", () => [{ publicKey: "ed25519:Other", permission: "FullAccess" }], "OWNER_KEY_MISSING"],
+    ["incorrect owner key permission", (o: string) => [{ publicKey: o, permission: "FunctionCall" }], "OWNER_KEY_NOT_FULL_ACCESS"],
+    ["parent key present", (o: string) => [{ publicKey: o, permission: "FullAccess" }, { publicKey: PARENT_PK, permission: "FullAccess" }], "PARENT_KEY_PRESENT"],
+  ] as const) {
+    it(`${label}: RECOVERY_REQUIRED with evidence`, async () => {
+      const { u, a } = await active();
+      near.accounts.set(a.accountId, keys(a.ownerPublicKey) as never);
+      const r = await reverify(u);
+      expect(r).toMatchObject({ status: "RECOVERY_REQUIRED", recoveryReason: reason, evidence: { decision: "RECOVERY_REQUIRED", reason } });
+    });
+  }
+  it("RPC failure, account unavailable and wrong network: RECOVERY_REQUIRED, never active", async () => {
+    const { u, a } = await active();
+    near.down = true;
+    expect(await reverify(u)).toMatchObject({ status: "RECOVERY_REQUIRED", recoveryReason: "VERIFICATION_UNAVAILABLE" });
+    near.down = false;
+    expect((await reverify(u)).status).toBe("ACTIVE");
+    near.chain = "mainnet";
+    expect(await reverify(u)).toMatchObject({ status: "RECOVERY_REQUIRED", recoveryReason: "WRONG_NETWORK" });
+    near.chain = "testnet";
+    near.accounts.delete(a.accountId);
+    expect(await reverify(u)).toMatchObject({ status: "RECOVERY_REQUIRED", recoveryReason: "ACCOUNT_NOT_FOUND" });
+  });
+  it("consent bound to another Agent or account: BINDING_MISMATCH", async () => {
+    const { u, a } = await active();
+    await db.execute(sql`update spak_agent_account_challenges set account_id = 'zzz.spak-agents.testnet' where id = (select consent_challenge_id from spak_agent_accounts where id = ${a.id})`);
+    expect(await reverify(u)).toMatchObject({ status: "RECOVERY_REQUIRED", recoveryReason: "BINDING_MISMATCH" });
+  });
+  it("Agent suspended or revoked while NEAR is being read: never activated", async () => {
+    for (const action of ["suspend", "revoke"] as const) {
+      const u = await verifiedUser();
+      const { body } = await consent(u);
+      const orig = near.accessKeys.bind(near);
+      near.accessKeys = async (id: string) => {
+        const k = await orig(id);
+        if (id !== PARENT) { near.accessKeys = orig; if (action === "suspend") await agentsSvc.suspend(u.userId, u.agentId); else await agentsSvc.revoke(u.userId, u.agentId, "REVOKE"); }
+        return k;
+      };
+      const r = await svc.create(u.userId, u.agentId, body);
+      expect(r.status).toBe(action === "suspend" ? "SUSPENDED" : "REVOKED");
+      expect((await svc.view(u.userId, u.agentId)).account?.activatedAt ?? null).toBeNull();
+    }
+  });
+  it("re-verifying the Agent owner identity never re-activates the account on its own", async () => {
+    const { u, a } = await active();
+    await agentsSvc.suspend(u.userId, u.agentId);
+    near.accounts.set(a.accountId, [{ publicKey: "ed25519:Other", permission: "FullAccess" }]);
+    const ch = await agentsSvc.challenge(u.userId, u.agentId, { accountId: u.owner.address, domain: DOMAIN });
+    const s = await u.owner.sign(ch.message, hex.encode(base64.decode(ch.nonce)), ch.recipient);
+    await agentsSvc.verify(u.userId, u.agentId, { challengeId: ch.challengeId, method: ch.method, accountId: u.owner.address, publicKey: s.publicKey, signature: s.signature, domain: DOMAIN });
+    expect((await svc.view(u.userId, u.agentId)).account!.status).toBe("OWNERSHIP_VERIFICATION_PENDING");
+    expect(await reverify(u)).toMatchObject({ status: "RECOVERY_REQUIRED", recoveryReason: "OWNER_KEY_MISSING" });
+    expect(await code(svc.verify(u.userId, u.agentId))).toBe("OK");
+  });
+  it("verification never moves a suspended account by itself", async () => {
+    const { u } = await active();
+    await agentsSvc.suspend(u.userId, u.agentId);
+    expect((await reverify(u)).status).toBe("SUSPENDED");
+  });
+
+  /* ---------------------------------------------- key rotation and lost keys ---------------------------------------------- */
+
+  async function rotationAuthorized() {
+    const { u, a } = await active();
+    const next = nearWallet();
+    const p = await svc.prepareRotation(u.userId, u.agentId, { newPublicKey: next.publicKey, domain: DOMAIN });
+    expect(p.transaction).toEqual({ signerId: a.accountId, receiverId: a.accountId, actions: [{ type: "AddKey", publicKey: next.publicKey, permission: "FullAccess" }, { type: "DeleteKey", publicKey: a.ownerPublicKey }] });
+    const s = await u.owner.sign(p.message, hex.encode(base64.decode(p.nonce)), p.recipient);
+    const r = await svc.authorizeRotation(u.userId, u.agentId, { rotationId: p.rotationId, publicKey: s.publicKey, signature: s.signature, domain: DOMAIN });
+    expect(r.status).toBe("AUTHORIZED");
+    return { u, a, next, p };
+  }
+  it("rotation: authorised by the current dedicated-account key, completed only when NEAR shows the new key alone", async () => {
+    const { u, a, next, p } = await rotationAuthorized();
+    near.accounts.set(a.accountId, [{ publicKey: next.publicKey, permission: "FullAccess" }]); // the owner's own transaction landed
+    const done = await svc.completeRotation(u.userId, u.agentId, { rotationId: p.rotationId, txHash: "owner_tx" });
+    expect(done).toMatchObject({ status: "COMPLETED", txHash: "owner_tx" });
+    const v = (await svc.view(u.userId, u.agentId)).account!;
+    expect(v).toMatchObject({ status: "ACTIVE", ownerPublicKey: next.publicKey, evidence: { keys: [{ publicKey: next.publicKey, permission: "FullAccess" }] } });
+  });
+  it("rotation: old key not removed (both keys present) fails and the account needs recovery", async () => {
+    const { u, a, next, p } = await rotationAuthorized();
+    near.accounts.set(a.accountId, [{ publicKey: a.ownerPublicKey, permission: "FullAccess" }, { publicKey: next.publicKey, permission: "FullAccess" }]);
+    expect(await svc.completeRotation(u.userId, u.agentId, { rotationId: p.rotationId })).toMatchObject({ status: "FAILED", failureReason: "UNEXPECTED_KEYS" });
+    expect((await svc.view(u.userId, u.agentId)).account).toMatchObject({ status: "RECOVERY_REQUIRED", recoveryReason: "UNEXPECTED_FULL_ACCESS_KEY", ownerPublicKey: a.ownerPublicKey });
+  });
+  it("rotation: failed transaction leaves the account unchanged and active", async () => {
+    const { u, a, p } = await rotationAuthorized();
+    near.txStatus = async () => "FAILURE";
+    expect(await svc.completeRotation(u.userId, u.agentId, { rotationId: p.rotationId, txHash: "bad" })).toMatchObject({ status: "FAILED", failureReason: "TRANSACTION_FAILED" });
+    expect((await svc.view(u.userId, u.agentId)).account).toMatchObject({ status: "ACTIVE", ownerPublicKey: a.ownerPublicKey });
+  });
+  it("rotation: unknown outcome stays authorised; a later NEAR read completes it", async () => {
+    const { u, a, next, p } = await rotationAuthorized();
+    near.txStatus = async () => "UNKNOWN";
+    expect((await svc.completeRotation(u.userId, u.agentId, { rotationId: p.rotationId, txHash: "pending" })).status).toBe("AUTHORIZED");
+    near.accounts.set(a.accountId, [{ publicKey: next.publicKey, permission: "FullAccess" }]);
+    expect(await svc.verify(u.userId, u.agentId)).toMatchObject({ status: "ACTIVE", ownerPublicKey: next.publicKey });
+    expect((await svc.view(u.userId, u.agentId)).rotation).toBeNull();
+  });
+  it("rotation authorisation: wrong key, bad signature, key not on the account, expired, reused, SPak key as replacement", async () => {
+    const { u, a } = await active();
+    expect(await code(svc.prepareRotation(u.userId, u.agentId, { newPublicKey: PARENT_PK, domain: DOMAIN }))).toBe("AGENT_BAD_REQUEST");
+    expect(await code(svc.prepareRotation(u.userId, u.agentId, { newPublicKey: a.ownerPublicKey, domain: DOMAIN }))).toBe("AGENT_BAD_REQUEST");
+    const p1 = await svc.prepareRotation(u.userId, u.agentId, { newPublicKey: nearWallet().publicKey, domain: DOMAIN });
+    expect(await code(svc.prepareRotation(u.userId, u.agentId, { newPublicKey: nearWallet().publicKey, domain: DOMAIN }))).toBe("AGENT_EXISTS");
+    const stranger = nearWallet();
+    const s1 = await stranger.sign(p1.message, hex.encode(base64.decode(p1.nonce)), p1.recipient);
+    expect(await code(svc.authorizeRotation(u.userId, u.agentId, { rotationId: p1.rotationId, publicKey: s1.publicKey, signature: s1.signature, domain: DOMAIN }))).toBe("AGENT_PROOF_INVALID");
+    expect(await code(svc.authorizeRotation(u.userId, u.agentId, { rotationId: p1.rotationId, publicKey: s1.publicKey, signature: s1.signature, domain: DOMAIN }))).toBe("AGENT_CHALLENGE_USED");
+    const p2 = await svc.prepareRotation(u.userId, u.agentId, { newPublicKey: nearWallet().publicKey, domain: DOMAIN });
+    expect(await code(svc.authorizeRotation(u.userId, u.agentId, { rotationId: p2.rotationId, publicKey: a.ownerPublicKey, signature: base64.encode(new Uint8Array(64)), domain: DOMAIN }))).toBe("AGENT_PROOF_INVALID");
+    const p3 = await svc.prepareRotation(u.userId, u.agentId, { newPublicKey: nearWallet().publicKey, domain: DOMAIN });
+    near.accounts.set(a.accountId, [{ publicKey: "ed25519:Other", permission: "FullAccess" }]); // the current key was removed on chain
+    const s3 = await u.owner.sign(p3.message, hex.encode(base64.decode(p3.nonce)), p3.recipient);
+    expect(await code(svc.authorizeRotation(u.userId, u.agentId, { rotationId: p3.rotationId, publicKey: s3.publicKey, signature: s3.signature, domain: DOMAIN }))).toBe("AGENT_KEY_NOT_AUTHORIZED");
+  });
+  it("rotation challenge expires; re-verifying the owner identity does not authorise a rotation", async () => {
+    const { u } = await active();
+    const p = await svc.prepareRotation(u.userId, u.agentId, { newPublicKey: nearWallet().publicKey, domain: DOMAIN });
+    clock.now += 5 * 60_000 + 1;
+    const s = await u.owner.sign(p.message, hex.encode(base64.decode(p.nonce)), p.recipient);
+    expect(await code(svc.authorizeRotation(u.userId, u.agentId, { rotationId: p.rotationId, publicKey: s.publicKey, signature: s.signature, domain: DOMAIN }))).toBe("AGENT_CHALLENGE_EXPIRED");
+    // completeRotation on a rotation that was never authorised changes nothing
+    expect((await svc.completeRotation(u.userId, u.agentId, { rotationId: p.rotationId })).status).toBe("CHALLENGED");
+  });
+  it("lost key: recovery is not offered, rotation is not available, SPak has no way in", async () => {
+    const { u, a } = await active();
+    near.accounts.set(a.accountId, [{ publicKey: "ed25519:SomeoneElse", permission: "FullAccess" }]);
+    await svc.verify(u.userId, u.agentId);
+    const v = await svc.view(u.userId, u.agentId);
+    expect(v).toMatchObject({ keyRotationAvailable: false, recovery: "KEY_LOST_OR_CHANGED", account: { status: "RECOVERY_REQUIRED" } });
+    expect(await code(svc.prepareRotation(u.userId, u.agentId, { newPublicKey: nearWallet().publicKey, domain: DOMAIN }))).toBe("AGENT_INVALID_STATE");
+    expect(near.creates).toBe(1); // SPak never sends another transaction to the account
   });
 });

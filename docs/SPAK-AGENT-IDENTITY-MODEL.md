@@ -398,3 +398,53 @@ SPak cannot recover the account. If the owner loses every full-access key, the a
 ### Not changed
 
 Guard, recipients, approvals, execution and signing are untouched. The account grants no permissions and SPak cannot sign for it.
+
+## 11. Hardening (feature/spak-agent-account-hardening)
+
+This section supersedes the earlier statements in sections 9 and 10 where they differ.
+
+### Two identities, two keys
+
+| | Agent owner identity (Stage 5) | Dedicated Agent NEAR account (Stage 7) |
+|---|---|---|
+| What | The user's own NEAR account, e.g. `alice.near` | `a<hash>.<parent>.testnet`, created for the Agent |
+| Proven by | NEP-413 from a full-access key of that account | NEAR showing exactly the approved key, with full access, on the dedicated account |
+| Key rotation | The user rotates keys on their own account, then re-verifies the Agent | Owner-authorised rotation through SPak (below); the owner sends the transaction |
+| Recovery | Their own account's keys and backups | None through SPak. A lost key means a lost account |
+
+Re-verifying the owner identity never re-activates or proves control of the dedicated account. After an Agent is suspended and re-verified, its dedicated account goes to OWNERSHIP_VERIFICATION_PENDING and becomes ACTIVE only after a fresh NEAR read passes every check below.
+
+### Exact account verification (implemented)
+
+ACTIVE requires all of these, read by the backend from NEAR testnet, decided by `assessAccount()`:
+
+1. NEAR answers (otherwise `VERIFICATION_UNAVAILABLE`).
+2. Chain id is `testnet` (otherwise `WRONG_NETWORK`).
+3. The account exists (`ACCOUNT_NOT_FOUND`).
+4. The account was created under this Agent's consent: the consent record has the same Agent, user and account id, and its key is the installed key or the installed key came from a completed rotation (`BINDING_MISMATCH`).
+5. SPak's parent key is absent (`PARENT_KEY_PRESENT`).
+6. The approved owner key is present (`OWNER_KEY_MISSING`) with full access (`OWNER_KEY_NOT_FULL_ACCESS`).
+7. No other full-access key (`UNEXPECTED_FULL_ACCESS_KEY`) and no function-call key (`UNEXPECTED_FUNCTION_CALL_KEY`).
+8. Inside one database transaction that locks the Agent and the account: the Agent is VERIFIED and in date, the account is still OWNERSHIP_VERIFICATION_PENDING or ACTIVE, and its version has not changed since NEAR was read. Otherwise nothing is written (stale evidence never overrides newer state).
+
+Any failure moves the account to RECOVERY_REQUIRED with the reason and the evidence (chain id, every public key and its permission, time, decision). Public data only. A suspended or revoked account is never moved by verification.
+
+### Dedicated account key rotation (implemented; not exercised on live testnet)
+
+NEAR allows several actions in one transaction to one receiver, applied all or nothing (docs.near.org/protocol/transactions/transaction-anatomy.md), and adding or deleting keys needs a full-access key (docs.near.org/protocol/access-keys). So:
+
+1. `POST /account/rotation/prepare { newPublicKey }`: only for an ACTIVE account of a verified Agent; the new key must be ed25519, different, and never SPak's key. One open rotation per account.
+2. `POST /account/rotation/authorize`: NEP-413 signature by the key currently installed on the dedicated account, verified against the stored message, and that key confirmed as full access on the dedicated account on NEAR. Single use, 5 minutes.
+3. The owner sends, from their own wallet, one transaction signed by the dedicated account: `AddKey(new, FullAccess)` then `DeleteKey(old)`. SPak never signs it and never sees either private key.
+4. `POST /account/rotation/complete { rotationId, txHash? }`: completed only when NEAR shows the new key as the only key, with full access. Old key alone plus a failed transaction: FAILED, account unchanged. Old key alone and outcome unknown: stays AUTHORIZED; any later NEAR read that shows the new key alone completes it. Any other key set: FAILED and the account goes to RECOVERY_REQUIRED.
+
+### Lost keys
+
+If the approved key is gone from the account, SPak shows RECOVERY_REQUIRED and "recovery is not available through SPak". NEAR has no protocol recovery (docs.near.org/protocol/network/token-loss.md), SPak's parent has no control over sub-accounts, and SPak adds no backup or SPak-held key. The user revokes the Agent and creates a new one. A safe recovery design (for example an owner-chosen second key or a recovery contract) is a product and contract decision and a mainnet blocker.
+
+### Wallet associations after Agent suspension (correction to section 9)
+
+- Agent suspended: active and pending associations become SUSPENDED. History kept, validity not extended.
+- Agent re-verified: associations stay SUSPENDED. Nothing is reactivated.
+- Each association returns to ACTIVE only with a fresh challenge and signature from that wallet (EIP-4361, SIWS ed25519 or NEP-413 full-access), verified with the Agent re-checked inside the activation transaction. Verification date and a new 90-day expiry are set then.
+- Expired associations need the same fresh proof. Revoked and compromised associations never reactivate; a new record with a new challenge is required.

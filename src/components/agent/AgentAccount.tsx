@@ -1,13 +1,15 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/client";
-import { Button, Mono, Spinner } from "@/components/ui";
+import { Button, Field, Mono, Spinner, inputCls } from "@/components/ui";
 import { Notice } from "@/components/status";
 import type { AgentView } from "@/agents/service";
 import type { AccountView } from "@/agents/accounts";
 import { discoverNearWallets, signNear } from "@/wallets/near";
 
-interface View { availability: "AVAILABLE" | "AGENT_NOT_VERIFIED" | "UNAVAILABLE"; unavailableReason: string | null; network: string | null; account: AccountView | null; failedAttempts: AccountView[] }
+interface Rotation { id: string; status: string; newPublicKey: string; oldPublicKey: string; accountId: string; failureReason: string | null }
+interface View { availability: "AVAILABLE" | "AGENT_NOT_VERIFIED" | "UNAVAILABLE"; unavailableReason: string | null; network: string | null; account: AccountView | null; failedAttempts: AccountView[]; rotation: Rotation | null; keyRotationAvailable: boolean; recovery: "KEY_LOST_OR_CHANGED" | "RECHECK" | "OWNER_ACTION_NEEDED" | null }
+interface RotationPlan { rotationId: string; message: string; nonce: string; recipient: string; accountId: string; currentPublicKey: string; newPublicKey: string; transaction: { signerId: string; receiverId: string; actions: { type: string; publicKey: string; permission?: string }[] } }
 interface Prepared { challengeId: string; accountId: string; network: string; parentAccountId: string; ownerAccountId: string; ownerPublicKey: string; message: string; nonce: string; recipient: string }
 
 const STATUS: Record<string, { text: string; role: string }> = {
@@ -17,7 +19,7 @@ const STATUS: Record<string, { text: string; role: string }> = {
   REVOKED: { text: "Revoked in SPak (account remains on NEAR)", role: "neutral" }, CREATION_FAILED: { text: "Creation failed", role: "error" },
 };
 const REASON: Record<string, string> = {
-  OWNER_KEY_MISSING: "Your owner key is no longer a full-access key on this account.", UNEXPECTED_SPAK_KEY: "A SPak key was found on the account. SPak must never have one.",
+  OWNER_KEY_MISSING: "Your owner key is no longer a full-access key on this account.", PARENT_KEY_PRESENT: "A SPak key was found on the account. SPak must never have one.", UNEXPECTED_FULL_ACCESS_KEY: "Another full-access key is on the account.", UNEXPECTED_FUNCTION_CALL_KEY: "A limited (function-call) key is on the account.", OWNER_KEY_NOT_FULL_ACCESS: "Your key is on the account but without full access.", BINDING_MISMATCH: "The account does not match the request it was created for.", VERIFICATION_UNAVAILABLE: "NEAR could not confirm the account. Check again.",
   ACCOUNT_NOT_FOUND: "NEAR does not show this account.", NAME_TAKEN: "The name was taken before creation.", PARENT_NOT_AUTHORIZED: "SPak's parent account could not sign.",
   NEAR_UNREACHABLE: "NEAR testnet could not be reached.", TRANSACTION_FAILED: "The creation transaction failed. Nothing was charged to you.", WRONG_NETWORK: "The server is not on testnet.",
 };
@@ -31,6 +33,30 @@ export function AgentAccount({ agent }: { agent: AgentView }) {
   const [plan, setPlan] = useState<Prepared | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [newKey, setNewKey] = useState("");
+  const [rot, setRot] = useState<RotationPlan | null>(null);
+  const [txHash, setTxHash] = useState("");
+  async function startRotation() {
+    setBusy(true); setMsg(null);
+    try {
+      const p = await api<RotationPlan>(`/api/agents/${agent.id}/account/rotation/prepare`, { newPublicKey: newKey.trim() });
+      const w = (await discoverNearWallets()).find((x) => x.available);
+      if (!w) throw new Error("No NEAR wallet is available in this browser.");
+      const s = await signNear(w.id, { message: p.message, nonceB64: p.nonce, recipient: p.recipient, challengeId: p.rotationId });
+      if (!s) { setMsg({ ok: false, text: "The wallet left this page before returning a signature. Start again." }); return; }
+      await api(`/api/agents/${agent.id}/account/rotation/authorize`, { rotationId: p.rotationId, publicKey: s.publicKey, signature: s.signature });
+      setRot(p);
+    } catch (e) { setMsg({ ok: false, text: (e as Error).message }); } finally { setBusy(false); await load(); }
+  }
+  async function finishRotation(rotationId: string) {
+    setBusy(true); setMsg(null);
+    try {
+      const r = await api<{ rotation: Rotation }>(`/api/agents/${agent.id}/account/rotation/complete`, { rotationId, ...(txHash.trim() ? { txHash: txHash.trim() } : {}) });
+      setMsg(r.rotation.status === "COMPLETED" ? { ok: true, text: "NEAR shows only your new key on the account. Rotation complete." } : r.rotation.status === "AUTHORIZED" ? { ok: false, text: "NEAR does not show the change yet. Check again once your transaction is final." } : { ok: false, text: `Rotation failed: ${(r.rotation.failureReason ?? "").toLowerCase().replaceAll("_", " ")}.` });
+      if (r.rotation.status !== "AUTHORIZED") setRot(null);
+    } catch (e) { setMsg({ ok: false, text: (e as Error).message }); } finally { setBusy(false); await load(); }
+  }
+
   const load = useCallback(() => api<View>(`/api/agents/${agent.id}/account`).then(setV).catch((e) => setMsg({ ok: false, text: (e as Error).message })), [agent.id]);
   useEffect(() => { load(); }, [load, agent.status]);
 
@@ -71,6 +97,35 @@ export function AgentAccount({ agent }: { agent: AgentView }) {
           <div><dt className="type-label text-fg-2">Created</dt><dd className="type-body-sm mt-1 text-fg">{a.createdOnChainAt ? new Date(a.createdOnChainAt).toLocaleString() : "–"}</dd><p className="type-caption text-fg-2">Sponsored by SPak on testnet · {a.sponsorship.toLowerCase().replace("_", " ")}</p></div>
           {a.status !== "REVOKED" && a.status !== "ACTIVE" && <div className="sm:col-span-2"><Button size="sm" variant="ghost" disabled={busy} onClick={recheck}>{busy ? "Checking NEAR" : "Check on NEAR again"}</Button></div>}
           {a.status === "ACTIVE" && <div className="sm:col-span-2"><Button size="sm" variant="ghost" disabled={busy} onClick={recheck}>{busy ? "Checking NEAR" : "Re-verify ownership"}</Button></div>}
+          <div className="sm:col-span-2 border-t border-line pt-3" data-account-authority>
+            <ul className="type-body-sm flex flex-col gap-1">
+              <li><span className="text-fg-2">Owner identity: </span><span className="text-fg">{agent.ownership.state === "VERIFIED" ? "verified" : "not verified"}</span><span className="text-fg-2"> (your NEAR account {agent.ownership.accountId ?? "–"})</span></li>
+              <li><span className="text-fg-2">Dedicated account ownership: </span><span className="text-fg">{a.status === "ACTIVE" ? "verified on NEAR" : "not verified"}</span></li>
+              <li><span className="text-fg-2">Key rotation: </span><span className="text-fg">{v!.keyRotationAvailable ? "available" : "not available"}</span></li>
+            </ul>
+            {v!.recovery === "KEY_LOST_OR_CHANGED" && (
+              <div className="mt-2" data-recovery-unavailable><Notice role="error" title="Recovery is not available through SPak">The approved key is no longer a full-access key on this account. If you changed it with a key you hold, add back exactly the approved key or rotate through SPak with it. If the key is lost, the account cannot be recovered: SPak holds no key on it and NEAR has no recovery mechanism. Revoke the Agent and create a new one.</Notice></div>
+            )}
+          </div>
+          {v!.keyRotationAvailable && (
+            <div className="sm:col-span-2 flex flex-col gap-3 rounded-control border border-line p-3" data-key-rotation>
+              <p className="type-label text-fg">Rotate the dedicated account key</p>
+              {!rot && v!.rotation?.status !== "AUTHORIZED" ? <>
+                <p className="type-body-sm text-fg-2">Re-verifying your owner identity does not change this key. To replace it: enter the new public key, sign with the key now on the account, then send the transaction below from a wallet that holds it. SPak cannot send it for you.</p>
+                <Field label="New public key (ed25519:…)"><input className={`${inputCls} type-address`} name="newPublicKey" value={newKey} onChange={(e) => setNewKey(e.target.value)} spellCheck={false} autoComplete="off" /></Field>
+                <div><Button size="sm" disabled={busy || !newKey.trim()} onClick={startRotation}>{busy ? "Waiting for your wallet" : "Authorise with current key"}</Button></div>
+              </> : (() => {
+                const pending = rot ?? (v!.rotation ? { rotationId: v!.rotation.id, accountId: v!.rotation.accountId, currentPublicKey: v!.rotation.oldPublicKey, newPublicKey: v!.rotation.newPublicKey } : null);
+                if (!pending) return null;
+                return <>
+                  <p className="type-body-sm text-fg-2">Authorised. Send one transaction from <span className="text-fg [overflow-wrap:anywhere]">{pending.accountId}</span> with exactly these two actions, in this order:</p>
+                  <ol className="type-body-sm list-decimal pl-5 text-fg"><li>AddKey <Mono value={pending.newPublicKey} /> with full access</li><li>DeleteKey <Mono value={pending.currentPublicKey} /></li></ol>
+                  <Field label="Transaction hash (optional)"><input className={`${inputCls} type-identifier`} name="rotationTx" value={txHash} onChange={(e) => setTxHash(e.target.value)} spellCheck={false} autoComplete="off" /></Field>
+                  <div><Button size="sm" disabled={busy} onClick={() => finishRotation(pending.rotationId)}>{busy ? "Checking NEAR" : "Check on NEAR"}</Button></div>
+                </>;
+              })()}
+            </div>
+          )}
         </dl>
       ) : v.availability === "UNAVAILABLE" ? (
         <p className="type-body-sm mt-3 text-fg-2" data-account-unavailable>Not available on this server yet. {v.unavailableReason}</p>

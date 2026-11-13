@@ -92,6 +92,13 @@
       "when": 1794569341421,
       "tag": "0012_agent_near_account",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794581487101,
+      "tag": "0013_agent_account_hardening",
+      "breakpoints": true
     }
   ]
 }

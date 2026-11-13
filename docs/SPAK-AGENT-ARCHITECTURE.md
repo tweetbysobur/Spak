@@ -163,3 +163,11 @@ The existing `spak_wallets` table stays the source of truth for ownership. Agent
 ## 8. Decisions that need owner input
 
 See [Roadmap, unresolved decisions](SPAK-AGENT-ROADMAP.md#unresolved-decisions).
+
+## 9. Boundaries after hardening
+
+- Agent identity verification grants no transaction authority and does not prove control of the dedicated account.
+- Dedicated account ownership grants no authority over associated wallets.
+- Wallet association proves ownership only, and lapses with Agent suspension until each wallet signs again.
+- SPak's parent account keeps no authority over created accounts and is refused as a rotation key.
+- Guard remains the only transaction policy authority. No permissions, autonomy, Chain Signatures or scheduled execution exist.
