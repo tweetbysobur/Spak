@@ -75,7 +75,7 @@ export function Manual({ ownAddress, onReady }: { ownAddress: (network: string) 
   return (
     <Card>
       <SectionTitle sub="Choose exactly what to send and receive. You review a quote before anything can be sent.">Manual swap</SectionTitle>
-      <p className="type-caption -mt-2 mb-3 text-fg-2" data-v1-scope>Send from EVM networks or Solana. Receive on EVM networks (tokens), Solana or NEAR. Sending from NEAR, receiving native coins on EVM networks, and other networks are not available yet: SPak only offers routes where it can verify delivery itself.</p>
+      <p className="type-caption -mt-2 mb-3 text-fg-2" data-v1-scope>Send from EVM networks or Solana. Receive on EVM networks (tokens) or Solana. NEAR, receiving native coins on EVM networks, and other networks are not available yet: SPak only offers routes where it can verify delivery itself.</p>
       <form onSubmit={submit} className="flex flex-col gap-4">
         {side("source")}
         <Field label="Amount"><input className={`${inputCls} type-amount`} inputMode="decimal" placeholder="0.0" value={f.amount} onChange={(e) => set("amount", e.target.value.replace(/[^\d.]/g, ""))} /></Field>

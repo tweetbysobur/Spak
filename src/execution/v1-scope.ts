@@ -5,7 +5,9 @@
  * itself on the destination chain:
  * - Source: EVM networks and Solana. NEAR is off as a source in V1: its deposit is manual and was never validated
  *   with a real wallet and funds. Other families have no deposit flow.
- * - Destination: EVM, Solana and NEAR, the families with a delivery verifier (src/tracking/verifiers).
+ * - Destination: EVM and Solana. Their delivery verifiers have run against real mainnet transactions. NEAR has a
+ *   verifier in code, but it was tested only with mocked receipts and assumes intents.near signs deliveries, so NEAR
+ *   is off as a destination in V1 until a real SPak delivery to NEAR has been verified.
  * - EVM native coins (ETH, POL, BNB, AVAX, xDAI) are off as a destination: native value moved by an internal call
  *   cannot be seen without a trace RPC, so delivery could end UNVERIFIABLE. Tokens are verified from Transfer logs.
  */
@@ -13,7 +15,7 @@ import { getAsset } from "../spak-in/registries/assets";
 import { getNetwork } from "../spak-in/registries/networks";
 
 export const V1_SOURCE_FAMILIES: readonly string[] = ["evm", "solana"];
-export const V1_DESTINATION_FAMILIES: readonly string[] = ["evm", "solana", "near"];
+export const V1_DESTINATION_FAMILIES: readonly string[] = ["evm", "solana"];
 
 export type RouteProblem = { code: "V1_SOURCE_NOT_SUPPORTED" | "V1_DESTINATION_NOT_SUPPORTED" | "V1_NATIVE_DESTINATION_NOT_SUPPORTED"; message: string };
 
@@ -24,7 +26,7 @@ export function sourceProblem(network: string): RouteProblem | null {
   return {
     code: "V1_SOURCE_NOT_SUPPORTED",
     message: n?.family === "near"
-      ? "Sending from NEAR is not available yet. You can send from an EVM network or Solana, and receive on NEAR."
+      ? "Sending from NEAR is not available yet. You can send from an EVM network or Solana."
       : `Sending from ${name} is not available yet. You can send from an EVM network or Solana.`,
   };
 }
@@ -32,6 +34,9 @@ export function sourceProblem(network: string): RouteProblem | null {
 export function destinationProblem(network: string, assetId?: string | null): RouteProblem | null {
   const n = getNetwork(network);
   const name = n?.name ?? network;
+  if (n?.family === "near") {
+    return { code: "V1_DESTINATION_NOT_SUPPORTED", message: "Delivery to NEAR is not available yet: SPak has not yet verified a real delivery on NEAR, and it never reports a delivery it has not verified. You can receive on an EVM network or Solana." };
+  }
   if (!n || !V1_DESTINATION_FAMILIES.includes(n.family)) {
     return { code: "V1_DESTINATION_NOT_SUPPORTED", message: `Delivery to ${name} is not available yet: SPak cannot verify delivery on ${name} itself, and it never reports a delivery it has not verified.` };
   }

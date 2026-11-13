@@ -58,11 +58,11 @@ async function shot(page, name) { await page.screenshot({ path: `${OUT}/${name}.
   const opts = async (label) => page.getByLabel(label).locator('option').allInnerTexts();
   const from = await opts('From network'), to = await opts('To network');
   ok('From network: EVM and Solana only, no NEAR', from.includes('Base') && from.includes('Solana') && !from.includes('NEAR') && !from.includes('Bitcoin'), from.join(','));
-  ok('To network: EVM, Solana and NEAR; no unverifiable networks', to.includes('Arbitrum') && to.includes('Solana') && to.includes('NEAR') && !['Bitcoin', 'Tron', 'Sui', 'XRP Ledger', 'Dogecoin', 'Litecoin', 'TON', 'Stellar', 'Aptos'].some((n) => to.includes(n)), to.join(','));
+  ok('To network: EVM and Solana only; no NEAR, no unverifiable networks', to.includes('Arbitrum') && to.includes('Solana') && !to.includes('NEAR') && !['Bitcoin', 'Tron', 'Sui', 'XRP Ledger', 'Dogecoin', 'Litecoin', 'TON', 'Stellar', 'Aptos'].some((n) => to.includes(n)), to.join(','));
   await page.getByLabel('To network').selectOption('arbitrum');
   const recv = await opts('Receive asset');
   ok('Receive asset on Arbitrum: tokens only, no native ETH', recv.includes('USDC') && !recv.includes('ETH'), recv.join(','));
-  ok('the restriction is explained in the form', /Sending from NEAR.*not available yet/.test(await page.locator('[data-v1-scope]').innerText()));
+  ok('the restriction is explained in the form', /NEAR.*not available yet/.test(await page.locator('[data-v1-scope]').innerText()));
   await shot(page, 'v1-01-manual-form');
 
   await page.getByRole('tab', { name: 'Instruction' }).click();
