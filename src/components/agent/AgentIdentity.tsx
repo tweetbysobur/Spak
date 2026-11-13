@@ -7,6 +7,7 @@ import type { Session } from "@/components/session";
 import { discoverNearWallets, signNear } from "@/wallets/near";
 import type { AgentView } from "@/agents/service";
 import { AgentWallets } from "./AgentWallets";
+import { AgentAccount } from "./AgentAccount";
 
 interface Events { items: { id: number; event: string; fromStatus: string | null; toStatus: string | null; at: string }[] }
 const EVENT: Record<string, string> = {
@@ -86,12 +87,12 @@ export function AgentIdentity({ session }: { session: Session }) {
         </form>
       ) : (
         <div className="flex flex-col gap-4" data-agent-status={agent.status} data-ownership={agent.ownership.state}>
-          <dl className="grid gap-3 sm:grid-cols-3 [&>div]:min-w-0">
+          <dl className="grid gap-3 sm:grid-cols-2 [&>div]:min-w-0">
             <div><dt className="type-label text-fg-2">Agent identity</dt><dd className="mt-1"><Dot role="neutral">Created</Dot><p className="type-body-sm mt-0.5 text-fg">{agent.displayName}</p><Mono value={agent.id} /></dd></div>
             <div><dt className="type-label text-fg-2">Ownership</dt><dd className="mt-1"><Dot role={OWNERSHIP[agent.ownership.state].role}>{OWNERSHIP[agent.ownership.state].text}</Dot>
               {agent.ownership.accountId && <p className="type-body-sm mt-0.5 text-fg [overflow-wrap:anywhere]">{agent.ownership.accountId}</p>}
               {agent.ownership.expiresAt && <p className="type-caption text-fg-2">Valid until {new Date(agent.ownership.expiresAt).toLocaleDateString()}</p>}</dd></div>
-            <div><dt className="type-label text-fg-2">Dedicated Agent NEAR account</dt><dd className="mt-1"><Dot role="neutral">Not available yet</Dot><p className="type-caption mt-0.5 text-fg-2">Comes in a later stage.</p></dd></div>
+            
           </dl>
           {agent.ownership.attestationHash && <p className="type-caption text-fg-2">Ownership record (kept by SPak, not on chain): <span className="type-identifier">{agent.ownership.attestationHash.slice(0, 16)}…</span></p>}
 
@@ -106,6 +107,7 @@ export function AgentIdentity({ session }: { session: Session }) {
             </div>
           )}
 
+          <AgentAccount agent={agent} />
           <AgentWallets agent={agent} session={session} />
 
           {result && <Notice role={result.ok ? "success" : "error"} title={result.ok ? "Done" : "Not verified"}>{result.text}</Notice>}

@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/database";
 import { AgentError, AgentService } from "@/agents/service";
 import { AgentWalletService } from "@/agents/wallets";
+import { AgentAccountService } from "@/agents/accounts";
+import { agentAccountConfig, nearTestnetChain } from "@/agents/near-chain";
 import { appOrigin, requireUser, route } from "./auth";
 
 const g = globalThis as unknown as { __spakAgents?: Promise<AgentService> };
@@ -26,3 +28,14 @@ const gw = globalThis as unknown as { __spakAgentWallets?: Promise<AgentWalletSe
 export const agentWalletService = () => (gw.__spakAgentWallets ??= getDb().then((db) => new AgentWalletService(db)));
 /** The URI wallets sign for: the server's configured origin. */
 export const agentUri = (req: Request) => appOrigin(req).origin;
+
+const ga = globalThis as unknown as { __spakAgentAccounts?: Promise<AgentAccountService> };
+/**
+ * Dedicated Agent accounts. Testnet only: the config refuses anything else, and without a complete testnet config
+ * the feature reports itself unavailable. The parent key stays in the server environment and goes only to the signer.
+ */
+export const agentAccountService = () => (ga.__spakAgentAccounts ??= getDb().then((db) => {
+  const config = agentAccountConfig();
+  const chain = "unavailable" in config ? null : nearTestnetChain(config, process.env.SPAK_AGENT_PARENT_PRIVATE_KEY!);
+  return new AgentAccountService({ db, config, chain });
+}));

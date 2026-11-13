@@ -1,6 +1,7 @@
 import { and, eq, gt, inArray, isNull, lte } from "drizzle-orm";
 import type { Db } from "../database/repositories";
 import { agentEvents, agentWalletChallenges, agentWallets } from "../database/schema";
+import { cascadeAgentAccount } from "./accounts";
 
 /**
  * How an Agent's lifecycle change applies to its wallet associations. Runs inside the Agent's own state-change
@@ -11,6 +12,7 @@ import { agentEvents, agentWalletChallenges, agentWallets } from "../database/sc
  *   (Expired ones never come back without a fresh wallet signature.)
  */
 export async function cascadeAgentStatus(tx: Db, a: { id: string; userId: string }, from: string, to: string, now: Date) {
+  await cascadeAgentAccount(tx, a, from, to, now);
   const log = async (rows: { id: string }[], event: string, toStatus: string) => {
     for (const r of rows) await tx.insert(agentEvents).values({ agentId: a.id, userId: a.userId, event, fromStatus: null, toStatus, data: { associationId: r.id, cause: `AGENT_${to}` }, at: now });
   };

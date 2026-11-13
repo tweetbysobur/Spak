@@ -708,3 +708,52 @@ export const agentWalletChallenges = pgTable("spak_agent_wallet_challenges", {
   usedAt: timestamp("used_at", { withTimezone: true }),
   outcome: text("outcome"),
 }, (t) => [uniqueIndex("spak_agent_wallet_challenges_nonce_uq").on(t.nonce), index("spak_agent_wallet_challenges_assoc_idx").on(t.associationId)]);
+
+/* ---------------------------------------------------------- Dedicated Agent NEAR account ---------------------------------------------------------- */
+
+/**
+ * The dedicated NEAR account for an Agent (Stage 7). Created by SPak's parent account in one atomic transaction
+ * (CreateAccount + Transfer + AddKey) whose only full-access key is the Agent owner's verified public key.
+ * SPak never holds a key on it. ACTIVE only after the backend reads the account and its keys from NEAR itself.
+ */
+export const agentAccounts = pgTable("spak_agent_accounts", {
+  id: text("id").primaryKey(),
+  agentId: text("agent_id").notNull().references(() => agents.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  network: text("network").notNull(), // testnet only in this stage
+  accountId: text("account_id").notNull(),
+  parentAccountId: text("parent_account_id").notNull(),
+  ownerPublicKey: text("owner_public_key").notNull(),
+  keyType: text("key_type").notNull(), // ed25519
+  status: text("status").notNull(),
+  sponsorship: text("sponsorship").notNull(), // NOT_FUNDED | RESERVED | FUNDED | NOT_SPENT
+  fundingYocto: text("funding_yocto"), // amount attached by the sponsor, decimal string of yoctoNEAR
+  creationTxHash: text("creation_tx_hash"),
+  creationOutcome: text("creation_outcome"), // SUCCESS | FAILURE | UNKNOWN
+  creationError: text("creation_error"),
+  idempotencyKey: text("idempotency_key").notNull(),
+  createdOnChainAt: timestamp("created_on_chain_at", { withTimezone: true }),
+  ownershipVerifiedAt: timestamp("ownership_verified_at", { withTimezone: true }),
+  activatedAt: timestamp("activated_at", { withTimezone: true }),
+  lastVerifiedAt: timestamp("last_verified_at", { withTimezone: true }),
+  recoveryReason: text("recovery_reason"),
+  schemaVersion: integer("schema_version").notNull().default(1),
+  version: integer("version").notNull().default(1),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+}, (t) => [uniqueIndex("spak_agent_accounts_idem_uq").on(t.idempotencyKey), index("spak_agent_accounts_user_idx").on(t.userId, t.createdAt)]);
+
+/** One-time consent challenges for creating a dedicated account: the owner signs, with NEP-413, the exact account to create. */
+export const agentAccountChallenges = pgTable("spak_agent_account_challenges", {
+  id: text("id").primaryKey(),
+  agentId: text("agent_id").notNull().references(() => agents.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  accountId: text("account_id").notNull(),
+  ownerPublicKey: text("owner_public_key").notNull(),
+  domain: text("domain").notNull(),
+  nonce: text("nonce").notNull(),
+  message: text("message").notNull(),
+  issuedAt: timestamp("issued_at", { withTimezone: true }).notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+}, (t) => [uniqueIndex("spak_agent_account_challenges_nonce_uq").on(t.nonce)]);

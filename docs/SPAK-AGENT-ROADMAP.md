@@ -26,7 +26,8 @@ Status: proposal for review. Identity and wallet association come before permiss
 - **Tests**: every family, replay, expiry, removal, compromised flag, same address other user.
 - **Acceptance**: an unverified address can never be associated; removing a wallet revokes its association immediately.
 
-### Stage 7: Dedicated Agent NEAR account (testnet first)
+### Stage 7: Dedicated Agent NEAR account (testnet first) [implemented on feature/spak-agent-near-account; no real account created yet]
+- **Built**: see [Identity model, section 10](SPAK-AGENT-IDENTITY-MODEL.md#10-stage-7-implementation-dedicated-agent-near-account-built-testnet-only). Blocked on an authorised testnet parent account to run the live test.
 - **Objective**: create `name.agents.<parent>` accounts owner-keyed from the first block.
 - **Dependencies**: decision on the parent account; factory contract.
 - **Backend**: creation requests, NEP-366 relaying or factory call, on-chain key verification.

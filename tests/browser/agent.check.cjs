@@ -71,7 +71,7 @@ const nep413 = (message, nonce, recipient) => createHash('sha256').update(Buffer
   await page.getByRole('button', { name: 'Create Agent identity' }).click();
   await page.locator('[data-agent-status="CREATED"]').waitFor();
   const t1 = await page.locator('[data-agent-status]').innerText();
-  ok('created: three states shown separately, not verified, dedicated account unavailable', /Not verified/.test(t1) && /Dedicated Agent NEAR account/.test(t1) && /Not available yet/.test(t1) && !/Verified by SPak/.test(t1));
+  ok('created: identity, ownership and dedicated account shown separately; not verified', /Not verified/.test(t1) && /Dedicated Agent NEAR account/.test(t1) && !/Verified by SPak/.test(t1));
   await shot(page, 'agent-02-created');
 
   // Ownership proof: challenge from the server, signed here with the implicit account key, verified by the server.
@@ -92,7 +92,9 @@ const nep413 = (message, nonce, recipient) => createHash('sha256').update(Buffer
   await page.reload({ waitUntil: 'networkidle' });
   await page.locator('[data-ownership="VERIFIED"]').waitFor({ timeout: 15000 });
   const t2 = await page.locator('[data-agent-status]').innerText();
-  ok('verified only after the server confirms; still no dedicated account', /Verified by SPak/.test(t2) && /Not available yet/.test(t2) && /not on chain/.test(t2));
+  ok('verified only after the server confirms', /Verified by SPak/.test(t2) && /not on chain/.test(t2));
+  await page.locator('[data-account-unavailable]').waitFor();
+  ok('dedicated account: unavailable without a testnet parent, never faked', /Not available on this server/.test(await page.locator('[data-agent-account]').innerText()) && (await page.locator('[data-agent-account]').getAttribute('data-agent-account')) === 'UNAVAILABLE');
   await shot(page, 'agent-03-verified');
 
   // Wallet association (Stage 6): the signed-in EVM wallet signs a fresh EIP-4361 association in the browser.
@@ -116,8 +118,8 @@ const nep413 = (message, nonce, recipient) => createHash('sha256').update(Buffer
   await page.getByRole('button', { name: 'Suspend', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Suspend Agent' }).click();
   await page.locator('[data-agent-status="SUSPENDED"]').waitFor();
-  ok('suspended: ownership no longer shown as verified', !/Verified by SPak/.test(await page.locator('[data-agent-status]').innerText()));
   await page.locator('[data-association-family="evm"][data-association-status="SUSPENDED"]').waitFor();
+  ok('suspended: ownership no longer shown as verified', !/Verified by SPak/.test(await page.locator('[data-agent-status]').innerText()));
   ok('suspending the Agent suspends its associations; adding is paused', /New associations are paused/.test(await page.locator('[data-agent-wallets]').innerText()));
   await shot(page, 'agent-06-suspended');
   await page.getByRole('button', { name: 'Revoke', exact: true }).click();

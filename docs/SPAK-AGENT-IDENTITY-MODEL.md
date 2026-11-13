@@ -301,3 +301,100 @@ Strict schemas, session required, same-origin writes, user-scoped queries (anoth
 - The browser flow uses the first detected EVM or Solana wallet extension; the user switches account in the wallet if needed.
 - No periodic on-chain re-check of NEAR keys between verifications.
 - No separate "suspend one association" action; removal covers compromise.
+
+## 10. Stage 7 implementation: dedicated Agent NEAR account (built, testnet only)
+
+Code on `feature/spak-agent-near-account`.
+
+### Status of a real testnet account
+
+Not created. This environment has no authorised testnet parent account or key, and SPak's parent namespace is an open decision. The mechanism, verification and lifecycle are implemented and tested against a modelled chain; `tests/live/agent-account.live.test.ts` creates and verifies a real testnet account once the configuration below is supplied. Without it, the server reports the feature as unavailable and nothing is simulated.
+
+### Relationships
+
+```mermaid
+flowchart TB
+  U["SPak user"] --> A["SPak Agent"]
+  A -. "owner proof (Stage 5)" .- O["Owner NEAR account\n(personal, e.g. alice.near)"]
+  A --> D["Dedicated Agent NEAR account\na<hash>.<parent>.testnet"]
+  O -. "same public key" .-> K["Owner key: only full-access key on D"]
+  K --> D
+  P["SPak parent account (testnet)"] -->|"creates in one tx, keeps no control"| D
+  A --> W["Associated wallets (Stage 6)"]
+```
+
+The dedicated account is a separate table (`spak_agent_accounts`), not a wallet association, and is shown separately in the app.
+
+### Mechanism (verified against official docs)
+
+| Claim | Source |
+|---|---|
+| Only `parent.testnet` can create `x.parent.testnet`; a parent "has no control over its sub-accounts after creation" | docs.near.org/protocol/tutorials/creating-implicit-and-named-accounts.md, docs.near.org/protocol/accounts-contracts/account-id.md |
+| "If any of the actions fails, the transaction is discarded and none of the actions take effect"; a transaction has one receiver | docs.near.org/protocol/transactions/transaction-anatomy.md |
+| A failed transfer after CreateAccount reverts the creation | docs.near.org/protocol/transactions/transaction-execution.md |
+| Creating an account burns a fixed 0.007 NEAR; storage is 1E19 yoctoNEAR per byte, 770 bytes free | docs.near.org/protocol/transactions/gas.md, docs.near.org/protocol/storage/storage-staking.md |
+
+One transaction from the parent to the new account id with three actions: `CreateAccount`, `Transfer(initial balance)`, `AddKey(owner public key, FullAccess)`. Signed by the parent's key with the official `near-api-js` SDK. No intermediate or temporary SPak key exists on the new account at any point.
+
+### Naming
+
+`a` + first 16 hex of `sha256("spak.agent.account:" + agentId + ":" + parent)` + `.` + parent. Deterministic per Agent, contains no personal data. A name taken on chain or by another Agent moves to the next attempt (4 more hex characters, up to 4 attempts). The actual id is stored.
+
+### Owner key
+
+The Agent owner's public key verified in Stage 5. Creation needs a fresh NEP-413 consent signed by that key over a message naming the Agent, account, network, owner key, domain and times (single use, 5 minutes). A session alone cannot create an account. If the owner rotates keys, they re-verify the Agent first.
+
+### Sponsorship (testnet only)
+
+| | User-funded | SPak-sponsored (implemented on testnet) |
+|---|---|---|
+| Who signs creation | User's own account (it would have to be the parent) | SPak's parent account |
+| Works with a SPak namespace | No: only the parent can create sub-accounts | Yes |
+| Cost | Paid by user | 0.007 NEAR creation burn + the configured initial balance + gas, paid by SPak |
+| Abuse controls | Not needed | Owner consent per creation, 3 attempts per user per 24 hours, global budget cap under an advisory lock, one live account per Agent, idempotency key |
+
+Amounts are configuration, not code: `SPAK_AGENT_INITIAL_BALANCE_YOCTO` and `SPAK_AGENT_SPONSOR_BUDGET_YOCTO`. Failed attempts are marked `NOT_SPENT` and do not count against the budget. Funds sent to a created account stay in that account (the owner's); there is no clawback.
+
+### Configuration (server environment only)
+
+`SPAK_AGENT_NEAR_NETWORK=testnet` (anything else is refused), `SPAK_AGENT_PARENT_ACCOUNT` (must end `.testnet`), `SPAK_AGENT_PARENT_PRIVATE_KEY` (testnet key; never logged, never returned, used only by the signer), `SPAK_AGENT_NEAR_RPC_URL` (default `https://rpc.testnet.near.org`, must be a testnet endpoint), `SPAK_AGENT_INITIAL_BALANCE_YOCTO`, `SPAK_AGENT_SPONSOR_BUDGET_YOCTO`.
+
+### Verification
+
+ACTIVE requires, read from NEAR by the backend: chain id `testnet`; the account exists; the owner key is present with FullAccess; SPak's parent key is absent; the Agent is verified and in date. Transaction success alone never activates. Unreachable NEAR leaves the state unchanged. Unknown creation outcomes stay `CREATION_PENDING` and are reconciled from the transaction status and the account itself.
+
+### Lifecycle
+
+| From | To |
+|---|---|
+| (none) | CREATION_PENDING |
+| CREATION_PENDING | CREATED, CREATION_FAILED, REVOKED |
+| CREATED | OWNERSHIP_VERIFICATION_PENDING, SUSPENDED, REVOKED |
+| OWNERSHIP_VERIFICATION_PENDING | ACTIVE, RECOVERY_REQUIRED, SUSPENDED, REVOKED |
+| ACTIVE | ACTIVE (re-verified), RECOVERY_REQUIRED, SUSPENDED, REVOKED |
+| SUSPENDED | OWNERSHIP_VERIFICATION_PENDING (after the Agent is re-verified), REVOKED |
+| RECOVERY_REQUIRED | OWNERSHIP_VERIFICATION_PENDING, SUSPENDED, REVOKED |
+| CREATION_FAILED, REVOKED | final (a retry after failure is a new row; history is kept) |
+
+Agent suspension and revocation cascade in the same transaction. Revocation never deletes the NEAR account: it stays the owner's.
+
+### Recovery limits
+
+SPak cannot recover the account. If the owner loses every full-access key, the account is locked (docs.near.org/protocol/network/token-loss.md). RECOVERY_REQUIRED tells the owner what NEAR shows; the owner fixes keys with their own wallet and asks SPak to re-verify.
+
+### API
+
+| Method and path | Body | Result |
+|---|---|---|
+| `GET /api/agents/:id/account` | | availability, network, account, failed attempts |
+| `POST /api/agents/:id/account/prepare` | `{}` | name, consent message, NEP-413 nonce and recipient |
+| `POST /api/agents/:id/account/create` | `{ challengeId, accountId, publicKey, signature }` + `Idempotency-Key` header | `{ account }` |
+| `POST /api/agents/:id/account/verify` | `{}` | `{ account }` re-read from NEAR |
+
+### Database (migration `0012_agent_near_account`)
+
+`spak_agent_accounts` and `spak_agent_account_challenges`. Checks: network must be `testnet`; account id must be a sub-account of the parent; key type ed25519; status and sponsorship values; ACTIVE requires transaction hash, SUCCESS outcome, creation, verification and activation times and FUNDED sponsorship. Unique: one live account per Agent, one account id per network, idempotency key, nonce. No private keys anywhere.
+
+### Not changed
+
+Guard, recipients, approvals, execution and signing are untouched. The account grants no permissions and SPak cannot sign for it.
