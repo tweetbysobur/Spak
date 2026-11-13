@@ -8,6 +8,7 @@ import { Icon } from "./icons";
 import { DepositPanel } from "./DepositPanel";
 import { RecoveryPanel } from "./RecoveryPanel";
 import { Receipt } from "./tracking/Receipt";
+import { TransferGuard } from "./guard/TransferGuard";
 import { PHASE_ROLE, PHASE_TITLE, fundsText, notificationFor, phaseOf, phaseSummary, stagesOf, type Stage } from "./tracking/model";
 
 const TERMINAL: string[] = ["COMPLETED", "REFUNDED", "EXPIRED", "CANCELLED"];
@@ -136,6 +137,8 @@ export function Tracker({ initial, onNotify }: { initial: ExecutionView; onNotif
           <RecoveryPanel executionId={x.id} view={t} onChange={setT} />
         </section>
       )}
+
+      <TransferGuard executionId={x.id} />
 
       {/* Details: secondary, folded on purpose. */}
       <details className="rounded-panel border border-line bg-elevated p-5 sm:p-6 dark:bg-surface">

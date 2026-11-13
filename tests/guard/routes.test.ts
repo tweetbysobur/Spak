@@ -119,6 +119,7 @@ describe("Guard enforcement through the API", () => {
     expect(c.status).toBe(403);
     expect(c.body.error.code).toBe("GUARD_BLOCKED");
     expect(c.body.error.message).toMatch(/Arbitrum as a destination/);
+    expect(c.body.error.details.failedRules).toEqual(["DESTINATION_NETWORK"]);
     await patch(bob, { networks: [{ network: "arbitrum", allowSource: true, allowDestination: true, disabled: false }] });
   });
   it("the manual form ignores a browser policy too", async () => {
@@ -156,7 +157,7 @@ describe("Guard enforcement through the API", () => {
     const r = await plan(alice, "Bridge 15 USDC from Base to Arbitrum");
     const f = await create(alice, r.plan.hash);
     expect(f.status).toBe(403);
-    expect(f.body.error).toMatchObject({ code: "GUARD_BLOCKED", details: { outcome: "BLOCKED", stage: "QUOTE" } });
+    expect(f.body.error).toMatchObject({ code: "GUARD_BLOCKED", details: { outcome: "BLOCKED", stage: "QUOTE", failedRules: ["DAILY_LIMIT"] } });
     expect(f.body.error.message).toMatch(/last 24 hours to \$100/);
     expect(f.body.error.message).not.toMatch(/sql|stack|select|undefined/i);
   });

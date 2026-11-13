@@ -26,7 +26,8 @@ export class GuardDecisionError extends Error {
 
 /** The public error for a stopping decision. Reasons are written for the user and name only their own settings. */
 export function guardError(d: GuardDecision): ExecutionError {
-  const details = { outcome: d.outcome, stage: d.stage, reasons: d.reasons, policyVersion: d.policyVersion };
+  const failedRules = d.rules.filter((r) => r.status === "FAIL" || r.status === "NEEDS_CONFIGURATION").map((r) => r.rule);
+  const details = { outcome: d.outcome, stage: d.stage, reasons: d.reasons, failedRules, policyVersion: d.policyVersion };
   return d.outcome === "NEEDS_CONFIGURATION"
     ? new ExecutionError("GUARD_NEEDS_CONFIGURATION", d.reasons.join(" ") || "Finish setting up Guard first.", details)
     : new ExecutionError("GUARD_BLOCKED", d.reasons.join(" ") || "Guard stopped this transfer.", details);

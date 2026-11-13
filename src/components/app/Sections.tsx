@@ -5,6 +5,7 @@ import type { Session } from "@/components/session";
 import { WalletsPanel } from "@/components/WalletsPanel";
 import { Card, SectionTitle } from "@/components/ui";
 import { Icon } from "@/components/icons";
+import { GuardPage } from "@/components/guard/GuardPage";
 
 function Lists({ live, planned }: { live: readonly string[]; planned: readonly string[] }) {
   return (
@@ -41,19 +42,9 @@ export function Portfolio() {
   );
 }
 
+/** SPak Guard: the user's real settings from the server. */
 export function Guard() {
-  return (
-    <Module id="guard">
-      <Card>
-        <SectionTitle>Active protections</SectionTitle>
-        <ul className="flex flex-col">
-          {[["Approval on every transfer", "Bound to the exact plan and firm quote. A new quote cancels it."], ["Value cap", "Each transfer is capped. A transfer SPak cannot price is refused."], ["Slippage limit", "Sets the minimum you receive, shown before you approve."], ["Recipient checks", "Addresses are checked against the destination network before any quote."]].map(([t, d]) => (
-            <li key={t} className="flex items-start gap-3 border-t border-line py-3 first:border-0"><Icon name="guard" className="mt-0.5 text-primary" /><div><p className="type-app-subheading text-fg">{t}</p><p className="type-body-sm text-fg-2">{d}</p></div><span className="type-status ml-auto text-primary">On</span></li>
-          ))}
-        </ul>
-      </Card>
-    </Module>
-  );
+  return <GuardPage />;
 }
 
 export function Agent({ session, refresh, signedOut }: { session: Session; refresh: () => Promise<void>; signedOut: () => void }) {

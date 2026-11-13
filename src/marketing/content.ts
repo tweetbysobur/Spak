@@ -75,9 +75,10 @@ export const PILLARS: Pillar[] = [
       "Every transfer needs your approval of a firm quote. The approval is bound to that exact plan.",
       "A value cap applies to each transfer. If SPak cannot price a transfer, it refuses it.",
       "A slippage limit sets the minimum you can receive, shown before you approve.",
+      "Your own saved limits, checked on SPak's server at every step: per-transfer, 24-hour, 7-day and 30-day spending, networks, tokens, approved recipients, and a pause switch.",
     ],
     planned: [
-      "Your own saved limits: daily spending, allowed networks and assets, approved recipients. The policy engine exists. The settings screen does not.",
+      "Separate limits for SPak Agent acting on its own. Agent execution is not built, so every transfer still needs your approval.",
     ],
   },
   {

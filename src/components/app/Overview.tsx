@@ -1,4 +1,5 @@
 "use client";
+import { GuardSummary } from "@/components/guard/GuardSummary";
 import { useEffect, useState } from "react";
 import { getNetwork } from "@/spak-in/registries/networks";
 import { getAsset } from "@/spak-in/registries/assets";
@@ -102,7 +103,7 @@ export function Overview({ session, onSelect, onExecute, onOpen }: {
           <Card>
             <div className="flex items-start gap-3">
               <Icon name="guard" className="mt-0.5 text-primary" />
-              <div><p className="type-app-subheading text-fg">SPak Guard: on</p><p className="type-caption mt-0.5 text-fg-2">Approval on every transfer, a value cap and a slippage limit. Personal limits are planned.</p></div>
+              <div className="min-w-0 flex-1"><GuardSummary onOpen={() => onSelect("guard")} /></div>
             </div>
             <div className="mt-4 flex items-start gap-3 border-t border-line pt-4">
               <Icon name="agent" className="mt-0.5 text-fg-2" />

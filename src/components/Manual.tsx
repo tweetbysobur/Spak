@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, startExecution, type ExecutionView, type IntentResult, type QuoteView } from "@/lib/client";
 import { Button, Card, Field, SectionTitle, Select, inputCls } from "./ui";
 import { Notice } from "./status";
+import { guardMessage, planBlock, type GuardMessage } from "@/lib/guard";
 
 interface Net { id: string; name: string }
 interface Asset { id: string; network: string; symbol: string }
@@ -14,6 +15,7 @@ export function Manual({ ownAddress, onReady }: { ownAddress: (network: string) 
   const [f, setF] = useState({ sourceNetwork: "base", sourceAsset: "", amount: "", destinationNetwork: "solana", destinationAsset: "", recipient: "", slippageBps: 100 });
   const [busy, setBusy] = useState(false);
   const [problems, setProblems] = useState<string[]>([]);
+  const [guardBlock, setGuardBlock] = useState<GuardMessage | null>(null);
 
   useEffect(() => {
     api<{ networks: Net[]; assets: Asset[] }>("/api/spak-in/registry").then((r) => { setNets(r.networks); setAssets(r.assets); }).catch((e) => setProblems([String(e)]));
@@ -30,7 +32,7 @@ export function Manual({ ownAddress, onReady }: { ownAddress: (network: string) 
   const set = (k: keyof typeof f, v: string | number) => setF((p) => ({ ...p, [k]: v }));
 
   async function submit(e: React.FormEvent) {
-    e.preventDefault(); setBusy(true); setProblems([]);
+    e.preventDefault(); setBusy(true); setProblems([]); setGuardBlock(null);
     const src = assets.find((a) => a.id === f.sourceAsset), dst = assets.find((a) => a.id === f.destinationAsset);
     const type = f.recipient ? "PAYMENT" : f.sourceNetwork === f.destinationNetwork ? "SWAP" : src?.symbol === dst?.symbol ? "BRIDGE" : "CROSS_CHAIN_SWAP";
     try {
@@ -39,9 +41,12 @@ export function Manual({ ownAddress, onReady }: { ownAddress: (network: string) 
         setProblems([...r.errors.map((x) => x.message), ...(r.policy?.violations.map((x) => x.message) ?? []), ...r.clarifications.map((c) => c.question)]);
         return;
       }
+      // The server's Guard decision on this plan. When it blocks, stop before any execution is created.
+      const block = planBlock(r.guard);
+      if (block) { setGuardBlock(block); return; }
       const { execution, quote } = await startExecution(r.plan.hash);
       onReady(r, execution, quote);
-    } catch (err) { setProblems([(err as Error).message]); } finally { setBusy(false); }
+    } catch (err) { const g = guardMessage(err); if (g) setGuardBlock(g); else setProblems([(err as Error).message]); } finally { setBusy(false); }
   }
 
   const side = (p: "source" | "destination") => {
@@ -77,6 +82,7 @@ export function Manual({ ownAddress, onReady }: { ownAddress: (network: string) 
             {[30, 50, 100].map((b) => <option key={b} value={b}>{b / 100}%</option>)}
           </Select>
         </Field>
+        {guardBlock && <div data-guard-block><Notice role="error" title={guardBlock.title}><ul className="list-disc pl-4">{guardBlock.reasons.map((p) => <li key={p}>{p}</li>)}</ul><p className="mt-1">Nothing was quoted or created. <a href="#guard" className="text-primary underline underline-offset-2">Open SPak Guard</a></p></Notice></div>}
         {!!problems.length && <Notice role="error" title="SPak cannot quote this yet"><ul className="list-disc pl-4">{problems.map((p) => <li key={p}>{p}</li>)}</ul></Notice>}
         <Button type="submit" disabled={busy || !f.amount || !f.sourceAsset || !f.destinationAsset}>{busy ? "Checking" : "Get quote"}</Button>
       </form>
