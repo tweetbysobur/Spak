@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, bigserial } from "drizzle-orm/pg-core";
+import { boolean, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex, bigserial } from "drizzle-orm/pg-core";
 
 /** Conversation context for follow-ups. One row per session. */
 export const sessions = pgTable("spak_sessions", {
@@ -508,3 +508,97 @@ export const adminAudit = pgTable("spak_admin_audit", {
   evidence: jsonb("evidence").notNull().default({}),
   outcome: text("outcome").notNull(),
 }, (t) => [index("spak_admin_audit_review_idx").on(t.reviewId, t.at), index("spak_admin_audit_reviewer_idx").on(t.reviewerId, t.at)]);
+
+/* ---------------------------------------------------------------- SPak Guard ---------------------------------------------------------------- */
+
+/**
+ * One Guard policy per user. `version` increases on every change; decisions record the version they used.
+ * The row is also the lock that serialises spending reservations for the user (SELECT ... FOR UPDATE).
+ * Money values are decimal strings in USD. Null limit means "not set" (the platform ceiling still applies).
+ */
+export const guardPolicies = pgTable("spak_guard_policies", {
+  userId: text("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  version: integer("version").notNull(),
+  status: text("status").notNull(), // ACTIVE | PAUSED (paused: no new requests)
+  executionDisabled: boolean("execution_disabled").notNull().default(false), // emergency: no deposit preparation either
+  maxTransactionUsd: text("max_transaction_usd"),
+  minTransactionUsd: text("min_transaction_usd"),
+  dailyLimitUsd: text("daily_limit_usd"),
+  weeklyLimitUsd: text("weekly_limit_usd"),
+  monthlyLimitUsd: text("monthly_limit_usd"),
+  maxSlippageBps: integer("max_slippage_bps").notNull(),
+  assetMode: text("asset_mode").notNull(), // ANY | ALLOWLIST
+  recipientMode: text("recipient_mode").notNull(), // ANY | APPROVED_ONLY
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+});
+
+/** Per-network rule. A network with no row needs configuration before it can be used. */
+export const guardNetworkRules = pgTable("spak_guard_network_rules", {
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  network: text("network").notNull(),
+  allowSource: boolean("allow_source").notNull(),
+  allowDestination: boolean("allow_destination").notNull(),
+  disabled: boolean("disabled").notNull().default(false),
+}, (t) => [primaryKey({ columns: [t.userId, t.network] })]);
+
+/** Per-asset rule by canonical asset id (network:address), never by symbol. */
+export const guardAssetRules = pgTable("spak_guard_asset_rules", {
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  assetId: text("asset_id").notNull(),
+  rule: text("rule").notNull(), // ALLOW | BLOCK
+}, (t) => [primaryKey({ columns: [t.userId, t.assetId] })]);
+
+/** Approved recipients. Approval is for one network only. Addresses are stored normalised for their family. */
+export const guardRecipients = pgTable("spak_guard_recipients", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  network: text("network").notNull(),
+  address: text("address").notNull(),
+  label: text("label"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+}, (t) => [uniqueIndex("spak_guard_recipients_uq").on(t.userId, t.network, t.address)]);
+
+/** Append-only change history of a user's policy. */
+export const guardPolicyHistory = pgTable("spak_guard_policy_history", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  version: integer("version").notNull(),
+  actor: text("actor").notNull(),
+  action: text("action").notNull(),
+  changes: jsonb("changes").notNull().default({}),
+  at: timestamp("at", { withTimezone: true }).notNull(),
+}, (t) => [uniqueIndex("spak_guard_history_version_uq").on(t.userId, t.version), index("spak_guard_history_user_idx").on(t.userId, t.at)]);
+
+/** Every Guard decision, bound to the plan hash, quote and policy version it evaluated. Append-only. */
+export const guardDecisions = pgTable("spak_guard_decisions", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  executionId: text("execution_id"),
+  stage: text("stage").notNull(), // PLAN | QUOTE | FIRM_QUOTE | APPROVAL | DEPOSIT
+  outcome: text("outcome").notNull(), // ALLOWED | BLOCKED | REQUIRES_APPROVAL | NEEDS_CONFIGURATION
+  planHash: text("plan_hash"),
+  quoteId: text("quote_id"),
+  policyVersion: integer("policy_version"),
+  valueUsd: text("value_usd"),
+  rules: jsonb("rules").notNull(),
+  reasons: jsonb("reasons").notNull(),
+  at: timestamp("at", { withTimezone: true }).notNull(),
+}, (t) => [index("spak_guard_decisions_exec_idx").on(t.executionId, t.at), index("spak_guard_decisions_user_idx").on(t.userId, t.at)]);
+
+/**
+ * Spending reservations. One per execution (unique), created atomically with approval.
+ * RESERVED and CONSUMED count against limits; RELEASED does not.
+ */
+export const guardReservations = pgTable("spak_guard_reservations", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  executionId: text("execution_id").notNull().references(() => executions.id, { onDelete: "cascade" }),
+  quoteId: text("quote_id").notNull(),
+  decisionId: text("decision_id").notNull(),
+  amountUsd: text("amount_usd").notNull(),
+  status: text("status").notNull(), // RESERVED | CONSUMED | RELEASED
+  reservedAt: timestamp("reserved_at", { withTimezone: true }).notNull(),
+  settledAt: timestamp("settled_at", { withTimezone: true }),
+  settleReason: text("settle_reason"),
+}, (t) => [uniqueIndex("spak_guard_reservations_exec_uq").on(t.executionId), index("spak_guard_reservations_user_idx").on(t.userId, t.status, t.reservedAt)]);

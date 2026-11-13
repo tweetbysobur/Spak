@@ -18,8 +18,8 @@ export interface PolicyInput {
   deferred: boolean;
 }
 
-const assetAllowed = (a: AssetDefinition, list: string[]) =>
-  list.some((x) => x === a.id || x.toUpperCase() === a.symbol.toUpperCase());
+/** Canonical asset id (network:address) only. A symbol never matches: the same symbol names different tokens on different networks. */
+const assetAllowed = (a: AssetDefinition, list: string[]) => list.includes(a.id);
 
 /** USD value of the amount when it can be known exactly now. Null when it depends on balances or missing prices. */
 export function valueUsd(amount: AmountSpec | null, asset: AssetDefinition | null, rt: PolicyRuntime): string | null {

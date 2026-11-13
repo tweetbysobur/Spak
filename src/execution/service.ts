@@ -8,6 +8,7 @@ import { validateExecutionPlan, type PlanStore, type ValidatedPlan, type Verifie
 import { compareDecimal } from "../spak-in/lib/decimal";
 import { QuoteService, newId, providerError } from "./quote-service";
 import type { ExecutionRecords, ExecutionRow, QuoteRow } from "./records";
+import { GuardDecisionError, guardError, type GuardService } from "../guard/service";
 import { DELAYED_AFTER_MS, TERMINAL, stateFromProvider, type ExecutionState } from "./state";
 
 export const PROVIDER_ID = "near-intents";
@@ -17,8 +18,9 @@ export const MIN_STATUS_INTERVAL_MS = 3_000;
 
 /** A firm quote must be approved within this window after SPak received it; otherwise request a new one. */
 export const FIRM_APPROVAL_TTL_MS = 10 * 60_000;
-/** Per-execution ceiling in USD (from the provider's amountInUsd). Fails closed when the value is unknown. */
-export const maxExecutionUsd = () => process.env.SPAK_MAX_EXECUTION_USD ?? "1000";
+/** Per-execution ceiling in USD (from the provider's amountInUsd). Fails closed when the value is unknown. No Guard setting can raise it. */
+export { platformCeilingUsd as maxExecutionUsd } from "../guard/ceiling";
+import { platformCeilingUsd as maxExecutionUsd } from "../guard/ceiling";
 
 export const approvalSchema = z.object({
   planHash: z.string().regex(/^[0-9a-f]{64}$/),
@@ -36,6 +38,8 @@ export interface ExecutionDeps {
   plans: PlanStore;
   audit?: AuditLog;
   clock?: () => Date;
+  /** SPak Guard. Required: there is no way to build an execution service that skips policy enforcement. */
+  guard: GuardService;
 }
 
 /**
@@ -68,6 +72,8 @@ export class ExecutionService {
   /** Create (or return) the execution for a plan and attach a fresh indicative quote. Idempotent per key and per plan. */
   async create(args: { userId: string; planHash: string; idempotencyKey: string; wallets: VerifiedWallet[] }) {
     const { v, src, dst } = await this.prepare(args.userId, args.planHash, args.wallets);
+    // Guard, before anything is quoted: the stored policy against the plan itself.
+    await this.d.guard.enforcePlan(args.userId, v);
     const now = this.clock();
     const { row, created } = await this.d.records.createOrGet({
       id: newId("exe"), userId: args.userId, intentId: v.intentId, planRevision: v.revision, planId: v.plan.planId, planHash: v.plan.hash,
@@ -90,11 +96,23 @@ export class ExecutionService {
       await this.d.records.touch(row.id, { error: (e as ExecutionError).toJSON?.() ?? { message: String(e) } });
       throw e;
     }
+    await this.guardQuote("QUOTE", row, q);
     await this.d.records.supersedeQuotes(row.id, q.id);
     // Approval is always required in this phase (autonomy is off), so a quoted execution waits for approval.
     const r = await this.d.records.transition(row.id, row.state as ExecutionState, "AWAITING_APPROVAL", "Indicative quote received.", { currentQuoteId: q.id, error: null }, { quoteId: q.id });
     if (!r) throw new ExecutionError("INVALID_STATE", "The execution changed while quoting. Reload it.");
     return q;
+  }
+
+  /** Guard on a quote the provider returned. A blocked quote is rejected so it can never be approved. */
+  private async guardQuote(stage: "QUOTE" | "FIRM_QUOTE", row: ExecutionRow, q: QuoteRow) {
+    try {
+      await this.d.guard.enforceQuote(stage, row, q);
+    } catch (e) {
+      await this.d.records.setQuoteStatus(q.id, "REJECTED", "VALID");
+      await this.d.records.touch(row.id, { error: (e as ExecutionError).toJSON?.() ?? { message: "Guard stopped this quote." } });
+      throw e;
+    }
   }
 
   /** New indicative quote (e.g. after the previous one expired). Only before approval; replaces any firm quote. */
@@ -121,13 +139,21 @@ export class ExecutionService {
     if (row.currentQuoteId !== args.quoteId) throw new ExecutionError("QUOTE_NOT_CURRENT", "That quote was replaced. Review the latest quote.");
     const current = await this.d.records.getQuote(args.quoteId);
     if (!current || current.status !== "VALID") throw new ExecutionError("QUOTE_NOT_CURRENT", "That quote can no longer be used.");
-    if (current.kind === "FIRM" && now.getTime() - current.createdAt.getTime() < FIRM_APPROVAL_TTL_MS) return { execution: row, quote: current, reused: true };
+    if (current.kind === "FIRM" && now.getTime() - current.createdAt.getTime() < FIRM_APPROVAL_TTL_MS) {
+      // The policy may have changed since: check the reused firm quote again before showing it.
+      await this.d.guard.enforceQuote("FIRM_QUOTE", row, current);
+      return { execution: row, quote: current, reused: true };
+    }
     if (current.kind === "INDICATIVE" && current.expiresAt.getTime() <= now.getTime()) {
       await this.d.records.setQuoteStatus(current.id, "EXPIRED", "VALID");
       throw new ExecutionError("QUOTE_EXPIRED", "The quote expired. Get a new quote.");
     }
+    // Guard before asking for a firm quote (no deposit address is issued under a policy that would block it)...
+    await this.d.guard.enforceQuote("QUOTE", row, current);
     const { v, src, dst } = await this.prepare(args.userId, row.planHash, args.wallets);
     const firm = await this.quotes.quote({ executionId: row.id, userId: args.userId, v, src, dst, dry: false });
+    // ...and on the firm quote itself, before it is shown for review.
+    await this.guardQuote("FIRM_QUOTE", row, firm);
     await this.d.records.supersedeQuotes(row.id, firm.id);
     await this.d.records.invalidateApprovals(row.id, "Quote replaced.");
     const r = await this.d.records.transition(row.id, "AWAITING_APPROVAL", "AWAITING_APPROVAL", "Firm quote received for review.", { currentQuoteId: firm.id, firmQuoteId: firm.id }, { firmQuoteId: firm.id, fromQuoteId: current.id });
@@ -185,9 +211,23 @@ export class ExecutionService {
     if (!approval) throw new ExecutionError("APPROVAL_IN_PROGRESS", "This execution is already approved.");
     const claimed = await this.d.records.claimApproval(row.id);
     if (!claimed) { await this.d.records.invalidateApprovals(row.id, "Lost approval race."); throw new ExecutionError("APPROVAL_IN_PROGRESS", "This execution is already being approved."); }
-    const r = await this.d.records.transition(row.id, "AWAITING_APPROVAL", "AWAITING_DEPOSIT", "Firm quote approved by the user.", {
-      depositAddress: firm.depositAddress, depositMemo: firm.depositMemo, depositDeadline: firm.providerDeadline,
-    }, { approvalId: approval.id, firmQuoteId: firm.id, allowDuplicate: a.allowDuplicate });
+    // Guard reserves spending in the same database transaction as the state change. If Guard blocks, nothing is approved.
+    let r: ExecutionRow | null;
+    try {
+      r = await this.d.records.transition(row.id, "AWAITING_APPROVAL", "AWAITING_DEPOSIT", "Firm quote approved by the user.", {
+        depositAddress: firm.depositAddress, depositMemo: firm.depositMemo, depositDeadline: firm.providerDeadline,
+      }, { approvalId: approval.id, firmQuoteId: firm.id, allowDuplicate: a.allowDuplicate }, async (tx, updated) => { await this.d.guard.reserveInTx(tx, updated, firm); });
+    } catch (e) {
+      await this.d.records.invalidateApprovals(row.id, e instanceof GuardDecisionError ? "Blocked by Guard." : "Approval failed.");
+      await this.d.records.releaseApproval(row.id);
+      if (e instanceof GuardDecisionError) {
+        await this.d.guard.record(args.userId, e.decision).catch(() => {});
+        throw guardError(e.decision);
+      }
+      if (e instanceof ExecutionError) throw e;
+      console.error("[spak-execution] approval failed", e);
+      throw new ExecutionError("GUARD_UNAVAILABLE", "Guard could not check this transfer, so it was not approved. Try again shortly.");
+    }
     if (!r) throw new ExecutionError("INVALID_STATE", "The execution changed during approval. Reload it.");
     await this.d.audit?.record({ at: now.toISOString(), actor: `user:${args.userId}`, event: "EXECUTION_APPROVED", ref: row.id, data: { approvalId: approval.id, planHash: row.planHash, planRevision: row.planRevision, firmQuoteId: firm.id, depositAddress: firm.depositAddress, amountInUsd: firm.amountInUsd } });
     return { execution: r, quote: firm, duplicate: false, approval };

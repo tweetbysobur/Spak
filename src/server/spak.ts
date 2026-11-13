@@ -1,6 +1,7 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { SpakIn, SpakInError, type SpakError } from "@/spak-in";
+import type { IntentResult } from "@/spak-in/schemas/result";
 import { oneClickFromEnv } from "@/integrations/near-intents";
 import { getDb, PgAuditLog, PgIntentLog, PgSessionStore } from "@/database";
 import { ExecutionError, ExecutionRecords, ExecutionService, IntentLogPlanStore } from "@/execution";
@@ -8,6 +9,7 @@ import { DepositRecords, DepositService, httpChainRpc } from "@/deposits";
 import { DestinationVerifier, ExecutionMonitor, TrackingRecords, TrackingService } from "@/tracking";
 import { FailureRecords, FailureService, RefundVerifier, ReviewService } from "@/failures";
 import { AuthError } from "@/auth/types";
+import { GuardService } from "@/guard";
 import { authService, requireUser, route } from "./auth";
 
 /**
@@ -26,11 +28,13 @@ async function build() {
   const client = oneClickFromEnv();
   const executionRecords = new ExecutionRecords(db);
   const audit = new PgAuditLog(db);
-  const execution = new ExecutionService({ client, records: executionRecords, plans: new IntentLogPlanStore(db), audit });
+  // SPak Guard: the user's stored policy, enforced at every step from plan to deposit.
+  const guard = new GuardService({ db, audit });
+  const execution = new ExecutionService({ client, records: executionRecords, plans: new IntentLogPlanStore(db), audit, guard });
   // Deposits extend the same execution engine: same records, same provider client, plus source-chain RPC.
   const rpc = httpChainRpc();
   const depositRecords = new DepositRecords(db);
-  const deposits = new DepositService({ records: depositRecords, executions: executionRecords, executionService: execution, rpc, client, audit });
+  const deposits = new DepositService({ records: depositRecords, executions: executionRecords, executionService: execution, rpc, client, audit, guard });
   // Tracking: background monitor and destination-chain verification over the same records. Not a second engine.
   const tracking = new TrackingRecords(db);
   const destination = new DestinationVerifier({ executions: executionRecords, tracking, rpc, audit });
@@ -44,7 +48,7 @@ async function build() {
     log: (msg, data) => console.warn(`[spak-monitor] ${msg}`, JSON.stringify(data ?? {})),
   });
   const trackingService = new TrackingService({ executions: executionRecords, execution, tracking, depositRecords, destination, failures });
-  return { engine, execution, deposits, monitor, tracking: trackingService, failures, reviews };
+  return { engine, execution, deposits, monitor, tracking: trackingService, failures, reviews, guard };
 }
 
 const g = globalThis as unknown as { __spak?: ReturnType<typeof build> };
@@ -88,4 +92,17 @@ export function handle(req: Request, fn: () => Promise<Response>): Promise<Respo
       return NextResponse.json({ error: { code: "PROVIDER_ERROR", message: "Internal error." } }, { status: 500 });
     }
   });
+}
+
+/**
+ * SPak-in with SPak Guard. The policy and spending SPak-in sees are read from the database for the signed-in
+ * user; nothing the browser sends about policy, limits, prices or spending is used. If a plan comes out, Guard
+ * evaluates it and the decision is returned with the result. Execution checks it again, so this is not the gate.
+ */
+export async function guardedInterpret(userId: string, run: (g: Awaited<ReturnType<GuardService["interpretContext"]>>) => Promise<IntentResult>) {
+  const s = await spak();
+  const g = await s.guard.interpretContext(userId);
+  const result = await run(g);
+  const guard = result.plan ? await s.guard.checkPlan(userId, result.plan, result.recipient?.kind ?? null) : null;
+  return { ...result, guard };
 }

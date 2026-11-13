@@ -1,3 +1,4 @@
+import type { GuardService } from "../guard/service";
 import type { OneClickClient } from "../integrations/near-intents/client";
 import { getAsset } from "../spak-in/registries/assets";
 import { getNetwork } from "../spak-in/registries/networks";
@@ -30,6 +31,8 @@ export interface DepositDeps {
   client: OneClickClient;
   audit?: AuditLog;
   clock?: () => Date;
+  /** SPak Guard. Required: deposit instructions are never prepared without a Guard check. */
+  guard: GuardService;
 }
 
 /**
@@ -59,6 +62,8 @@ export class DepositService {
     const ok = wallets.some((w) => w.family === fam && w.networks.some((n) => n.id === ex.sourceNetwork && n.enabled)
       && (fam === "solana" ? w.address === ex.refundAddress : w.address.toLowerCase() === ex.refundAddress.toLowerCase()));
     if (!ok) throw new ExecutionError("WALLET_NOT_VERIFIED", "The wallet that must send this deposit is no longer verified on the source network.");
+    // Guard: emergency controls, disabled networks and a live spending reservation.
+    await this.d.guard.enforceDeposit(ex, quote);
     return { ex, approval, quote };
   }
 

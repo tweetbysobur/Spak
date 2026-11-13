@@ -24,6 +24,8 @@ export class Fake1Click {
   /** Output per input unit, as a ratio numerator/denominator applied to amountIn (base-unit agnostic, deterministic). */
   rate = { num: 12n, den: 1n };
   firmRate: { num: bigint; den: bigint } | null = null;
+  /** USD value the quote reports for the input amount. Null leaves it out. */
+  usdIn: string | null = "50.0";
 
   tokens() {
     return listAssets().filter((a) => MAP[a.id] && !this.delistedAssets.has(MAP[a.id])).map((a) => ({
@@ -68,7 +70,7 @@ export class Fake1Click {
     if (this.mode === "echo-wrong-recipient") echo.recipient = "0x9999999999999999999999999999999999999999";
     if (this.mode === "echo-wrong-asset") echo.destinationAsset = "nep141:eth.bridge.near";
     const quote: Record<string, unknown> = {
-      amountIn: this.mode === "amount-in-differs" ? String(BigInt(body.amount) - 1n) : body.amount, amountInFormatted: "x", amountInUsd: "50.0",
+      amountIn: this.mode === "amount-in-differs" ? String(BigInt(body.amount) - 1n) : body.amount, amountInFormatted: "x", ...(this.usdIn !== null ? { amountInUsd: this.usdIn } : {}),
       minAmountIn: body.amount, amountOut: amountOut.toString(), amountOutFormatted: "y", amountOutUsd: "49.9", minAmountOut: minAmountOut.toString(),
       timeEstimate: 32, refundFee: "2400", withdrawFee: "1000",
     };

@@ -6,7 +6,7 @@ export const policyConfigSchema = z.object({
   maxTransactionUsd: decimalString.optional(),
   dailyLimitUsd: decimalString.optional(),
   allowedNetworks: z.array(z.string()).optional(),
-  /** Symbols ("USDC") or canonical asset ids ("base:0x..."). */
+  /** Canonical asset ids ("base:0x..."). Symbols are not accepted as a match. */
   allowedAssets: z.array(z.string()).optional(),
   maxSlippageBps: z.number().int().min(1).max(5000).default(100),
   recipientMode: z.enum(["ANY", "APPROVED_ONLY"]).default("ANY"),

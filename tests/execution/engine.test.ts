@@ -281,7 +281,7 @@ describe("persistence", () => {
     await approve(x);
     const { ExecutionService, ExecutionRecords, IntentLogPlanStore } = await import("@/execution");
     const { OneClickClient } = await import("@/integrations/near-intents/client");
-    const fresh = new ExecutionService({ client: new OneClickClient({ fetchImpl: h.fake.fetch as typeof fetch }), records: new ExecutionRecords(h.db, h.now), plans: new IntentLogPlanStore(h.db), clock: h.now });
+    const fresh = new ExecutionService({ client: new OneClickClient({ fetchImpl: h.fake.fetch as typeof fetch }), records: new ExecutionRecords(h.db, h.now), plans: new IntentLogPlanStore(h.db), clock: h.now, guard: h.guard });
     const d = await fresh.details(x.execution.id, u.userId);
     expect(d).toMatchObject({ state: "AWAITING_DEPOSIT", plan: { planHash: x.execution.planHash } });
     expect((await fresh.history(u.userId, { limit: 5 }))[0].id).toBe(x.execution.id);

@@ -10,6 +10,7 @@ import { FakeChain } from "../deposits/fake-chain";
 import { DestinationVerifier, ExecutionMonitor, TrackingRecords, TrackingService } from "@/tracking";
 import { FailureRecords, FailureService, RefundVerifier, ReviewService } from "@/failures";
 import { Fake1Click } from "./fake-1click";
+import { GuardService } from "@/guard";
 
 export const T0 = Date.parse("2026-11-10T10:00:00Z");
 
@@ -23,11 +24,12 @@ export async function harness(opts: { client?: OneClickClient } = {}) {
   const spakIn = new SpakIn({ sessions: new PgSessionStore(db), clock: now, onResult: (r, req) => intentLog.record(r, req.userId ?? null) });
   const fake = new Fake1Click();
   const records = new ExecutionRecords(db, now);
-  const svc = new ExecutionService({ client: opts.client ?? new OneClickClient({ fetchImpl: fake.fetch as typeof fetch }), records, plans: new IntentLogPlanStore(db), audit: new PgAuditLog(db), clock: now });
+  const guard = new GuardService({ db, clock: now, audit: new PgAuditLog(db) });
+  const svc = new ExecutionService({ guard, client: opts.client ?? new OneClickClient({ fetchImpl: fake.fetch as typeof fetch }), records, plans: new IntentLogPlanStore(db), audit: new PgAuditLog(db), clock: now });
 
   const chain = new FakeChain();
   const depositRecords = new DepositRecords(db, now);
-  const deposits = new DepositService({ records: depositRecords, executions: records, executionService: svc, rpc: chain, client: new OneClickClient({ fetchImpl: fake.fetch as typeof fetch }), audit: new PgAuditLog(db), clock: now });
+  const deposits = new DepositService({ guard, records: depositRecords, executions: records, executionService: svc, rpc: chain, client: new OneClickClient({ fetchImpl: fake.fetch as typeof fetch }), audit: new PgAuditLog(db), clock: now });
   const tracking = new TrackingRecords(db, now);
   const destination = new DestinationVerifier({ executions: records, tracking, rpc: chain, audit: new PgAuditLog(db), clock: now });
   const failureRecords = new FailureRecords(db, now);
@@ -57,7 +59,7 @@ export async function harness(opts: { client?: OneClickClient } = {}) {
     };
     return { userId, evm: e, sol: s, near: n, wallets, plan };
   }
-  return { db, clock, now, auth, spakIn, fake, svc, records, newUser, chain, deposits, depositRecords, tracking, destination, monitor, trackingService, failureRecords, refunds, failures, reviews, capability };
+  return { db, clock, now, auth, guard, spakIn, fake, svc, records, newUser, chain, deposits, depositRecords, tracking, destination, monitor, trackingService, failureRecords, refunds, failures, reviews, capability };
 }
 
 export const approval = (planHash: string, at: Date, allowDuplicate = false, planRevision = 0) => ({ planHash, planRevision, approvedAt: at.toISOString(), allowDuplicate });

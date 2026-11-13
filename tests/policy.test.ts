@@ -23,7 +23,9 @@ describe("policy engine (SPak Guard)", () => {
   });
   it("allowed networks, assets, slippage, recipients", async () => {
     expect((await run("Swap 50 USDC on Base to SOL on Solana", { policy: { allowedNetworks: ["base", "arbitrum"] } })).policy?.violations[0].code).toBe("POLICY_NETWORK_NOT_ALLOWED");
-    expect((await run("Swap 50 USDC on Base to SOL on Solana", { policy: { allowedAssets: ["USDC", "ETH"] } })).policy?.violations[0].code).toBe("POLICY_ASSET_NOT_ALLOWED");
+    // Canonical ids only: a symbol in the list matches nothing, so USDC on Base is still not allowed.
+    expect((await run("Swap 50 USDC on Base to SOL on Solana", { policy: { allowedAssets: ["USDC", "SOL"] } })).policy?.violations[0].code).toBe("POLICY_ASSET_NOT_ALLOWED");
+    expect((await run("Swap 50 USDC on Base to SOL on Solana", { policy: { allowedAssets: [USDC_BASE] } })).policy?.violations[0].code).toBe("POLICY_ASSET_NOT_ALLOWED");
     expect((await run("Swap 50 USDC on Base to SOL on Solana with 3% slippage")).policy?.violations[0].code).toBe("POLICY_SLIPPAGE_EXCEEDED");
     expect((await run(`Send 5 USDC on Base to ${EVM2}`, { policy: { recipientMode: "APPROVED_ONLY" } })).status).toBe("POLICY_REJECTED");
     expect((await run(`Send 5 USDC on Base to ${EVM2}`, { policy: { recipientMode: "APPROVED_ONLY", approvedRecipients: [EVM2] } })).status).toBe("VALIDATED");

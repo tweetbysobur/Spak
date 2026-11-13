@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, gte, inArray, isNull, lt, max, ne } from "drizzle-orm";
 import type { Db } from "../database/repositories";
-import { approvals, deposits, executionEvents, executions, intents, quotes } from "../database/schema";
+import { approvals, deposits, executionEvents, executions, guardReservations, intents, quotes } from "../database/schema";
+import { ExecutionError } from "./errors";
 import type { IntentResult } from "../spak-in/schemas/result";
 import type { ExecutionPlan } from "../spak-in/schemas/plan";
 import type { IssuedPlan, PlanStore } from "./plan-validator";
@@ -84,14 +85,37 @@ export class ExecutionRecords {
     ));
   }
 
-  /** Atomic state change with history. Returns null if another request changed the state first. */
-  async transition(id: string, from: ExecutionState, to: ExecutionState, reason: string, patch: Partial<ExecutionInsert> = {}, data: Record<string, unknown> = {}) {
+  /**
+   * Atomic state change with history. Returns null if another request changed the state first.
+   *
+   * SPak Guard is enforced at this one seam, in the same database transaction:
+   * - Approval (QUOTED or AWAITING_APPROVAL to AWAITING_DEPOSIT) runs `inTx`, which must leave a RESERVED spending
+   *   reservation for the execution. Without one the transition is refused and rolled back, whatever the caller.
+   * - COMPLETED consumes the reservation. CANCELLED, EXPIRED and REFUNDED release it. FAILED, REFUNDING and UNKNOWN
+   *   keep it: the funds are not confirmed back, so the spending still counts.
+   */
+  async transition(id: string, from: ExecutionState, to: ExecutionState, reason: string, patch: Partial<ExecutionInsert> = {}, data: Record<string, unknown> = {},
+    inTx?: (tx: Db, row: ExecutionRow) => Promise<void>) {
     assertTransition(from, to);
     const now = this.clock();
-    return this.db.transaction(async (tx) => {
+    return this.db.transaction(async (t) => {
+      const tx = t as unknown as Db;
       const [r] = await tx.update(executions).set({ ...patch, state: to, updatedAt: now })
         .where(and(eq(executions.id, id), eq(executions.state, from))).returning();
       if (!r) return null;
+      if (inTx) await inTx(tx, r);
+      if (to === "AWAITING_DEPOSIT" && (from === "QUOTED" || from === "AWAITING_APPROVAL")) {
+        const [res] = await tx.select({ id: guardReservations.id }).from(guardReservations)
+          .where(and(eq(guardReservations.executionId, id), eq(guardReservations.status, "RESERVED"))).limit(1);
+        if (!res) throw new ExecutionError("GUARD_BLOCKED", "Guard has not approved this transfer.");
+      }
+      if (from !== to) {
+        const settle = to === "COMPLETED" ? "CONSUMED" : to === "CANCELLED" || to === "EXPIRED" || to === "REFUNDED" ? "RELEASED" : null;
+        if (settle) {
+          await tx.update(guardReservations).set({ status: settle, settledAt: now, settleReason: `Execution ${to.toLowerCase()}.` })
+            .where(and(eq(guardReservations.executionId, id), eq(guardReservations.status, "RESERVED")));
+        }
+      }
       if (from !== to || Object.keys(data).length) {
         await tx.insert(executionEvents).values({ executionId: id, at: now, fromState: from, toState: to, reason, data });
       }
