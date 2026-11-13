@@ -2,6 +2,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { getDb } from "@/database";
 import { AgentError, AgentService } from "@/agents/service";
+import { AgentWalletService } from "@/agents/wallets";
 import { appOrigin, requireUser, route } from "./auth";
 
 const g = globalThis as unknown as { __spakAgents?: Promise<AgentService> };
@@ -20,3 +21,8 @@ export function agentRoute(req: Request, fn: (userId: string) => Promise<Respons
     }
   });
 }
+
+const gw = globalThis as unknown as { __spakAgentWallets?: Promise<AgentWalletService> };
+export const agentWalletService = () => (gw.__spakAgentWallets ??= getDb().then((db) => new AgentWalletService(db)));
+/** The URI wallets sign for: the server's configured origin. */
+export const agentUri = (req: Request) => appOrigin(req).origin;

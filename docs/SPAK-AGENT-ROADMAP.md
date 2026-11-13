@@ -16,7 +16,8 @@ Status: proposal for review. Identity and wallet association come before permiss
 - **Tests**: ownership, cross-user access, replay, key removal, RPC failure.
 - **Acceptance**: removing the NEAR wallet suspends the Agent instead of silently unlinking; no Agent action without a verified owner key.
 
-### Stage 6: Wallet association
+### Stage 6: Wallet association [implemented on feature/spak-agent-wallet-association]
+- **Built**: see [Identity model, section 9](SPAK-AGENT-IDENTITY-MODEL.md#9-stage-6-implementation-wallet-association-built). Expiry chosen as 90 days (not 180).
 - **Objective**: signed, expiring wallet-to-Agent associations for EVM, Solana and NEAR.
 - **Backend**: statements, verification, expiry, revocation, compromise flag.
 - **Frontend**: associate, view, remove.

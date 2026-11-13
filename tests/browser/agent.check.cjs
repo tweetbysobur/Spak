@@ -95,11 +95,31 @@ const nep413 = (message, nonce, recipient) => createHash('sha256').update(Buffer
   ok('verified only after the server confirms; still no dedicated account', /Verified by SPak/.test(t2) && /Not available yet/.test(t2) && /not on chain/.test(t2));
   await shot(page, 'agent-03-verified');
 
+  // Wallet association (Stage 6): the signed-in EVM wallet signs a fresh EIP-4361 association in the browser.
+  const row = page.locator('[data-association-family="evm"]');
+  ok('owner NEAR account shown separately from associated wallets', /Agent owner NEAR account/.test(await page.locator('[data-agent-wallets]').innerText()));
+  ok('EVM wallet starts as not associated', (await row.getAttribute('data-association-status')) === 'NONE');
+  await row.getByRole('button', { name: 'Associate' }).click();
+  await page.locator('[data-association-family="evm"][data-association-status="ACTIVE"]').waitFor({ timeout: 20000 });
+  const rowText = await row.innerText();
+  ok('association verified by the server, network named, no authority claimed', /Verified by SPak/.test(rowText) && /signed on Base/.test(rowText) && /no signing authority/.test(await page.locator('[data-agent-wallets]').innerText()));
+  await shot(page, 'agent-05-wallet-associated');
+  await row.getByRole('button', { name: 'Remove' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Remove, it is compromised' }).click();
+  await page.locator('[data-association-family="evm"][data-association-status="NONE"]').waitFor();
+  ok('removed immediately; history kept', /Show removed \(1\)/.test(await page.locator('[data-agent-wallets]').innerText()));
+  await row.getByRole('button', { name: 'Associate' }).click();
+  await page.locator('[data-association-family="evm"][data-association-status="ACTIVE"]').waitFor({ timeout: 20000 });
+  ok('re-association needs and gets a fresh signature', true);
+
   // Suspend and revoke through the UI with confirmations
   await page.getByRole('button', { name: 'Suspend', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Suspend Agent' }).click();
   await page.locator('[data-agent-status="SUSPENDED"]').waitFor();
   ok('suspended: ownership no longer shown as verified', !/Verified by SPak/.test(await page.locator('[data-agent-status]').innerText()));
+  await page.locator('[data-association-family="evm"][data-association-status="SUSPENDED"]').waitFor();
+  ok('suspending the Agent suspends its associations; adding is paused', /New associations are paused/.test(await page.locator('[data-agent-wallets]').innerText()));
+  await shot(page, 'agent-06-suspended');
   await page.getByRole('button', { name: 'Revoke', exact: true }).click();
   ok('revoke needs typed confirmation', await page.getByRole('dialog').getByRole('button', { name: 'Revoke Agent' }).isDisabled());
   await page.locator('input[name=confirmRevoke]').fill('REVOKE');

@@ -45,3 +45,11 @@ Status: threat model for the proposed architecture.
 - **Lost Agent owner key with a backup key**: sign in with the backup key, rotate keys, re-verify ownership in SPak.
 - **Lost Agent owner key without a backup**: the NEAR account cannot be recovered (NEAR documents no protocol recovery). SPak deactivates the Agent record; the user creates a new Agent.
 - **Suspected SPak compromise**: users can revoke from the app, and, in L3, delete SPak's function-call key directly on NEAR without SPak.
+
+## 5. Stage 6 controls (implemented)
+
+- Associations need a fresh, single-use, domain-bound signature from the wallet, tied to one Agent, one user and one wallet, verified on the server only.
+- Only verified, in-date, active Agents can add wallets. Suspension and revocation cascade to associations in the same transaction.
+- No association grants signing authority, adds recipients or changes Guard. Execution code does not read associations.
+- Removal is immediate in every state; a compromised wallet is cut off without touching the Agent.
+- Database constraints make an ACTIVE association without proof fields, an unknown family, or two live associations for one wallet impossible.

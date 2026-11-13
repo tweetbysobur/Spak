@@ -78,6 +78,13 @@
       "when": 1794565482011,
       "tag": "0010_agent_identity",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794567756144,
+      "tag": "0011_agent_wallet_association",
+      "breakpoints": true
     }
   ]
 }

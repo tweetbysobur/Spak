@@ -6,6 +6,7 @@ import { agentChallenges, agentEvents, agents } from "../database/schema";
 import { isUniqueViolation } from "../execution/records";
 import { AuthError } from "../auth/types";
 import { nearRpc as defaultNearRpc, verifyNearSignature, type NearRpc } from "../auth/verify/near";
+import { cascadeAgentStatus } from "./cascade";
 
 /* ----------------------------------------------------------------- constants ---------------------------------------------------------------- */
 
@@ -163,6 +164,8 @@ export class AgentService {
         .where(and(eq(agents.id, a.id), eq(agents.userId, a.userId), eq(agents.status, a.status), eq(agents.version, a.version))).returning();
       if (!r) throw new AgentError("AGENT_CONCURRENT_UPDATE", "This Agent changed in another request. Reload and try again.");
       await this.event(tx, r, event, a.status, to, data);
+      // Wallet associations follow the Agent in the same transaction.
+      await cascadeAgentStatus(tx, r, a.status, to, now);
       return r;
     });
   }

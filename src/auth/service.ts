@@ -7,6 +7,7 @@ import { normalizeAddress } from "./address";
 import { buildChallengeMessage } from "./messages";
 import { AuthError, type ChallengePurpose, type WalletFamily } from "./types";
 import { verifyEvmSignature } from "./verify/evm";
+import { revokeAssociationsForWallet } from "../agents/wallets";
 import { nearRpc as defaultNearRpc, verifyNearSignature, type NearRpc } from "./verify/near";
 import { verifySolanaSignature } from "./verify/solana";
 
@@ -265,6 +266,8 @@ export class AuthService {
     await this.db.transaction(async (tx) => {
       await tx.update(agentIdentities).set({ walletId: null, nearAccountId: null, status: "NOT_LINKED", updatedAt: this.clock() })
         .where(and(eq(agentIdentities.userId, userId), eq(agentIdentities.walletId, walletId)));
+      // Agent wallet associations for this wallet are revoked before the wallet row goes (history is kept).
+      await revokeAssociationsForWallet(tx as unknown as Db, userId, walletId, this.clock());
       await tx.delete(wallets).where(eq(wallets.id, walletId));
       const [u] = await tx.select().from(users).where(eq(users.id, userId)).limit(1);
       if (u?.activeWalletId === walletId) {

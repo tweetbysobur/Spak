@@ -660,3 +660,51 @@ export const agentEvents = pgTable("spak_agent_events", {
   data: jsonb("data").notNull().default({}),
   at: timestamp("at", { withTimezone: true }).notNull(),
 }, (t) => [index("spak_agent_events_agent_idx").on(t.agentId, t.at)]);
+
+/* ------------------------------------------------------- SPak Agent wallet associations ------------------------------------------------------- */
+
+/**
+ * A wallet associated with an Agent (Stage 6). Proves the Agent owner controlled the wallet when it signed.
+ * Grants SPak no signing authority and changes nothing in Guard. The wallet must already be one of the user's
+ * verified wallets (spak_wallets); family, network and canonical address are kept as a snapshot so history
+ * survives the wallet being disconnected.
+ */
+export const agentWallets = pgTable("spak_agent_wallets", {
+  id: text("id").primaryKey(),
+  agentId: text("agent_id").notNull().references(() => agents.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  walletId: text("wallet_id").references(() => wallets.id, { onDelete: "set null" }),
+  family: text("family").notNull(), // evm | solana | near
+  network: text("network").notNull(), // SPak network the proof was made on (e.g. base, solana, near)
+  chainId: text("chain_id"), // EVM only: the chain id signed in the EIP-4361 message
+  address: text("address").notNull(), // canonical (EVM lowercase, NEAR lowercase, Solana exact)
+  publicKey: text("public_key"), // NEAR: the signing key; Solana: the address is the key; EVM: null
+  method: text("method").notNull(), // EIP4361_PERSONAL_SIGN | SIWS_ED25519 | NEAR_NEP413_FULL_ACCESS_KEY
+  status: text("status").notNull(), // PENDING | ACTIVE | SUSPENDED | EXPIRED | REVOKED
+  verifiedAt: timestamp("verified_at", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  revokeReason: text("revoke_reason"),
+  version: integer("version").notNull().default(1),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+}, (t) => [index("spak_agent_wallets_agent_idx").on(t.agentId, t.status)]);
+
+/** One-time association challenges. The exact message is stored; verification uses this copy only. */
+export const agentWalletChallenges = pgTable("spak_agent_wallet_challenges", {
+  id: text("id").primaryKey(),
+  associationId: text("association_id").notNull().references(() => agentWallets.id, { onDelete: "cascade" }),
+  agentId: text("agent_id").notNull().references(() => agents.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  family: text("family").notNull(),
+  method: text("method").notNull(),
+  address: text("address").notNull(),
+  chainId: text("chain_id"),
+  domain: text("domain").notNull(),
+  nonce: text("nonce").notNull(),
+  message: text("message").notNull(),
+  issuedAt: timestamp("issued_at", { withTimezone: true }).notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  outcome: text("outcome"),
+}, (t) => [uniqueIndex("spak_agent_wallet_challenges_nonce_uq").on(t.nonce), index("spak_agent_wallet_challenges_assoc_idx").on(t.associationId)]);

@@ -6,6 +6,7 @@ import { Notice } from "@/components/status";
 import type { Session } from "@/components/session";
 import { discoverNearWallets, signNear } from "@/wallets/near";
 import type { AgentView } from "@/agents/service";
+import { AgentWallets } from "./AgentWallets";
 
 interface Events { items: { id: number; event: string; fromStatus: string | null; toStatus: string | null; at: string }[] }
 const EVENT: Record<string, string> = {
@@ -104,6 +105,8 @@ export function AgentIdentity({ session }: { session: Session }) {
               <div><Button onClick={verify} disabled={busy || !(agent.ownership.accountId ?? account).trim()}>{busy ? "Waiting for your wallet" : "Sign with NEAR wallet"}</Button></div>
             </div>
           )}
+
+          <AgentWallets agent={agent} session={session} />
 
           {result && <Notice role={result.ok ? "success" : "error"} title={result.ok ? "Done" : "Not verified"}>{result.text}</Notice>}
 

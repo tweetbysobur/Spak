@@ -225,3 +225,79 @@ Proposed minimal registry contract (`agent-registry.<spak-parent>.near`):
 - NEAR RPC is the public mainnet endpoint unless `NEAR_RPC_URL` is set. It is a trust dependency for named accounts.
 - One live Agent per user for now.
 - The NEAR wallet's redirect fallback is not resumed for Agent proofs; the user restarts verification.
+
+## 9. Stage 6 implementation: wallet association (built)
+
+Code on `feature/spak-agent-wallet-association`. Section 6 above was the design; this is what was built and where it differs.
+
+### Model
+
+```mermaid
+flowchart TB
+  U["SPak user"] --> A["SPak Agent (agt_)"]
+  A -. "owner (Stage 5 proof)" .- O["Owner NEAR account"]
+  U --> W["Verified wallets on the account\n(spak_wallets)"]
+  A --> E["EVM associations"]
+  A --> S["Solana associations"]
+  A --> N["Additional NEAR associations"]
+  W -. "must exist first" .-> E & S & N
+```
+
+- A wallet can be associated only if it is already one of the user's verified wallets (`spak_wallets`, unique per family and address across all users). The association names it by wallet id; its address comes from the server's record.
+- The association keeps a snapshot of family, network, chain id and canonical address so history survives the wallet being disconnected.
+- One live association per wallet across all Agents (partial unique index on family and address where status is not REVOKED). At most 20 live associations per Agent.
+- The Agent owner NEAR account cannot be associated as an ordinary wallet; it is shown separately as the owner.
+- Association grants nothing: every view carries `signingAuthority: "NONE"`, recipients and Guard are untouched, execution does not read associations.
+
+### Verification per ecosystem
+
+| Family | Method | Signed message | Server check |
+|---|---|---|---|
+| EVM | `EIP4361_PERSONAL_SIGN` | EIP-4361 (viem `createSiweMessage`): domain, EIP-55 address, statement, URI, version, chain id, nonce, issued at, expiration time, request id = challenge id, resources `urn:spak:agent:<id>`, `urn:spak:owner:<user ref>`, `urn:spak:purpose:AGENT_WALLET_ASSOCIATION` | viem `verifyMessage` (EIP-191 recovery) against the stored message and the stored address. EOAs only |
+| Solana | `SIWS_ED25519` | Sign-In With Solana layout with the same fields plus Agent, owner reference and purpose lines | ed25519 verification of the UTF-8 message against the stored base58 public key (32 bytes) |
+| NEAR | `NEAR_NEP413_FULL_ACCESS_KEY` | Same text layout, signed with NEP-413 (32-byte nonce, recipient = app host) | Existing `verifyNearSignature`: implicit account must equal the key; named account needs a `FullAccess` key on chain. Function-call keys are refused. RPC failure fails closed |
+
+All three: challenge stored with the exact message, single use (atomic `UPDATE ... WHERE used_at IS NULL`), 5 minute expiry, bound to one Agent, one user and one wallet, domain from the server's configured origin. EVM chain id must be a supported EVM network and is part of the signed message, so a proof cannot be replayed as another chain.
+
+### Lifecycle
+
+| State | Meaning | Transitions |
+|---|---|---|
+| PENDING | Challenge issued, never verified | → ACTIVE (valid proof), → SUSPENDED (Agent suspended), → REVOKED |
+| ACTIVE | Verified, in date | → EXPIRED (90 days), → SUSPENDED (Agent suspended), → ACTIVE (re-verify, key rotation), → REVOKED |
+| SUSPENDED | Agent suspended | → ACTIVE when the Agent is re-verified and the association is in date; → EXPIRED if out of date; → REVOKED if it was never verified, or on removal |
+| EXPIRED | Past expiry | → ACTIVE only with a fresh wallet signature; → REVOKED |
+| REVOKED | Removed, compromised, wallet disconnected, or Agent revoked | Final. A new association is a new row and needs a new challenge |
+
+- Removing works in any state except REVOKED, even while the Agent is suspended, so a compromised wallet can always be cut off. Reason `REMOVED` or `COMPROMISED`.
+- Disconnecting a wallet from the account revokes its associations in the same transaction.
+- Activation re-checks the Agent under a row lock: a challenge issued before a suspension or revocation cannot activate afterwards.
+- For later stages, only `associationUsable()` counts: ACTIVE, in date, and the Agent's ownership current.
+
+### Expiry policy
+
+90 days, against 180 days for Agent ownership. Wallets change hands and get compromised more often than an owner's NEAR key, and re-signing costs nothing. The value is a constant (`ASSOCIATION_VALID_MS`); making it configurable is a later decision.
+
+### API
+
+| Method and path | Body | Result |
+|---|---|---|
+| `GET /api/agents/:id/wallets` | | `{ items[] }` |
+| `POST /api/agents/:id/wallets/challenge` | `{ walletId, chainId? }` | challenge (message; NEAR adds `nonce`, `recipient`) |
+| `POST /api/agents/:id/wallets/verify` | `{ challengeId, signature, publicKey?, accountId? }` | `{ association }` |
+| `GET /api/agents/:id/wallets/:associationId` | | `{ association }` |
+| `DELETE /api/agents/:id/wallets/:associationId` | `{ reason? }` | `{ association }` |
+| `GET /api/agents/:id/wallets/:associationId/events` | | `{ items[] }` |
+
+Strict schemas, session required, same-origin writes, user-scoped queries (another user's data is 404). No user id, nonce or signature in responses. Re-verification uses the same challenge endpoint.
+
+### Database (migration `0011_agent_wallet_association`)
+
+`spak_agent_wallets` and `spak_agent_wallet_challenges`, with checks tying family to method, requiring a chain id for EVM only, requiring proof fields for ACTIVE and EXPIRED, and `revoked_at` exactly when REVOKED. Events go to the existing append-only `spak_agent_events` with the association id in `data`.
+
+### Known limitations
+
+- ERC-1271 smart-contract wallets are not supported. An EOA association covers that key on every EVM chain; the chain it was signed on is recorded.
+- The browser flow uses the first detected EVM or Solana wallet extension; the user switches account in the wallet if needed.
+- No periodic on-chain re-check of NEAR keys between verifications.
+- No separate "suspend one association" action; removal covers compromise.
