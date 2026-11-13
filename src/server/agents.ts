@@ -4,6 +4,7 @@ import { getDb } from "@/database";
 import { AgentError, AgentService } from "@/agents/service";
 import { AgentWalletService } from "@/agents/wallets";
 import { AgentAccountService } from "@/agents/accounts";
+import { AgentFundingService } from "@/agents/funding";
 import { agentAccountConfig, nearTestnetChain } from "@/agents/near-chain";
 import { appOrigin, requireUser, route } from "./auth";
 
@@ -38,4 +39,12 @@ export const agentAccountService = () => (ga.__spakAgentAccounts ??= getDb().the
   const config = agentAccountConfig();
   const chain = "unavailable" in config ? null : nearTestnetChain(config, process.env.SPAK_AGENT_PARENT_PRIVATE_KEY!);
   return new AgentAccountService({ db, config, chain });
+}));
+
+const gf = globalThis as unknown as { __spakAgentFunding?: Promise<AgentFundingService> };
+/** Funding reads only: view_account on NEAR testnet. Uses the same testnet chain as accounts; no key is involved in a read. */
+export const agentFundingService = () => (gf.__spakAgentFunding ??= getDb().then((db) => {
+  const config = agentAccountConfig();
+  const chain = "unavailable" in config ? null : nearTestnetChain(config, process.env.SPAK_AGENT_PARENT_PRIVATE_KEY!);
+  return new AgentFundingService({ db, chain });
 }));

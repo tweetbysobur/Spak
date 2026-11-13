@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex, bigserial } from "drizzle-orm/pg-core";
+import { type AnyPgColumn, boolean, index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex, bigserial } from "drizzle-orm/pg-core";
 
 /** Conversation context for follow-ups. One row per session. */
 export const sessions = pgTable("spak_sessions", {
@@ -191,9 +191,15 @@ export const executions = pgTable("spak_executions", {
   refundVerifiedAt: timestamp("refund_verified_at", { withTimezone: true }),
   /** Latest failure classification (see src/failures). */
   failure: jsonb("failure"),
+  /**
+   * Stage 9: the SPak Agent this execution acts for, when the user started it through their Agent. Validated on the
+   * server (owned, verified, ownership current) at creation and checked again at approval and deposit. Null for manual.
+   */
+  agentId: text("agent_id").references((): AnyPgColumn => agents.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 }, (t) => [
+  index("spak_executions_agent_idx").on(t.agentId, t.createdAt),
   uniqueIndex("spak_executions_idem_uq").on(t.userId, t.idempotencyKey),
   uniqueIndex("spak_executions_plan_uq").on(t.userId, t.planHash),
   uniqueIndex("spak_executions_deposit_uq").on(t.depositAddress),
@@ -795,3 +801,27 @@ export const agentAccountRotations = pgTable("spak_agent_account_rotations", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 }, (t) => [uniqueIndex("spak_agent_account_rotations_nonce_uq").on(t.nonce), index("spak_agent_account_rotations_acct_idx").on(t.accountRowId, t.createdAt)]);
+
+/* ------------------------------------------------------------ Agent account funding ------------------------------------------------------------ */
+
+/**
+ * Stage 9: what NEAR showed about an ACTIVE dedicated Agent account's balance, read by the backend. Append-only
+ * observations. FUNDED only when the read succeeded and the spendable balance (liquid minus storage reserve) meets
+ * the minimum. A failed read is INCONCLUSIVE, never FUNDED. SPak sends no funds here: the owner funds from a wallet.
+ */
+export const agentFundingChecks = pgTable("spak_agent_funding_checks", {
+  id: text("id").primaryKey(),
+  agentId: text("agent_id").notNull().references(() => agents.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  accountRowId: text("account_row_id").notNull().references(() => agentAccounts.id, { onDelete: "cascade" }),
+  network: text("network").notNull(),
+  accountId: text("account_id").notNull(),
+  result: text("result").notNull(), // FUNDED | UNFUNDED | INCONCLUSIVE
+  reason: text("reason"),
+  balanceYocto: text("balance_yocto"),
+  lockedYocto: text("locked_yocto"),
+  storageUsage: integer("storage_usage"),
+  spendableYocto: text("spendable_yocto"),
+  minimumYocto: text("minimum_yocto").notNull(),
+  checkedAt: timestamp("checked_at", { withTimezone: true }).notNull(),
+}, (t) => [index("spak_agent_funding_checks_agent_idx").on(t.agentId, t.checkedAt)]);

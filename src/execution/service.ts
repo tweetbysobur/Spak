@@ -41,6 +41,17 @@ export interface ExecutionDeps {
   clock?: () => Date;
   /** SPak Guard. Required: there is no way to build an execution service that skips policy enforcement. */
   guard: GuardService;
+  /** Stage 9: checks that an Agent may act for its owner. Without it, any Agent execution is refused (fail closed). */
+  agents?: AgentGate;
+}
+
+/** Can this user's Agent act right now? Throws ExecutionError AGENT_NOT_AUTHORIZED when not. Read from the server's own records. */
+export interface AgentGate { assertCanAct(userId: string, agentId: string): Promise<void> }
+
+export async function assertAgent(gate: AgentGate | undefined, userId: string, agentId: string | null | undefined) {
+  if (!agentId) return;
+  if (!gate) throw new ExecutionError("AGENT_NOT_AUTHORIZED", "Agent actions are not available on this server.");
+  await gate.assertCanAct(userId, agentId);
 }
 
 /**
@@ -71,7 +82,10 @@ export class ExecutionService {
   }
 
   /** Create (or return) the execution for a plan and attach a fresh indicative quote. Idempotent per key and per plan. */
-  async create(args: { userId: string; planHash: string; idempotencyKey: string; wallets: VerifiedWallet[] }) {
+  async create(args: { userId: string; planHash: string; idempotencyKey: string; wallets: VerifiedWallet[]; agentId?: string | null }) {
+    const agentId = args.agentId ?? null;
+    // Stage 9: an execution started through the Agent is attributed to it only if the server finds the Agent owned, verified and current.
+    await assertAgent(this.d.agents, args.userId, agentId);
     const { v, src, dst } = await this.prepare(args.userId, args.planHash, args.wallets);
     // Guard, before anything is quoted: the stored policy against the plan itself.
     await this.d.guard.enforcePlan(args.userId, v);
@@ -81,8 +95,11 @@ export class ExecutionService {
       plan: v.plan, idempotencyKey: args.idempotencyKey, fingerprint: fingerprint(args.userId, v), state: "DRAFT", provider: PROVIDER_ID,
       sourceNetwork: src.network, destinationNetwork: dst.network, sourceAssetId: src.id, destinationAssetId: dst.id,
       amountIn: this.quotes.buildRequest(v, src, dst, true).amount, recipient: v.leg.recipient, recipientKind: v.recipientKind,
-      refundAddress: v.leg.refundAddress, createdAt: now, updatedAt: now,
+      refundAddress: v.leg.refundAddress, agentId, createdAt: now, updatedAt: now,
     });
+    if (!created && (row.agentId ?? null) !== agentId) {
+      throw new ExecutionError("AGENT_MISMATCH", row.agentId ? "This plan already has a transfer started through your Agent." : "This plan already has a transfer you started yourself.", { existing: row.id });
+    }
     // Same key or same plan: return the one execution. Retry the quote only if the first attempt never got one.
     if (!created && !(row.state === "DRAFT" && !row.currentQuoteId)) return { execution: row, quote: row.currentQuoteId ? await this.d.records.getQuote(row.currentQuoteId) : null, created };
     const quote = await this.attachIndicative(row, v, src, dst);
@@ -201,6 +218,8 @@ export class ExecutionService {
       throw new ExecutionError("AMOUNT_LIMIT_EXCEEDED", firm.amountInUsd ? `This is about $${Number(firm.amountInUsd).toFixed(2)}, above the $${limit} limit per execution.` : "The USD value of this execution is unknown, so it cannot be checked against the limit.");
     }
     await this.prepare(args.userId, row.planHash, args.wallets);
+    // An Agent transfer is approved only while the Agent can still act: a suspended or revoked Agent stops it here.
+    await assertAgent(this.d.agents, args.userId, row.agentId);
     if (!a.allowDuplicate) {
       const recent = await this.d.records.recentSameTransfer(args.userId, row.fingerprint, new Date(now.getTime() - DUPLICATE_WINDOW_MS), row.id);
       if (recent.length) throw new ExecutionError("DUPLICATE_SUSPECTED", "You started the same transfer less than 2 minutes ago. Confirm to do it again.", { existing: recent[0].id });
@@ -384,7 +403,7 @@ export function toQuoteView(q: QuoteRow, now: Date = new Date()) {
 
 export function toExecutionView(r: ExecutionRow, allQuotes: QuoteRow[], events: { at: Date; fromState: string | null; toState: string; reason: string }[], now: Date = new Date()) {
   return {
-    id: r.id, state: r.state, provider: r.provider,
+    id: r.id, state: r.state, provider: r.provider, agentId: r.agentId ?? null,
     plan: { planId: r.planId, planHash: r.planHash, intentId: r.intentId, revision: r.planRevision },
     source: { network: r.sourceNetwork, assetId: r.sourceAssetId, amountIn: r.amountIn },
     destination: { network: r.destinationNetwork, assetId: r.destinationAssetId, amountOutSettled: r.amountOutSettled, amountOutVerified: r.amountOutVerified, verifiedAt: r.destinationVerifiedAt?.toISOString() ?? null },

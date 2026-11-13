@@ -10,6 +10,10 @@ import { DestinationVerifier, ExecutionMonitor, TrackingRecords, TrackingService
 import { FailureRecords, FailureService, RefundVerifier, ReviewService } from "@/failures";
 import { AuthError } from "@/auth/types";
 import { GuardService } from "@/guard";
+import { DbAgentGate } from "@/agents/gate";
+import { actingProblem } from "@/agents/authority";
+import { agents as agentsTable } from "@/database/schema";
+import { and, eq } from "drizzle-orm";
 import { authService, requireUser, route } from "./auth";
 
 /**
@@ -30,11 +34,13 @@ async function build() {
   const audit = new PgAuditLog(db);
   // SPak Guard: the user's stored policy, enforced at every step from plan to deposit.
   const guard = new GuardService({ db, audit });
-  const execution = new ExecutionService({ client, records: executionRecords, plans: new IntentLogPlanStore(db), audit, guard });
+  // Stage 9: Agent authority is read from the database at create, approval and deposit.
+  const agentGate = new DbAgentGate(db);
+  const execution = new ExecutionService({ client, records: executionRecords, plans: new IntentLogPlanStore(db), audit, guard, agents: agentGate });
   // Deposits extend the same execution engine: same records, same provider client, plus source-chain RPC.
   const rpc = httpChainRpc();
   const depositRecords = new DepositRecords(db);
-  const deposits = new DepositService({ records: depositRecords, executions: executionRecords, executionService: execution, rpc, client, audit, guard });
+  const deposits = new DepositService({ records: depositRecords, executions: executionRecords, executionService: execution, rpc, client, audit, guard, agents: agentGate });
   // Tracking: background monitor and destination-chain verification over the same records. Not a second engine.
   const tracking = new TrackingRecords(db);
   const destination = new DestinationVerifier({ executions: executionRecords, tracking, rpc, audit });
@@ -63,9 +69,12 @@ export async function spakContext(req: Request, clientSessionId?: unknown) {
   const auth = await authService();
   const wallets = await auth.walletContext(user.userId);
   const agent = await auth.getAgentIdentity(user.userId);
+  // Agent mode needs a verified SPak Agent with a current ownership proof (or the legacy linked identity).
+  const [own] = await (await getDb()).select().from(agentsTable).where(and(eq(agentsTable.userId, user.userId), eq(agentsTable.status, "VERIFIED"))).limit(1);
+  const agentCanAct = !!own && actingProblem(own, user.userId, new Date()) === null;
   // Conversation sessions are namespaced by user, so one user can never continue another's draft.
   const sid = typeof clientSessionId === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(clientSessionId) ? clientSessionId : "default";
-  return { userId: user.userId, wallets, agentLinked: agent.status === "LINKED", sessionId: `${user.userId}:${sid}` };
+  return { userId: user.userId, wallets, agentLinked: agent.status === "LINKED" || agentCanAct, agentId: agentCanAct ? own!.id : null, sessionId: `${user.userId}:${sid}` };
 }
 
 const STATUS: Partial<Record<SpakError["code"], number>> = {

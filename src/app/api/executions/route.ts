@@ -6,7 +6,8 @@ import { handle, spak } from "@/server/spak";
 import { toQuoteView } from "@/execution";
 
 /**
- * POST /api/executions  { planHash, idempotencyKey? }  header Idempotency-Key also accepted.
+ * POST /api/executions  { planHash, idempotencyKey?, agentId? }  header Idempotency-Key also accepted.
+ * agentId attributes the transfer to the user's Agent; the server refuses unless that Agent is owned, verified and current.
  * Creates (or returns) the execution for a SPak-in plan and attaches an indicative quote.
  * 201 when created, 200 when the same key or plan was already used.
  */
@@ -17,7 +18,7 @@ export async function POST(req: Request) {
     const b = createBody.parse(await req.json());
     const idempotencyKey = idempotencyKeySchema.parse(req.headers.get("idempotency-key") ?? b.idempotencyKey);
     const s = (await spak()).execution;
-    const r = await s.create({ userId: ctx.userId, planHash: b.planHash, idempotencyKey, wallets: ctx.wallets });
+    const r = await s.create({ userId: ctx.userId, planHash: b.planHash, idempotencyKey, wallets: ctx.wallets, agentId: b.agentId ?? null });
     return NextResponse.json({ execution: await s.details(r.execution.id, ctx.userId), quote: r.quote ? toQuoteView(r.quote) : null }, { status: r.created ? 201 : 200 });
   });
 }

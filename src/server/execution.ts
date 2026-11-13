@@ -19,6 +19,8 @@ export const idSchema = (prefix: string) => z.string().regex(new RegExp(`^${pref
 export const createBody = z.object({
   planHash: z.string().regex(/^[0-9a-f]{64}$/),
   idempotencyKey: idempotencyKeySchema.optional(),
+  /** Stage 9: start this transfer through the user's Agent. The server checks the Agent; this only names it. */
+  agentId: idSchema("agt").optional(),
 });
 
 export const approveBody = z.object({

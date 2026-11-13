@@ -11,6 +11,7 @@ import { DestinationVerifier, ExecutionMonitor, TrackingRecords, TrackingService
 import { FailureRecords, FailureService, RefundVerifier, ReviewService } from "@/failures";
 import { Fake1Click } from "./fake-1click";
 import { GuardService } from "@/guard";
+import { DbAgentGate } from "@/agents/gate";
 
 export const T0 = Date.parse("2026-11-10T10:00:00Z");
 
@@ -25,11 +26,12 @@ export async function harness(opts: { client?: OneClickClient } = {}) {
   const fake = new Fake1Click();
   const records = new ExecutionRecords(db, now);
   const guard = new GuardService({ db, clock: now, audit: new PgAuditLog(db) });
-  const svc = new ExecutionService({ guard, client: opts.client ?? new OneClickClient({ fetchImpl: fake.fetch as typeof fetch }), records, plans: new IntentLogPlanStore(db), audit: new PgAuditLog(db), clock: now });
+  const agentGate = new DbAgentGate(db, now);
+  const svc = new ExecutionService({ guard, agents: agentGate, client: opts.client ?? new OneClickClient({ fetchImpl: fake.fetch as typeof fetch }), records, plans: new IntentLogPlanStore(db), audit: new PgAuditLog(db), clock: now });
 
   const chain = new FakeChain();
   const depositRecords = new DepositRecords(db, now);
-  const deposits = new DepositService({ guard, records: depositRecords, executions: records, executionService: svc, rpc: chain, client: new OneClickClient({ fetchImpl: fake.fetch as typeof fetch }), audit: new PgAuditLog(db), clock: now });
+  const deposits = new DepositService({ guard, agents: agentGate, records: depositRecords, executions: records, executionService: svc, rpc: chain, client: new OneClickClient({ fetchImpl: fake.fetch as typeof fetch }), audit: new PgAuditLog(db), clock: now });
   const tracking = new TrackingRecords(db, now);
   const destination = new DestinationVerifier({ executions: records, tracking, rpc: chain, audit: new PgAuditLog(db), clock: now });
   const failureRecords = new FailureRecords(db, now);

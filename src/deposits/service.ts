@@ -1,3 +1,4 @@
+import { assertAgent, type AgentGate } from "../execution/service";
 import type { GuardService } from "../guard/service";
 import type { OneClickClient } from "../integrations/near-intents/client";
 import { getAsset } from "../spak-in/registries/assets";
@@ -33,6 +34,8 @@ export interface DepositDeps {
   clock?: () => Date;
   /** SPak Guard. Required: deposit instructions are never prepared without a Guard check. */
   guard: GuardService;
+  /** Stage 9: an Agent transfer prepares a deposit only while its Agent can still act. Missing means refuse. */
+  agents?: AgentGate;
 }
 
 /**
@@ -62,6 +65,8 @@ export class DepositService {
     const ok = wallets.some((w) => w.family === fam && w.networks.some((n) => n.id === ex.sourceNetwork && n.enabled)
       && (fam === "solana" ? w.address === ex.refundAddress : w.address.toLowerCase() === ex.refundAddress.toLowerCase()));
     if (!ok) throw new ExecutionError("WALLET_NOT_VERIFIED", "The wallet that must send this deposit is no longer verified on the source network.");
+    // Stage 9: a suspended, revoked or expired Agent stops its transfers before any deposit instruction is issued.
+    if (checkGuard) await assertAgent(this.d.agents, userId, ex.agentId);
     // Guard: emergency controls, disabled networks and a live spending reservation.
     if (checkGuard) await this.d.guard.enforceDeposit(ex, quote);
     return { ex, approval, quote };
