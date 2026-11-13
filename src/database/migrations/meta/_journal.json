@@ -99,6 +99,13 @@
       "when": 1794581487101,
       "tag": "0013_agent_account_hardening",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794588778131,
+      "tag": "0014_agent_account_recheck",
+      "breakpoints": true
     }
   ]
 }

@@ -73,3 +73,12 @@ Status: threat model for the proposed architecture.
 3. Production sponsorship amounts, budgets and monitoring.
 4. Live testnet run of creation and rotation with an authorised parent account.
 5. Periodic background re-verification of dedicated accounts and associations.
+
+## 7. Stage 8 (implemented; no live testnet run)
+
+- Parent credentials: server environment only; validated format; never logged, returned, stored or sent to the browser; testnet only.
+- Readiness requires NEAR to confirm the parent and its key; configuration alone does not enable creation.
+- Sponsorship cap, budget and parent balance checked before consent, at reservation (atomic) and at preflight.
+- Background re-verification is read-only, leased, idempotent and refuses stale writes.
+- Association monitoring cannot reactivate or extend anything.
+- Still a mainnet blocker: recovery design, mainnet parent namespace and key custody, production sponsorship economics, a live testnet validation run, a scheduler more frequent than daily if faster retries are needed.

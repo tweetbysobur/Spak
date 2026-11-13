@@ -376,3 +376,29 @@ describe("hardening: no automatic reactivation", () => {
     expect((await svc.get(u.userId, u.agentId, a.id)).status).toBe("ACTIVE");
   });
 });
+
+describe("stage 8: association monitoring", () => {
+  it("marks expired, reports what needs a fresh proof, never reactivates or extends", async () => {
+    const { monitorAssociations } = await import("@/agents/wallets");
+    const u = await setup();
+    const a = await svc.verify(u.userId, u.agentId, (await associate(u, "solana")).proof);
+    const b = await svc.verify(u.userId, u.agentId, (await associate(u, "evm")).proof);
+    await svc.remove(u.userId, u.agentId, b.id, "COMPROMISED");
+    clock.now += ASSOCIATION_VALID_MS + 1;
+    const r1 = await monitorAssociations(db, new Date(clock.now));
+    expect(r1).toEqual({ newlyExpired: 1, needFreshProof: { suspended: 0, expired: 1, pending: 0 }, reactivated: 0, signatureRequests: 0 });
+    const after = await svc.get(u.userId, u.agentId, a.id);
+    expect(after).toMatchObject({ status: "EXPIRED", expiresAt: a.expiresAt });
+    expect((await svc.get(u.userId, u.agentId, b.id)).status).toBe("REVOKED");
+    expect((await monitorAssociations(db, new Date(clock.now))).newlyExpired).toBe(0); // idempotent
+  });
+  it("suspended associations stay suspended through monitoring and Agent re-verification", async () => {
+    const { monitorAssociations } = await import("@/agents/wallets");
+    const u = await setup();
+    const a = await svc.verify(u.userId, u.agentId, (await associate(u, "solana")).proof);
+    await agentsSvc.suspend(u.userId, u.agentId);
+    const r = await monitorAssociations(db, new Date(clock.now));
+    expect(r.needFreshProof.suspended).toBe(1);
+    expect((await svc.get(u.userId, u.agentId, a.id))).toMatchObject({ status: "SUSPENDED", expiresAt: a.expiresAt });
+  });
+});

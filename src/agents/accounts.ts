@@ -69,7 +69,9 @@ export interface AccountView {
   sponsorship: string; creationTxHash: string | null; creationOutcome: string | null; creationError: string | null;
   createdOnChainAt: string | null; ownershipVerifiedAt: string | null; activatedAt: string | null; lastVerifiedAt: string | null; recoveryReason: string | null;
   createdAt: string; signingAuthority: "OWNER_ONLY";
-  /** What NEAR showed at the last check: public keys and permissions only. */
+  /** Background checks: latest attempt (decisive or not) and schedule. */
+  checks: { lastSuccessfulAt: string | null; lastAttemptAt: string | null; lastResult: string | null; lastReason: string | null; nextAt: string | null; consecutiveFailures: number };
+  /** What NEAR showed at the last decisive check: public keys and permissions only. */
   evidence: { checkedAt: string; decision: string; reason: string | null; keys: { publicKey: string; permission: string }[] } | null;
 }
 export function toAccountView(r: Row): AccountView {
@@ -79,6 +81,7 @@ export function toAccountView(r: Row): AccountView {
     sponsorship: r.sponsorship, creationTxHash: r.creationTxHash, creationOutcome: r.creationOutcome, creationError: r.creationError,
     createdOnChainAt: iso(r.createdOnChainAt), ownershipVerifiedAt: iso(r.ownershipVerifiedAt), activatedAt: iso(r.activatedAt), lastVerifiedAt: iso(r.lastVerifiedAt),
     recoveryReason: r.recoveryReason, createdAt: r.createdAt.toISOString(), signingAuthority: "OWNER_ONLY",
+    checks: { lastSuccessfulAt: iso(r.lastVerifiedAt), lastAttemptAt: iso(r.lastCheckAt), lastResult: r.lastCheckResult, lastReason: r.lastCheckReason, nextAt: r.status === "ACTIVE" ? iso(r.nextCheckAt) : null, consecutiveFailures: r.consecutiveFailures },
     evidence: r.verificationEvidence ? (({ checkedAt, decision, reason, keys }) => ({ checkedAt, decision, reason, keys }))(r.verificationEvidence as { checkedAt: string; decision: string; reason: string | null; keys: { publicKey: string; permission: string }[] }) : null,
   };
 }
@@ -137,13 +140,55 @@ export class AgentAccountService {
     return u;
   }
 
+  private infraCache: { at: number; value: InfrastructureStatus } | null = null;
+
+  /**
+   * Is SPak's testnet infrastructure ready to create accounts? Reads NEAR: chain id, the parent account, that the
+   * configured key is a full-access key on it, and that its spendable balance covers one more account. Configured
+   * variables alone never mean ready. Cached for a minute for display; creation always re-checks.
+   */
+  async infrastructure(opts: { fresh?: boolean } = {}): Promise<InfrastructureStatus> {
+    const cfg = this.cfg;
+    if (!cfg) return { state: "NOT_CONFIGURED", reason: (this.d.config as { unavailable: string }).unavailable, network: null, parentAccountId: null, sponsorship: null };
+    const now = this.clock().getTime();
+    if (!opts.fresh && this.infraCache && now - this.infraCache.at < 60_000) return this.infraCache.value;
+    const sponsorship = await this.sponsorship(cfg);
+    const base = { network: cfg.network, parentAccountId: cfg.parentAccountId, sponsorship };
+    let value: InfrastructureStatus;
+    try {
+      const chain = this.d.chain!;
+      if ((await chain.chainId()) !== "testnet") value = { ...base, state: "UNAVAILABLE", reason: "The configured RPC is not NEAR testnet." };
+      else {
+        const parent = await chain.viewAccount(cfg.parentAccountId);
+        const keys = parent ? await chain.accessKeys(cfg.parentAccountId) : [];
+        if (!parent) value = { ...base, state: "UNAVAILABLE", reason: "The parent account does not exist on testnet." };
+        else if (!keys.some((k) => k.publicKey === chain.parentPublicKey() && k.permission === "FullAccess")) value = { ...base, state: "UNAVAILABLE", reason: "The configured key is not a full-access key on the parent account." };
+        else if (BigInt(spendable(parent)) < BigInt(requiredForOne(cfg))) value = { ...base, state: "UNAVAILABLE", reason: "The parent account does not have enough NEAR to sponsor another account." };
+        else if (sponsorship.sponsoredAccounts >= cfg.maxSponsoredAccounts) value = { ...base, state: "UNAVAILABLE", reason: "The maximum number of sponsored accounts is reached." };
+        else if (BigInt(sponsorship.remainingYocto) < BigInt(cfg.initialBalanceYocto)) value = { ...base, state: "UNAVAILABLE", reason: "The sponsorship budget is used up." };
+        else value = { ...base, state: "READY", reason: null };
+      }
+    } catch { value = { ...base, state: "UNAVAILABLE", reason: "NEAR testnet could not be reached." }; }
+    this.infraCache = { at: now, value };
+    return value;
+  }
+
+  private async sponsorship(cfg: AgentAccountConfig, q: Db = this.d.db) {
+    const [r] = await q.select({ spent: sql<string>`coalesce(sum(cast(${agentAccounts.fundingYocto} as numeric)), 0)::text`, n: sql<number>`count(*)::int` })
+      .from(agentAccounts).where(inArray(agentAccounts.sponsorship, ["RESERVED", "FUNDED"]));
+    const spent = BigInt((r?.spent ?? "0").split(".")[0]);
+    const remaining = BigInt(cfg.budgetYocto) - spent;
+    return { initialBalanceYocto: cfg.initialBalanceYocto, budgetYocto: cfg.budgetYocto, committedYocto: spent.toString(), remainingYocto: (remaining > 0n ? remaining : 0n).toString(), sponsoredAccounts: r?.n ?? 0, maxSponsoredAccounts: cfg.maxSponsoredAccounts };
+  }
+
   async view(userId: string, agentId: string) {
     const a = await this.agent(userId, agentId);
     const rows = await this.d.db.select().from(agentAccounts).where(and(eq(agentAccounts.agentId, agentId), eq(agentAccounts.userId, userId))).orderBy(desc(agentAccounts.createdAt));
     const live = rows.find((r) => r.status !== "CREATION_FAILED");
-    const availability = this.cfg ? (a.status === "VERIFIED" && ownershipCurrent(a, this.clock()) ? "AVAILABLE" : "AGENT_NOT_VERIFIED") : "UNAVAILABLE";
+    const infrastructure = await this.infrastructure();
+    const availability = infrastructure.state !== "READY" ? "UNAVAILABLE" : a.status === "VERIFIED" && ownershipCurrent(a, this.clock()) ? "AVAILABLE" : "AGENT_NOT_VERIFIED";
     return {
-      availability, unavailableReason: this.cfg ? null : (this.d.config as { unavailable: string }).unavailable, network: this.cfg?.network ?? null,
+      availability, unavailableReason: infrastructure.reason, network: this.cfg?.network ?? null, infrastructure,
       account: live ? toAccountView(live) : null, failedAttempts: rows.filter((r) => r.status === "CREATION_FAILED").map(toAccountView),
       rotation: live ? ((x) => (x ? rotationView(x) : null))(await this.openRotation(live.id)) : null,
       /** Rotation needs the current key on an ACTIVE account. A lost key cannot be rotated or recovered by SPak. */
@@ -160,6 +205,8 @@ export class AgentAccountService {
     const existing = await this.live(agentId, userId);
     if (existing) throw new AgentError("AGENT_EXISTS", "This Agent already has a dedicated account.");
     const chain = this.d.chain ?? this.unavailable();
+    const infra = await this.infrastructure({ fresh: true });
+    if (infra.state !== "READY") throw new AgentError("AGENT_VERIFICATION_UNAVAILABLE", infra.reason ?? "Account creation is not available.");
     let accountId: string | null = null;
     try {
       if ((await chain.chainId()) !== "testnet") throw new AgentError("AGENT_VERIFICATION_UNAVAILABLE", "The configured NEAR network is not testnet.");
@@ -229,6 +276,8 @@ export class AgentAccountService {
         const [{ spent }] = await tx.select({ spent: sql<string>`coalesce(sum(cast(${agentAccounts.fundingYocto} as numeric)), 0)::text` }).from(agentAccounts)
           .where(inArray(agentAccounts.sponsorship, ["RESERVED", "FUNDED"]));
         if (BigInt(spent.split(".")[0]) + BigInt(cfg.initialBalanceYocto) > BigInt(cfg.budgetYocto)) throw new AgentError("AGENT_VERIFICATION_UNAVAILABLE", "The testnet sponsorship budget is used up. Nothing was created.");
+        const [{ sponsored }] = await tx.select({ sponsored: sql<number>`count(*)::int` }).from(agentAccounts).where(inArray(agentAccounts.sponsorship, ["RESERVED", "FUNDED"]));
+        if (sponsored >= cfg.maxSponsoredAccounts) throw new AgentError("AGENT_VERIFICATION_UNAVAILABLE", "The maximum number of sponsored testnet accounts is reached. Nothing was created.");
         const [r] = await tx.insert(agentAccounts).values({
           id: newId("aga"), agentId: a.id, userId, network: cfg.network, accountId: c.accountId, parentAccountId: cfg.parentAccountId, ownerPublicKey: c.ownerPublicKey,
           keyType: "ed25519", status: "CREATION_PENDING", sponsorship: "RESERVED", fundingYocto: cfg.initialBalanceYocto, idempotencyKey: input.idempotencyKey, consentChallengeId: c.id, createdAt: now, updatedAt: now,
@@ -246,6 +295,8 @@ export class AgentAccountService {
       if ((await chain.chainId()) !== "testnet") return toAccountView(await this.fail(row, "WRONG_NETWORK"));
       const parentKeys = await chain.accessKeys(cfg.parentAccountId);
       if (!parentKeys.some((k) => k.publicKey === chain.parentPublicKey() && k.permission === "FullAccess")) return toAccountView(await this.fail(row, "PARENT_NOT_AUTHORIZED"));
+      const parent = await chain.viewAccount(cfg.parentAccountId);
+      if (!parent || BigInt(spendable(parent)) < BigInt(requiredForOne(cfg))) return toAccountView(await this.fail(row, "PARENT_INSUFFICIENT_BALANCE"));
       if (await chain.viewAccount(row.accountId)) return toAccountView(await this.fail(row, "NAME_TAKEN"));
     } catch { return toAccountView(await this.fail(row, "NEAR_UNREACHABLE")); }
 
@@ -331,10 +382,79 @@ export class AgentAccountService {
       const decision = assessAccount(ev, { accountId: cur.accountId, ownerPublicKey: cur.ownerPublicKey, parentPublicKey: this.d.chain!.parentPublicKey() }, await this.bindingOk(cur, tx));
       const evidence = { ...ev, decision: decision.ok ? "VERIFIED" : "RECOVERY_REQUIRED", reason: decision.reason };
       const now = this.clock();
-      if (!decision.ok) return this.move(cur, "RECOVERY_REQUIRED", { recoveryReason: decision.reason, verificationEvidence: evidence, lastVerifiedAt: now }, { reason: decision.reason }, tx);
-      if (cur.status === "ACTIVE") return this.move(cur, "ACTIVE", { lastVerifiedAt: now, verificationEvidence: evidence }, { reverified: true }, tx);
-      return this.move(cur, "ACTIVE", { ownershipVerifiedAt: now, activatedAt: cur.activatedAt ?? now, lastVerifiedAt: now, recoveryReason: null, verificationEvidence: evidence }, { keys: ev.keys.length }, tx);
+      if (!decision.ok) return this.move(cur, "RECOVERY_REQUIRED", { recoveryReason: decision.reason, verificationEvidence: evidence, lastVerifiedAt: now, lastCheckAt: now, lastCheckResult: "RECOVERY_REQUIRED", lastCheckReason: decision.reason, lastCheckEvidence: evidence, nextCheckAt: null }, { reason: decision.reason }, tx);
+      const check = { lastCheckAt: now, lastCheckResult: "VERIFIED", lastCheckReason: null, lastCheckEvidence: evidence, consecutiveFailures: 0, nextCheckAt: this.nextCheck(now) };
+      if (cur.status === "ACTIVE") return this.move(cur, "ACTIVE", { lastVerifiedAt: now, verificationEvidence: evidence, ...check }, { reverified: true }, tx);
+      return this.move(cur, "ACTIVE", { ownershipVerifiedAt: now, activatedAt: cur.activatedAt ?? now, lastVerifiedAt: now, recoveryReason: null, verificationEvidence: evidence, ...check }, { keys: ev.keys.length }, tx);
     });
+  }
+
+  private nextCheck(from: Date) {
+    const h = this.cfg?.recheck.intervalHours ?? 24;
+    return new Date(from.getTime() + h * 3600_000);
+  }
+
+  /**
+   * Background re-verification of ACTIVE dedicated accounts whose next check is due. Read-only on NEAR: it never
+   * signs, never changes keys, never activates anything that is not already ACTIVE.
+   * - Rows are claimed with a short lease by a conditional update, so concurrent or duplicate jobs check each once.
+   * - NEAR unreadable: retried a few times in-job, then recorded INCONCLUSIVE with bounded backoff; status and last
+   *   decisive evidence are kept.
+   * - Account not found or wrong network: INCONCLUSIVE (an RPC node can lag); not found three checks in a row is
+   *   RECOVERY_REQUIRED.
+   * - Exact authority wrong: RECOVERY_REQUIRED.
+   * - All writes lock the account and Agent and refuse stale state (status or version changed since the claim).
+   */
+  async recheckDue(opts: { limit?: number; sleep?: (ms: number) => Promise<void> } = {}) {
+    const out = { checked: 0, verified: 0, recovery: 0, inconclusive: 0, skipped: 0 };
+    if (!this.cfg || !this.d.chain || !this.cfg.recheck.enabled) return { ...out, disabled: true };
+    const sleep = opts.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
+    const now = this.clock();
+    const claimed = await this.d.db.update(agentAccounts).set({ checkLeaseUntil: new Date(now.getTime() + 10 * 60_000) })
+      .where(sql`${agentAccounts.id} in (select id from ${agentAccounts} where ${agentAccounts.status} = 'ACTIVE' and ${agentAccounts.nextCheckAt} <= ${now.toISOString()}::timestamptz and (${agentAccounts.checkLeaseUntil} is null or ${agentAccounts.checkLeaseUntil} < ${now.toISOString()}::timestamptz) order by ${agentAccounts.nextCheckAt} limit ${opts.limit ?? 50})`)
+      .returning();
+    for (const r of claimed) {
+      out.checked++;
+      let ev = await this.evidence(r);
+      for (let i = 0; i < 2 && !ev.readable; i++) { await sleep(1000 * 2 ** i); ev = await this.evidence(r); }
+      const res = await this.d.db.transaction(async (t) => {
+        const tx = t as unknown as Db;
+        const [a] = await tx.select().from(agents).where(eq(agents.id, r.agentId)).for("update").limit(1);
+        const [cur] = await tx.select().from(agentAccounts).where(eq(agentAccounts.id, r.id)).for("update").limit(1);
+        if (!cur || cur.status !== "ACTIVE" || cur.version !== r.version || !a || a.status !== "VERIFIED") {
+          if (cur) await tx.update(agentAccounts).set({ checkLeaseUntil: null }).where(eq(agentAccounts.id, cur.id));
+          return "skipped" as const;
+        }
+        const at = this.clock();
+        const evidenceRec = { ...ev, decision: "", reason: null as string | null };
+        const inconclusive = async (reason: string, escalate: boolean) => {
+          const failures = cur.consecutiveFailures + 1;
+          if (escalate) {
+            await this.move(cur, "RECOVERY_REQUIRED", { recoveryReason: reason, lastCheckAt: at, lastCheckResult: "RECOVERY_REQUIRED", lastCheckReason: reason, lastCheckEvidence: { ...evidenceRec, decision: "RECOVERY_REQUIRED", reason }, consecutiveFailures: failures, nextCheckAt: null, checkLeaseUntil: null }, { background: true, reason }, tx);
+            return "recovery" as const;
+          }
+          const backoffH = Math.min(2 ** (failures - 1), this.cfg!.recheck.intervalHours);
+          await tx.update(agentAccounts).set({ lastCheckAt: at, lastCheckResult: "INCONCLUSIVE", lastCheckReason: reason, lastCheckEvidence: { ...evidenceRec, decision: "INCONCLUSIVE", reason }, consecutiveFailures: failures, nextCheckAt: new Date(at.getTime() + backoffH * 3600_000), checkLeaseUntil: null, updatedAt: at })
+            .where(eq(agentAccounts.id, cur.id));
+          await this.event(tx, { id: cur.agentId, userId: cur.userId }, "ACCOUNT_CHECK_INCONCLUSIVE", "ACTIVE", "ACTIVE", { accountRowId: cur.id, reason, consecutiveFailures: failures });
+          return "inconclusive" as const;
+        };
+        if (!ev.readable) return inconclusive("VERIFICATION_UNAVAILABLE", false);
+        if (ev.chainId !== "testnet") return inconclusive("WRONG_NETWORK", false);
+        if (!ev.exists) return inconclusive("ACCOUNT_NOT_FOUND", cur.lastCheckReason === "ACCOUNT_NOT_FOUND" && cur.consecutiveFailures >= 2);
+        const d = assessAccount(ev, { accountId: cur.accountId, ownerPublicKey: cur.ownerPublicKey, parentPublicKey: this.d.chain!.parentPublicKey() }, await this.bindingOk(cur, tx));
+        if (!d.ok) {
+          await this.move(cur, "RECOVERY_REQUIRED", { recoveryReason: d.reason, verificationEvidence: { ...evidenceRec, decision: "RECOVERY_REQUIRED", reason: d.reason }, lastCheckAt: at, lastCheckResult: "RECOVERY_REQUIRED", lastCheckReason: d.reason, lastCheckEvidence: { ...evidenceRec, decision: "RECOVERY_REQUIRED", reason: d.reason }, nextCheckAt: null, checkLeaseUntil: null }, { background: true, reason: d.reason }, tx);
+          return "recovery" as const;
+        }
+        const good = { ...evidenceRec, decision: "VERIFIED", reason: null };
+        await tx.update(agentAccounts).set({ lastVerifiedAt: at, verificationEvidence: good, lastCheckAt: at, lastCheckResult: "VERIFIED", lastCheckReason: null, lastCheckEvidence: good, consecutiveFailures: 0, nextCheckAt: this.nextCheck(at), checkLeaseUntil: null, updatedAt: at })
+          .where(eq(agentAccounts.id, cur.id));
+        return "verified" as const;
+      });
+      out[res]++;
+    }
+    return { ...out, disabled: false };
   }
 
   /* ------------------------------------------- dedicated account key rotation ------------------------------------------- */
@@ -485,6 +605,24 @@ export class AgentAccountService {
 export function rotationView(x: typeof agentAccountRotations.$inferSelect) {
   return { id: x.id, status: x.status, accountId: x.accountId, oldPublicKey: x.oldPublicKey, newPublicKey: x.newPublicKey, txHash: x.txHash, failureReason: x.failureReason, createdAt: x.createdAt.toISOString(), updatedAt: x.updatedAt.toISOString() };
 }
+
+export type InfrastructureStatus = {
+  state: "NOT_CONFIGURED" | "UNAVAILABLE" | "READY"; reason: string | null; network: "testnet" | null; parentAccountId: string | null;
+  sponsorship: { initialBalanceYocto: string; budgetYocto: string; committedYocto: string; remainingYocto: string; sponsoredAccounts: number; maxSponsoredAccounts: number } | null;
+};
+
+/** Account creation burns a fixed 0.007 NEAR (docs.near.org/protocol/transactions/gas.md). */
+export const CREATION_BURN_YOCTO = "7000000000000000000000";
+/** Margin for the creation transaction's gas. An assumption, kept generous; it is not spent unless gas costs it. */
+export const GAS_MARGIN_YOCTO = "10000000000000000000000";
+/** Storage price: 1E19 yoctoNEAR per byte (docs.near.org/protocol/storage/storage-staking.md). */
+export const STORAGE_YOCTO_PER_BYTE = 10_000_000_000_000_000_000n;
+/** Spendable parent balance: liquid amount minus what its own storage must keep staked. */
+export function spendable(a: { amount: string; storageUsage?: number }) {
+  const v = BigInt(a.amount) - BigInt(a.storageUsage ?? 0) * STORAGE_YOCTO_PER_BYTE;
+  return (v > 0n ? v : 0n).toString();
+}
+export const requiredForOne = (cfg: { initialBalanceYocto: string }) => (BigInt(cfg.initialBalanceYocto) + BigInt(CREATION_BURN_YOCTO) + BigInt(GAS_MARGIN_YOCTO)).toString();
 
 export interface AccountEvidence { readable: boolean; chainId: string | null; exists: boolean; keys: AccessKeyInfo[]; checkedAt: string }
 export type AccountReason =

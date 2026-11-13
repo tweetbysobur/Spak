@@ -741,6 +741,14 @@ export const agentAccounts = pgTable("spak_agent_accounts", {
   consentChallengeId: text("consent_challenge_id"),
   /** Last verification evidence read from NEAR: chain id, every access key and permission, decision, reason. Public data only. */
   verificationEvidence: jsonb("verification_evidence"),
+  /** Background re-verification. The latest check, decisive or not; verificationEvidence keeps the last decisive one. */
+  lastCheckAt: timestamp("last_check_at", { withTimezone: true }),
+  lastCheckResult: text("last_check_result"), // VERIFIED | RECOVERY_REQUIRED | INCONCLUSIVE
+  lastCheckReason: text("last_check_reason"),
+  lastCheckEvidence: jsonb("last_check_evidence"),
+  nextCheckAt: timestamp("next_check_at", { withTimezone: true }),
+  consecutiveFailures: integer("consecutive_failures").notNull().default(0),
+  checkLeaseUntil: timestamp("check_lease_until", { withTimezone: true }),
   schemaVersion: integer("schema_version").notNull().default(1),
   version: integer("version").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),

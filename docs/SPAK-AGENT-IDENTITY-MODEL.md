@@ -448,3 +448,40 @@ If the approved key is gone from the account, SPak shows RECOVERY_REQUIRED and "
 - Agent re-verified: associations stay SUSPENDED. Nothing is reactivated.
 - Each association returns to ACTIVE only with a fresh challenge and signature from that wallet (EIP-4361, SIWS ed25519 or NEP-413 full-access), verified with the Agent re-checked inside the activation transaction. Verification date and a new 90-day expiry are set then.
 - Expired associations need the same fresh proof. Revoked and compromised associations never reactivate; a new record with a new challenge is required.
+
+## 12. Stage 8: testnet infrastructure and background re-verification
+
+Implemented and tested against a modelled chain. **No live NEAR testnet transaction has been made**: no parent account is configured. Setup and live testing: [SPAK-TESTNET-SETUP.md](SPAK-TESTNET-SETUP.md).
+
+### Infrastructure readiness
+
+`AgentAccountService.infrastructure()` reads NEAR before anything is offered: chain id `testnet`, the parent account exists, the configured key is a full-access key on it, its spendable balance (amount minus its own storage at 1E19 yoctoNEAR per byte) covers one more account (initial balance + 0.007 NEAR creation burn + 0.01 NEAR gas margin), the sponsored-account cap and the budget. States: NOT_CONFIGURED, UNAVAILABLE (with reason), READY. Environment variables alone never mean READY. Prepare re-checks fresh; creation re-checks the parent key and balance in preflight.
+
+### Sponsorship
+
+Initial testnet limits, all configurable: 0.1 NEAR per account, 1 NEAR budget, 3 accounts. Reserved atomically under an advisory lock with the budget and the count; one live account per Agent; idempotency key. Definite failures release (`NOT_SPENT`); unknown outcomes stay RESERVED until reconciled. The funds belong to the created account; SPak recovers nothing.
+
+### Background re-verification
+
+Runs in the existing daily monitor job (`/api/internal/monitor`, Vercel Cron, same secret). For ACTIVE accounts whose `next_check_at` is due:
+
+| Observation | Result |
+|---|---|
+| Exact authority (owner key only, full access, parent key absent, consent bound) | Stays ACTIVE; evidence refreshed; next check in 24 h |
+| Any other key set | RECOVERY_REQUIRED |
+| NEAR unreadable | Two in-job retries; then INCONCLUSIVE, previous decisive evidence kept, next check after 1, 2, 4, … hours (capped at the interval) |
+| Wrong network | INCONCLUSIVE (a configuration problem, not the account's) |
+| Account not found | INCONCLUSIVE; RECOVERY_REQUIRED on the third consecutive check |
+| Agent suspended or revoked | Not checked; never reactivated |
+
+Claims use a 10-minute lease by conditional update, so duplicate jobs check each account once. Writes lock the account and Agent and refuse a changed status or version. The worker never signs, never changes keys and never activates. Because Vercel Cron runs once a day here, backoff retries happen at the next run unless an external scheduler calls the endpoint more often.
+
+Observability on each account: last successful check, last attempt and result, reason, next scheduled check, consecutive inconclusive checks.
+
+### Association monitoring
+
+Same job: ACTIVE associations past their 90-day expiry become EXPIRED (with events); counts of suspended, expired and pending associations are reported. It never requests a signature, never reactivates, never extends an expiry.
+
+### Database
+
+Migration `0014_agent_account_recheck`: check scheduling columns and a partial index on due ACTIVE accounts.

@@ -15,7 +15,7 @@ export interface AgentNearChain {
   readonly network: "testnet";
   chainId(): Promise<string>;
   /** null when the account does not exist. Throws when NEAR cannot be reached. */
-  viewAccount(accountId: string): Promise<{ amount: string } | null>;
+  viewAccount(accountId: string): Promise<{ amount: string; locked?: string; storageUsage?: number } | null>;
   /** All access keys on the account. Throws when NEAR cannot be reached or the account is missing. */
   accessKeys(accountId: string): Promise<AccessKeyInfo[]>;
   txStatus(txHash: string, senderId: string): Promise<"SUCCESS" | "FAILURE" | "UNKNOWN">;
@@ -31,28 +31,52 @@ export interface AgentAccountConfig {
   network: "testnet";
   rpcUrl: string;
   parentAccountId: string;
-  /** Yocto NEAR attached to each new account. Required; never defaulted, so no unverified cost is hardcoded. */
+  /** Yocto NEAR attached to each new account. From configuration; never a hardcoded cost. */
   initialBalanceYocto: string;
   /** Total sponsorship budget in yocto NEAR across all Agents. */
   budgetYocto: string;
+  /** Most accounts SPak will sponsor in total (reserved or funded). */
+  maxSponsoredAccounts: number;
+  recheck: { enabled: boolean; intervalHours: number };
+}
+
+const YOCTO = 24;
+/** "0.1" NEAR to yocto, exact decimal math. Null when not a positive decimal with at most 24 places. */
+export function nearToYocto(v: string | undefined): string | null {
+  if (!v || !/^\d+(\.\d{1,24})?$/.test(v.trim())) return null;
+  const [i, f = ""] = v.trim().split(".");
+  const y = (BigInt(i) * 10n ** 24n + BigInt((f + "0".repeat(YOCTO)).slice(0, YOCTO))).toString();
+  return y === "0" ? null : y;
 }
 
 /**
- * Configuration from the environment. Returns null (feature unavailable) unless everything is set, and refuses any
- * network other than testnet, any parent not ending in .testnet, and an RPC that is not a testnet RPC.
+ * Configuration from the server environment. NOT_CONFIGURED (feature off) unless everything is set; anything other
+ * than testnet is refused and never falls back to mainnet. Amounts are in NEAR (SPAK_AGENT_INITIAL_BALANCE=0.1) or,
+ * for the earlier names, yocto (SPAK_AGENT_INITIAL_BALANCE_YOCTO). The parent key is read separately and never
+ * returned by this function.
+ *
+ * NEAR_RPC_URL is deliberately NOT used here: it already points owner-identity checks at mainnet.
  */
 export function agentAccountConfig(env: Record<string, string | undefined> = process.env): AgentAccountConfig | { unavailable: string } {
   const network = env.SPAK_AGENT_NEAR_NETWORK;
   if (!network) return { unavailable: "Dedicated Agent accounts are not configured on this server." };
   if (network !== "testnet") return { unavailable: "Only NEAR testnet is allowed for dedicated Agent accounts in this stage." };
   const parent = env.SPAK_AGENT_PARENT_ACCOUNT ?? "";
-  if (!/^[a-z0-9][a-z0-9._-]*\.testnet$/.test(parent)) return { unavailable: "The parent account must be a .testnet account." };
+  if (!/^[a-z0-9][a-z0-9._-]*\.testnet$/.test(parent) || parent.includes("..")) return { unavailable: "The parent account must be a .testnet account." };
   const rpcUrl = env.SPAK_AGENT_NEAR_RPC_URL ?? "https://rpc.testnet.near.org";
-  if (!/testnet/.test(rpcUrl)) return { unavailable: "The Agent account RPC must be a testnet endpoint." };
-  if (!env.SPAK_AGENT_PARENT_PRIVATE_KEY) return { unavailable: "No parent account key is configured." };
-  const bal = env.SPAK_AGENT_INITIAL_BALANCE_YOCTO ?? "", budget = env.SPAK_AGENT_SPONSOR_BUDGET_YOCTO ?? "";
-  if (!/^[1-9]\d*$/.test(bal) || !/^[1-9]\d*$/.test(budget)) return { unavailable: "Sponsorship amounts are not configured." };
-  return { network: "testnet", rpcUrl, parentAccountId: parent, initialBalanceYocto: bal, budgetYocto: budget };
+  if (!/^https:\/\/[^/]*testnet[^/]*/.test(rpcUrl)) return { unavailable: "The Agent account RPC must be an https testnet endpoint." };
+  const key = env.SPAK_AGENT_PARENT_PRIVATE_KEY ?? "";
+  if (!key) return { unavailable: "No parent account key is configured." };
+  if (!/^ed25519:[1-9A-HJ-NP-Za-km-z]{60,100}$/.test(key)) return { unavailable: "The parent account key is not a valid ed25519 secret key." };
+  const bal = env.SPAK_AGENT_INITIAL_BALANCE ? nearToYocto(env.SPAK_AGENT_INITIAL_BALANCE) : (/^[1-9]\d*$/.test(env.SPAK_AGENT_INITIAL_BALANCE_YOCTO ?? "") ? env.SPAK_AGENT_INITIAL_BALANCE_YOCTO! : null);
+  const budget = env.SPAK_AGENT_SPONSORSHIP_BUDGET ? nearToYocto(env.SPAK_AGENT_SPONSORSHIP_BUDGET) : (/^[1-9]\d*$/.test(env.SPAK_AGENT_SPONSOR_BUDGET_YOCTO ?? "") ? env.SPAK_AGENT_SPONSOR_BUDGET_YOCTO! : null);
+  if (!bal || !budget) return { unavailable: "Sponsorship amounts are not configured." };
+  if (BigInt(bal) > BigInt(budget)) return { unavailable: "The initial balance is larger than the sponsorship budget." };
+  const max = Number(env.SPAK_AGENT_MAX_SPONSORED_ACCOUNTS ?? "");
+  if (!Number.isInteger(max) || max < 1 || max > 1000) return { unavailable: "SPAK_AGENT_MAX_SPONSORED_ACCOUNTS must be a whole number from 1 to 1000." };
+  const hours = Number(env.SPAK_AGENT_RECHECK_INTERVAL_HOURS ?? "24");
+  if (!Number.isFinite(hours) || hours < 1 || hours > 24 * 30) return { unavailable: "SPAK_AGENT_RECHECK_INTERVAL_HOURS must be between 1 and 720." };
+  return { network: "testnet", rpcUrl, parentAccountId: parent, initialBalanceYocto: bal, budgetYocto: budget, maxSponsoredAccounts: max, recheck: { enabled: env.SPAK_AGENT_BACKGROUND_RECHECK_ENABLED !== "false", intervalHours: hours } };
 }
 
 async function rpc<T>(url: string, method: string, params: unknown, fetchImpl: typeof fetch): Promise<T> {
@@ -74,7 +98,10 @@ export function nearTestnetChain(cfg: AgentAccountConfig, parentSecret: string, 
     parentPublicKey: () => publicKeyOf(parentSecret),
     async chainId() { return (await rpc<{ chain_id: string }>(cfg.rpcUrl, "status", [], fetchImpl)).chain_id; },
     async viewAccount(accountId) {
-      try { return await rpc<{ amount: string }>(cfg.rpcUrl, "query", { request_type: "view_account", finality: "final", account_id: accountId }, fetchImpl); }
+      try {
+        const r = await rpc<{ amount: string; locked: string; storage_usage: number }>(cfg.rpcUrl, "query", { request_type: "view_account", finality: "final", account_id: accountId }, fetchImpl);
+        return { amount: r.amount, locked: r.locked, storageUsage: r.storage_usage };
+      }
       catch (e) { if ((e as { cause?: string }).cause === "UNKNOWN_ACCOUNT") return null; throw e instanceof NearUnavailable ? e : new NearUnavailable("NEAR returned an unexpected answer."); }
     },
     async accessKeys(accountId) {

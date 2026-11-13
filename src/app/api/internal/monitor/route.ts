@@ -1,5 +1,8 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
+import { getDb } from "@/database";
+import { monitorAssociations } from "@/agents/wallets";
+import { agentAccountService } from "@/server/agents";
 import { spak } from "@/server/spak";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +28,10 @@ async function run(req: Request) {
   const trigger = req.headers.get("user-agent")?.includes("vercel-cron") ? "vercel-cron" : "scheduler";
   try {
     const summary = await (await spak()).monitor.run({ trigger, limit: 25, budgetMs: 45_000 });
-    return NextResponse.json(summary);
+    // Same scheduler, same secret: dedicated Agent account re-verification (read-only on NEAR) and association monitoring.
+    const agents = await (await agentAccountService()).recheckDue({ limit: 25 }).catch((e) => { console.error("[spak-monitor] agent recheck failed", (e as Error).message); return { error: "AGENT_RECHECK_FAILED" }; });
+    const associations = await monitorAssociations(await getDb(), new Date()).catch((e) => { console.error("[spak-monitor] association monitor failed", (e as Error).message); return { error: "ASSOCIATION_MONITOR_FAILED" }; });
+    return NextResponse.json({ ...summary, agentAccounts: agents, walletAssociations: associations });
   } catch (e) {
     console.error("[spak-monitor] run failed", (e as Error).message);
     return NextResponse.json({ error: { code: "MONITOR_FAILED" } }, { status: 500 });

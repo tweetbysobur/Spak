@@ -90,3 +90,7 @@ Stage 5. It removes the current gap (a label without a verified owner key), need
 ## Hardening stage (implemented on feature/spak-agent-account-hardening)
 
 Strict dedicated-account verification with evidence, consent binding, row locking, owner-authorised key rotation, honest lost-key handling, and fresh wallet proofs after Agent suspension. See [Identity model, section 11](SPAK-AGENT-IDENTITY-MODEL.md#11-hardening-feature-spak-agent-account-hardening) and [Security, sections 6 and mainnet blockers](SPAK-AGENT-SECURITY.md#6-hardening-implemented). Nothing here was run against live testnet.
+
+## Stage 8: testnet infrastructure (implemented on feature/spak-testnet-infrastructure)
+
+Readiness checks, sponsorship limits, background re-verification and association monitoring are built and tested on a modelled chain. Live testnet validation is **pending**: it needs a parent account configured per [SPAK-TESTNET-SETUP.md](SPAK-TESTNET-SETUP.md). Meteor rotation support is untested.

@@ -16,7 +16,7 @@ import { freshDb } from "../auth/db";
 import { evmWallet, nearWallet } from "../auth/keys";
 
 const DOMAIN = "spak.test", PARENT = "spak-agents.testnet", PARENT_PK = "ed25519:ParentKey1111111111111111111111111111111111";
-const cfg: AgentAccountConfig = { network: "testnet", rpcUrl: "https://rpc.testnet.near.org", parentAccountId: PARENT, initialBalanceYocto: "10000000000000000000000", budgetYocto: "30000000000000000000000" };
+const cfg: AgentAccountConfig = { network: "testnet", rpcUrl: "https://rpc.testnet.near.org", parentAccountId: PARENT, initialBalanceYocto: "10000000000000000000000", budgetYocto: "30000000000000000000000", maxSponsoredAccounts: 10, recheck: { enabled: true, intervalHours: 24 } };
 
 class FakeNear implements AgentNearChain {
   readonly network = "testnet" as const;
@@ -27,7 +27,9 @@ class FakeNear implements AgentNearChain {
   parentPublicKey() { return PARENT_PK; }
   private up() { if (this.down) throw new NearUnavailable("down"); }
   async chainId() { this.up(); return this.chain; }
-  async viewAccount(id: string) { this.up(); return this.accounts.has(id) ? { amount: "1" } : null; }
+  /** Parent balance in yocto; 10 NEAR by default. */
+  parentBalance = "10000000000000000000000000";
+  async viewAccount(id: string) { this.up(); return this.accounts.has(id) ? (id === PARENT ? { amount: this.parentBalance, storageUsage: 200 } : { amount: "1" }) : null; }
   async accessKeys(id: string) { this.up(); const k = this.accounts.get(id); if (!k) throw new NearUnavailable("missing"); return k; }
   async txStatus() { return this.mode === "unknown-lost" ? "FAILURE" as const : "UNKNOWN" as const; }
   async createSubAccount(a: { newAccountId: string; ownerPublicKey: string; amountYocto: string }): Promise<CreateOutcome> {
@@ -74,7 +76,7 @@ beforeEach(async () => {
 
 describe("configuration", () => {
   it("testnet only: mainnet, non-testnet parents and RPCs, missing keys and missing amounts are refused", () => {
-    const ok = { SPAK_AGENT_NEAR_NETWORK: "testnet", SPAK_AGENT_PARENT_ACCOUNT: PARENT, SPAK_AGENT_PARENT_PRIVATE_KEY: "ed25519:x", SPAK_AGENT_INITIAL_BALANCE_YOCTO: "1", SPAK_AGENT_SPONSOR_BUDGET_YOCTO: "10" };
+    const ok = { SPAK_AGENT_NEAR_NETWORK: "testnet", SPAK_AGENT_PARENT_ACCOUNT: PARENT, SPAK_AGENT_PARENT_PRIVATE_KEY: `ed25519:${"3".repeat(88)}`, SPAK_AGENT_INITIAL_BALANCE_YOCTO: "1", SPAK_AGENT_SPONSOR_BUDGET_YOCTO: "10", SPAK_AGENT_MAX_SPONSORED_ACCOUNTS: "3" };
     expect(agentAccountConfig(ok)).toMatchObject({ network: "testnet", parentAccountId: PARENT });
     for (const bad of [{ SPAK_AGENT_NEAR_NETWORK: "mainnet" }, { SPAK_AGENT_PARENT_ACCOUNT: "spak.near" }, { SPAK_AGENT_NEAR_RPC_URL: "https://rpc.mainnet.near.org" }, { SPAK_AGENT_PARENT_PRIVATE_KEY: undefined }, { SPAK_AGENT_INITIAL_BALANCE_YOCTO: "0.1" }, { SPAK_AGENT_NEAR_NETWORK: undefined }]) {
       expect(agentAccountConfig({ ...ok, ...bad })).toHaveProperty("unavailable");
@@ -133,8 +135,12 @@ describe("creation", () => {
   });
   it("parent without authority, wrong network and unreachable NEAR fail without a transaction", async () => {
     const u = await verifiedUser();
+    // A consent issued while ready, then the parent loses authority before creation: refused at preflight.
+    const ready = await consent(u);
     near.accounts.set(PARENT, [{ publicKey: PARENT_PK, permission: "FunctionCall" }]);
-    expect((await svc.create(u.userId, u.agentId, (await consent(u)).body)).creationError).toBe("PARENT_NOT_AUTHORIZED");
+    expect((await svc.create(u.userId, u.agentId, ready.body)).creationError).toBe("PARENT_NOT_AUTHORIZED");
+    // And a new attempt is refused before any consent is issued.
+    expect(await code(svc.prepare(u.userId, u.agentId, DOMAIN))).toBe("AGENT_VERIFICATION_UNAVAILABLE");
     near.accounts.set(PARENT, [{ publicKey: PARENT_PK, permission: "FullAccess" }]);
     near.chain = "mainnet";
     expect(await code(svc.prepare(u.userId, u.agentId, DOMAIN))).toBe("AGENT_VERIFICATION_UNAVAILABLE");
@@ -239,7 +245,16 @@ describe("sponsorship controls", () => {
   it("budget cap: funding stops when the budget would be exceeded", async () => {
     for (let i = 0; i < 3; i++) { const u = await verifiedUser(); expect((await svc.create(u.userId, u.agentId, (await consent(u)).body)).status).toBe("ACTIVE"); }
     const u = await verifiedUser();
-    expect(await code(svc.create(u.userId, u.agentId, (await consent(u)).body))).toBe("AGENT_VERIFICATION_UNAVAILABLE");
+    expect(await code(consent(u))).toBe("AGENT_VERIFICATION_UNAVAILABLE"); // refused before any consent
+    expect(near.creates).toBe(3);
+  });
+  it("budget is enforced atomically at reservation even for consents issued before it ran out", async () => {
+    const users = [await verifiedUser(), await verifiedUser(), await verifiedUser(), await verifiedUser()];
+    const consents: Awaited<ReturnType<typeof consent>>[] = [];
+    for (const u of users) consents.push(await consent(u));
+    const r = await Promise.all(users.map((u, i) => code(svc.create(u.userId, u.agentId, consents[i].body))));
+    expect(r.filter((x) => x === "OK")).toHaveLength(3);
+    expect(r.filter((x) => x === "AGENT_VERIFICATION_UNAVAILABLE")).toHaveLength(1);
     expect(near.creates).toBe(3);
   });
   it("failed attempts do not consume budget; per-user attempts are limited", async () => {
@@ -457,5 +472,143 @@ describe("hardening: exact account authority", () => {
     expect(v).toMatchObject({ keyRotationAvailable: false, recovery: "KEY_LOST_OR_CHANGED", account: { status: "RECOVERY_REQUIRED" } });
     expect(await code(svc.prepareRotation(u.userId, u.agentId, { newPublicKey: nearWallet().publicKey, domain: DOMAIN }))).toBe("AGENT_INVALID_STATE");
     expect(near.creates).toBe(1); // SPak never sends another transaction to the account
+  });
+});
+
+/* ------------------------------------------- Stage 8: infrastructure (MODELLED chain) ------------------------------------------- */
+
+describe("stage 8: infrastructure readiness", () => {
+  it("not configured, configured but unavailable, and ready are distinct", async () => {
+    const off = new AgentAccountService({ db, config: { unavailable: "Dedicated Agent accounts are not configured on this server." }, chain: null });
+    expect(await off.infrastructure()).toMatchObject({ state: "NOT_CONFIGURED", network: null, parentAccountId: null, sponsorship: null });
+    expect(await svc.infrastructure({ fresh: true })).toMatchObject({ state: "READY", network: "testnet", parentAccountId: PARENT });
+    near.accounts.delete(PARENT);
+    expect(await svc.infrastructure({ fresh: true })).toMatchObject({ state: "UNAVAILABLE", reason: expect.stringMatching(/does not exist/) });
+  });
+  it("invalid parent key, wrong network, RPC down and low parent balance are unavailable", async () => {
+    near.accounts.set(PARENT, [{ publicKey: "ed25519:SomeoneElse", permission: "FullAccess" }]);
+    expect((await svc.infrastructure({ fresh: true })).reason).toMatch(/not a full-access key/);
+    near.accounts.set(PARENT, [{ publicKey: PARENT_PK, permission: "FullAccess" }]);
+    near.chain = "mainnet";
+    expect((await svc.infrastructure({ fresh: true })).reason).toMatch(/not NEAR testnet/);
+    near.chain = "testnet"; near.down = true;
+    expect((await svc.infrastructure({ fresh: true })).reason).toMatch(/could not be reached/);
+    near.down = false;
+    near.parentBalance = "15000000000000000000000"; // 0.015 NEAR: less than one account
+    expect((await svc.infrastructure({ fresh: true })).reason).toMatch(/enough NEAR/);
+  });
+  it("config: requested names in NEAR, limits, testnet only, never mainnet fallback, key never returned", async () => {
+    const env = { SPAK_AGENT_NEAR_NETWORK: "testnet", SPAK_AGENT_PARENT_ACCOUNT: PARENT, SPAK_AGENT_PARENT_PRIVATE_KEY: `ed25519:${"3".repeat(88)}`, SPAK_AGENT_INITIAL_BALANCE: "0.1", SPAK_AGENT_SPONSORSHIP_BUDGET: "1", SPAK_AGENT_MAX_SPONSORED_ACCOUNTS: "3", SPAK_AGENT_RECHECK_INTERVAL_HOURS: "24" };
+    const c = agentAccountConfig(env);
+    expect(c).toEqual({ network: "testnet", rpcUrl: "https://rpc.testnet.near.org", parentAccountId: PARENT, initialBalanceYocto: "100000000000000000000000", budgetYocto: "1000000000000000000000000", maxSponsoredAccounts: 3, recheck: { enabled: true, intervalHours: 24 } });
+    expect(JSON.stringify(c)).not.toContain("3333");
+    for (const bad of [{ SPAK_AGENT_INITIAL_BALANCE: "2" }, { SPAK_AGENT_INITIAL_BALANCE: "-1" }, { SPAK_AGENT_MAX_SPONSORED_ACCOUNTS: "0" }, { SPAK_AGENT_PARENT_PRIVATE_KEY: "not-a-key" }, { SPAK_AGENT_NEAR_RPC_URL: "http://rpc.testnet.near.org" }, { SPAK_AGENT_PARENT_ACCOUNT: "" }]) {
+      expect(agentAccountConfig({ ...env, ...bad }), JSON.stringify(bad)).toHaveProperty("unavailable");
+    }
+    expect(agentAccountConfig({ ...env, SPAK_AGENT_BACKGROUND_RECHECK_ENABLED: "false" })).toMatchObject({ recheck: { enabled: false } });
+  });
+  it("sponsored-account cap: refuses the next account even with budget left", async () => {
+    const capped = new AgentAccountService({ db, config: { ...cfg, maxSponsoredAccounts: 1 }, chain: near, clock: () => new Date(clock.now), ownerRpc: { accessKey: async () => null } });
+    const u1 = await verifiedUser(), u2 = await verifiedUser();
+    const c1 = await consent(u1), c2 = await consent(u2);
+    const r = await Promise.all([code(capped.create(u1.userId, u1.agentId, c1.body)), code(capped.create(u2.userId, u2.agentId, c2.body))]);
+    expect(r.sort()).toEqual(["AGENT_VERIFICATION_UNAVAILABLE", "OK"]);
+    expect(near.creates).toBe(1);
+    expect((await capped.infrastructure({ fresh: true })).reason).toMatch(/maximum number/);
+  });
+  it("parent balance drops between consent and creation: refused at preflight, nothing reserved", async () => {
+    const u = await verifiedUser();
+    const c = await consent(u);
+    near.parentBalance = "1000000000000000000000";
+    expect(await svc.create(u.userId, u.agentId, c.body)).toMatchObject({ status: "CREATION_FAILED", creationError: "PARENT_INSUFFICIENT_BALANCE", sponsorship: "NOT_SPENT" });
+    expect(near.creates).toBe(0);
+  });
+  it("sponsorship view reports real committed amounts only", async () => {
+    const u = await verifiedUser();
+    await svc.create(u.userId, u.agentId, (await consent(u)).body);
+    expect((await svc.infrastructure({ fresh: true })).sponsorship).toEqual({ initialBalanceYocto: cfg.initialBalanceYocto, budgetYocto: cfg.budgetYocto, committedYocto: cfg.initialBalanceYocto, remainingYocto: "20000000000000000000000", sponsoredAccounts: 1, maxSponsoredAccounts: 10 });
+  });
+});
+
+/* --------------------------------------- Stage 8: background re-verification (MODELLED chain) --------------------------------------- */
+
+describe("stage 8: background re-verification", () => {
+  const noSleep = async () => {};
+  async function activeDue() {
+    const u = await verifiedUser();
+    const a = await svc.create(u.userId, u.agentId, (await consent(u)).body);
+    expect(a.checks.nextAt).not.toBeNull();
+    clock.now += 24 * 3600_000 + 1;
+    return { u, a };
+  }
+  it("activation schedules the next check 24 hours later; nothing is due before then", async () => {
+    const u = await verifiedUser();
+    const a = await svc.create(u.userId, u.agentId, (await consent(u)).body);
+    expect(Date.parse(a.checks.nextAt!) - Date.parse(a.activatedAt!)).toBe(24 * 3600_000);
+    expect(await svc.recheckDue({ sleep: noSleep })).toMatchObject({ checked: 0 });
+  });
+  it("valid account: stays ACTIVE, evidence refreshed, next check rescheduled, no transaction sent", async () => {
+    const { u } = await activeDue();
+    const creates = near.creates;
+    expect(await svc.recheckDue({ sleep: noSleep })).toMatchObject({ checked: 1, verified: 1 });
+    const v = (await svc.view(u.userId, u.agentId)).account!;
+    expect(v).toMatchObject({ status: "ACTIVE", checks: { lastResult: "VERIFIED", consecutiveFailures: 0, lastSuccessfulAt: new Date(clock.now).toISOString() } });
+    expect(Date.parse(v.checks.nextAt!)).toBe(clock.now + 24 * 3600_000);
+    expect(near.creates).toBe(creates);
+  });
+  it("unexpected access key: RECOVERY_REQUIRED", async () => {
+    const { u, a } = await activeDue();
+    near.accounts.set(a.accountId, [{ publicKey: a.ownerPublicKey, permission: "FullAccess" }, { publicKey: "ed25519:Extra", permission: "FunctionCall" }]);
+    expect(await svc.recheckDue({ sleep: noSleep })).toMatchObject({ recovery: 1 });
+    expect((await svc.view(u.userId, u.agentId)).account).toMatchObject({ status: "RECOVERY_REQUIRED", recoveryReason: "UNEXPECTED_FUNCTION_CALL_KEY", checks: { lastResult: "RECOVERY_REQUIRED", nextAt: null } });
+  });
+  it("RPC outage: retried in-job, then INCONCLUSIVE with bounded backoff; status and decisive evidence kept", async () => {
+    const { u, a } = await activeDue();
+    near.down = true;
+    let sleeps = 0;
+    expect(await svc.recheckDue({ sleep: async () => { sleeps++; } })).toMatchObject({ inconclusive: 1 });
+    expect(sleeps).toBe(2);
+    const v = (await svc.view(u.userId, u.agentId)).account!;
+    expect(v).toMatchObject({ status: "ACTIVE", checks: { lastResult: "INCONCLUSIVE", lastReason: "VERIFICATION_UNAVAILABLE", consecutiveFailures: 1 }, evidence: { decision: "VERIFIED" } });
+    expect(v.checks.lastSuccessfulAt).toBe(a.lastVerifiedAt);
+    expect(Date.parse(v.checks.nextAt!) - clock.now).toBe(3600_000);
+    for (const hours of [2, 4, 8, 16, 24, 24]) { clock.now = Date.parse((await svc.view(u.userId, u.agentId)).account!.checks.nextAt!); await svc.recheckDue({ sleep: noSleep }); expect(Date.parse((await svc.view(u.userId, u.agentId)).account!.checks.nextAt!) - clock.now).toBe(hours * 3600_000); }
+    near.down = false;
+    clock.now = Date.parse((await svc.view(u.userId, u.agentId)).account!.checks.nextAt!);
+    await svc.recheckDue({ sleep: noSleep });
+    expect((await svc.view(u.userId, u.agentId)).account!.checks).toMatchObject({ lastResult: "VERIFIED", consecutiveFailures: 0 });
+  });
+  it("missing account: inconclusive twice, RECOVERY_REQUIRED on the third consecutive check", async () => {
+    const { u, a } = await activeDue();
+    near.accounts.delete(a.accountId);
+    for (let i = 0; i < 2; i++) { await svc.recheckDue({ sleep: noSleep }); expect((await svc.view(u.userId, u.agentId)).account!.status).toBe("ACTIVE"); clock.now = Date.parse((await svc.view(u.userId, u.agentId)).account!.checks.nextAt!); }
+    await svc.recheckDue({ sleep: noSleep });
+    expect((await svc.view(u.userId, u.agentId)).account).toMatchObject({ status: "RECOVERY_REQUIRED", recoveryReason: "ACCOUNT_NOT_FOUND" });
+  });
+  it("Agent suspended or revoked: the worker never checks or reactivates", async () => {
+    const { u } = await activeDue();
+    await agentsSvc.suspend(u.userId, u.agentId);
+    expect(await svc.recheckDue({ sleep: noSleep })).toMatchObject({ checked: 0 });
+    expect((await svc.view(u.userId, u.agentId)).account!.status).toBe("SUSPENDED");
+    await agentsSvc.revoke(u.userId, u.agentId, "REVOKE");
+    await svc.recheckDue({ sleep: noSleep });
+    expect((await svc.view(u.userId, u.agentId)).account!.status).toBe("REVOKED");
+  });
+  it("state changes during the check: stale results are not written", async () => {
+    const { u, a } = await activeDue();
+    const orig = near.accessKeys.bind(near);
+    near.accessKeys = async (id: string) => { const k = await orig(id); if (id === a.accountId) { near.accessKeys = orig; await agentsSvc.suspend(u.userId, u.agentId); } return k; };
+    expect(await svc.recheckDue({ sleep: noSleep })).toMatchObject({ skipped: 1 });
+    expect((await svc.view(u.userId, u.agentId)).account!.status).toBe("SUSPENDED");
+  });
+  it("duplicate concurrent jobs check each account once", async () => {
+    await activeDue();
+    const [x, y] = await Promise.all([svc.recheckDue({ sleep: noSleep }), svc.recheckDue({ sleep: noSleep })]);
+    expect(x.checked + y.checked).toBe(1);
+  });
+  it("disabled or unconfigured: does nothing", async () => {
+    await activeDue();
+    const off = new AgentAccountService({ db, config: { ...cfg, recheck: { enabled: false, intervalHours: 24 } }, chain: near, clock: () => new Date(clock.now) });
+    expect(await off.recheckDue()).toMatchObject({ disabled: true, checked: 0 });
   });
 });

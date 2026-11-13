@@ -94,7 +94,7 @@ const nep413 = (message, nonce, recipient) => createHash('sha256').update(Buffer
   const t2 = await page.locator('[data-agent-status]').innerText();
   ok('verified only after the server confirms', /Verified by SPak/.test(t2) && /not on chain/.test(t2));
   await page.locator('[data-account-unavailable]').waitFor();
-  ok('dedicated account: unavailable without a testnet parent, never faked', /Not available on this server/.test(await page.locator('[data-agent-account]').innerText()) && (await page.locator('[data-agent-account]').getAttribute('data-agent-account')) === 'UNAVAILABLE');
+  ok('dedicated account: unavailable without a testnet parent, never faked', /not configured on this server/.test(await page.locator('[data-agent-account]').innerText()) && (await page.locator('[data-infrastructure]').getAttribute('data-infrastructure')) === 'NOT_CONFIGURED' && /mainnet is not available/.test(await page.locator('[data-infrastructure]').innerText()) && (await page.locator('[data-agent-account]').getAttribute('data-agent-account')) === 'UNAVAILABLE');
   await shot(page, 'agent-03-verified');
 
   // Wallet association (Stage 6): the signed-in EVM wallet signs a fresh EIP-4361 association in the browser.

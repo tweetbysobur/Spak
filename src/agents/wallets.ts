@@ -290,6 +290,20 @@ export class AgentWalletService {
   }
 }
 
+/**
+ * Background monitoring of wallet associations. Marks ACTIVE associations past expiry as EXPIRED (with an event each)
+ * and reports how many need a fresh proof. It never requests a signature, never reactivates anything, never extends
+ * an expiry: only the user's own fresh signature restores an association.
+ */
+export async function monitorAssociations(db: Db, now: Date) {
+  const expired = await db.update(agentWallets).set({ status: "EXPIRED", updatedAt: now })
+    .where(and(eq(agentWallets.status, "ACTIVE"), lte(agentWallets.expiresAt, now))).returning();
+  for (const r of expired) await db.insert(agentEvents).values({ agentId: r.agentId, userId: r.userId, event: "WALLET_EXPIRED", fromStatus: "ACTIVE", toStatus: "EXPIRED", data: { associationId: r.id, cause: "MONITOR" }, at: now });
+  const rows = await db.select({ status: agentWallets.status, n: sql<number>`count(*)::int` }).from(agentWallets).where(inArray(agentWallets.status, ["SUSPENDED", "EXPIRED", "PENDING"])).groupBy(agentWallets.status);
+  const by = Object.fromEntries(rows.map((r) => [r.status, r.n])) as Record<string, number>;
+  return { newlyExpired: expired.length, needFreshProof: { suspended: by.SUSPENDED ?? 0, expired: by.EXPIRED ?? 0, pending: by.PENDING ?? 0 }, reactivated: 0, signatureRequests: 0 };
+}
+
 /** When a wallet is disconnected from the SPak account, its associations are revoked in the same transaction. */
 export async function revokeAssociationsForWallet(tx: Db, userId: string, walletId: string, now: Date) {
   const rows = await tx.update(agentWallets).set({ status: "REVOKED", revokedAt: now, revokeReason: "WALLET_DISCONNECTED", updatedAt: now })

@@ -171,3 +171,9 @@ See [Roadmap, unresolved decisions](SPAK-AGENT-ROADMAP.md#unresolved-decisions).
 - Wallet association proves ownership only, and lapses with Agent suspension until each wallet signs again.
 - SPak's parent account keeps no authority over created accounts and is refused as a rotation key.
 - Guard remains the only transaction policy authority. No permissions, autonomy, Chain Signatures or scheduled execution exist.
+
+## 10. Stage 8 additions
+
+- Infrastructure readiness (NOT_CONFIGURED, UNAVAILABLE, READY) read from NEAR testnet before creation is offered.
+- Background re-verification of dedicated accounts and monitoring of wallet associations, inside the existing daily monitor job. Read-only on NEAR.
+- Testnet only. No mainnet path exists.
