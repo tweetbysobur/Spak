@@ -1,17 +1,21 @@
 "use client";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getNetwork } from "@/spak-in/registries/networks";
 import { api, formatUnits, startExecution, type ExecutionView, type IntentResult, type QuoteView } from "@/lib/client";
 import { Button, Card, SectionTitle, inputCls } from "./ui";
 
 interface Msg { from: "you" | "spak"; text: string; detail?: string[]; options?: string[] }
 
-const EXAMPLES = ["Swap 50 USDC on Base to SOL on Solana", "Bridge 0.5 ETH from Ethereum to NEAR", "Transfer 50 USDC from Base to Arbitrum"];
+const EXAMPLES = ["Swap 100 USDC on Base to ETH on Arbitrum", "Swap 50 USDC on Base to SOL on Solana", "Bridge 0.5 ETH from Ethereum to NEAR"];
 const net = (id: string | null) => (id ? getNetwork(id)?.name ?? id : "?");
 
-export function Chat({ timezone, onReady }: {
+export function Chat({ timezone, onReady, onInterpret, initial }: {
   timezone: string;
   onReady: (intent: IntentResult, execution: ExecutionView, quote: QuoteView) => void;
+  /** Called with every SPak-in result, so the page can show the interpretation in full. */
+  onInterpret?: (r: IntentResult) => void;
+  /** An instruction handed over from the dashboard. Sent once, on mount. */
+  initial?: string;
 }) {
   const [text, setText] = useState("");
   const [msgs, setMsgs] = useState<Msg[]>([]);
@@ -25,6 +29,7 @@ export function Chat({ timezone, onReady }: {
     add({ from: "you", text: input });
     try {
       const r = await api<IntentResult>("/api/spak-in/interpret", { text: input, sessionId: sessionId.current, timezone });
+      onInterpret?.(r);
       const errs = [...r.errors.map((e) => e.message), ...(r.policy?.violations.map((v) => v.message) ?? [])];
       if (r.status === "NEEDS_CLARIFICATION") {
         add({ from: "spak", text: "I need a bit more before I can do this.", detail: [...errs, ...r.clarifications.map((c) => c.question)], options: r.clarifications.find((c) => c.options?.length)?.options?.slice(0, 6) });
@@ -42,6 +47,9 @@ export function Chat({ timezone, onReady }: {
       add({ from: "spak", text: `Something failed: ${(err as Error).message}` });
     } finally { setBusy(false); }
   }
+
+  const sent = useRef(false);
+  useEffect(() => { if (initial && !sent.current) { sent.current = true; send(initial); } });
 
   return (
     <Card className="flex flex-col gap-4">

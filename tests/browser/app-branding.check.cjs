@@ -16,6 +16,7 @@ fs.mkdirSync(OUT, { recursive: true });
 const APP = `${BASE}/app`; // the application route; the marketing site is at "/"
 const account = privateKeyToAccount(generatePrivateKey());
 const results = []; const errors = [];
+const go = (pg, label) => pg.locator('nav[aria-label=App] button:visible', { hasText: label }).first().click();
 const ok = (name, pass, detail = '') => { results.push({ name, pass, detail }); console.log(`${pass ? 'PASS' : 'FAIL'} ${name}${detail ? ' | ' + detail : ''}`); };
 
 const PROVIDER = (address) => `(() => {
@@ -57,7 +58,9 @@ async function shot(page, name) { await page.screenshot({ path: `${OUT}/${name}.
 
   // 2. Sign in with the simulated wallet (real challenge, real server-side signature verification)
   await page.getByRole('button', { name: /Test Wallet \(simulated\)/ }).click();
-  await page.getByRole('tab', { name: 'SPak Chat' }).first().waitFor({ timeout: 20000 });
+  await page.locator('nav[aria-label=App]').first().waitFor({ timeout: 20000 });
+  await go(page, 'Execute');
+  await page.getByLabel('Instruction').waitFor({ timeout: 20000 });
   ok('signed in: navigation shown', true);
   await shot(page, '02-chat-light-desktop');
 
@@ -103,7 +106,7 @@ async function shot(page, name) { await page.screenshot({ path: `${OUT}/${name}.
   const dbg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   ok('dark background is Graphite', dbg === 'rgb(34, 39, 36)', dbg);
   ok('dark logo visible, light hidden', await page.locator('img.logo-dark').first().isVisible() && !(await page.locator('img.logo-light').first().isVisible()));
-  await page.getByRole('tab', { name: 'History' }).first().click();
+  await go(page, 'Activity');
   await page.locator('[data-status-role]').first().waitFor({ timeout: 15000 });
   await shot(page, '07-history-dark-desktop');
 
@@ -132,7 +135,7 @@ async function shot(page, name) { await page.screenshot({ path: `${OUT}/${name}.
       await page.route(`**/api/executions/${execId}/refresh`, (r) => r.fulfill({ json: view }));
       await page.route(`**/api/executions/${execId}`, (r) => r.fulfill({ json: { ...realEx, state: view.state } }));
       await page.reload({ waitUntil: 'networkidle' });
-      await page.getByRole('tab', { name: 'History' }).first().click();
+      await go(page, 'Activity');
       await page.locator('ul li button').first().click();
       await page.locator(`[data-status-role]`).first().waitFor();
       await page.waitForTimeout(400);
@@ -162,14 +165,14 @@ async function shot(page, name) { await page.screenshot({ path: `${OUT}/${name}.
     ok(`mobile ${theme}: every tab fully visible`, clipped.length === 0, clipped.join(','));
     ok(`mobile ${theme}: no horizontal overflow on chat`, (await overflow(m)) <= 0, `${await overflow(m)}px`);
     await shot(m, `09-mobile-chat-${theme}`);
-    await m.getByRole('tab', { name: 'History' }).first().click();
+    await go(m, 'Activity');
     await m.locator('ul li button').first().click();
     await m.getByText('Step 3 of 7: send the deposit').waitFor({ timeout: 20000 });
     ok(`mobile ${theme}: no horizontal overflow on deposit`, (await overflow(m)) <= 0, `${await overflow(m)}px`);
     const depVisible = await m.getByText('To deposit address', { exact: true }).locator('xpath=..').locator('.type-address').first().isVisible();
     ok(`mobile ${theme}: full deposit address visible`, depVisible);
     await shot(m, `10-mobile-deposit-${theme}`);
-    await m.getByRole('tab', { name: 'Wallets' }).first().click();
+    await go(m, 'Settings');
     await m.getByText('Connected wallets').waitFor();
     ok(`mobile ${theme}: no horizontal overflow on wallets`, (await overflow(m)) <= 0);
     await shot(m, `11-mobile-wallets-${theme}`);
