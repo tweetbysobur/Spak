@@ -5,8 +5,8 @@ import { Button, Card, Field, SectionTitle, Select, inputCls } from "./ui";
 import { Notice } from "./status";
 import { guardMessage, planBlock, type GuardMessage } from "@/lib/guard";
 
-interface Net { id: string; name: string }
-interface Asset { id: string; network: string; symbol: string }
+interface Net { id: string; name: string; source: boolean; destination: boolean }
+interface Asset { id: string; network: string; symbol: string; destination: boolean }
 
 /** ownAddress: the signed-in user's verified address on a network, for display only. The server decides. */
 export function Manual({ ownAddress, onReady }: { ownAddress: (network: string) => string | undefined; onReady: (i: IntentResult, e: ExecutionView, q: QuoteView) => void }) {
@@ -21,12 +21,16 @@ export function Manual({ ownAddress, onReady }: { ownAddress: (network: string) 
     api<{ networks: Net[]; assets: Asset[] }>("/api/spak-in/registry").then((r) => { setNets(r.networks); setAssets(r.assets); }).catch((e) => setProblems([String(e)]));
   }, []);
 
-  const on = (n: string) => assets.filter((a) => a.network === n).sort((a, b) => a.symbol.localeCompare(b.symbol));
-  const usable = useMemo(() => nets.filter((n) => assets.some((a) => a.network === n.id)), [nets, assets]);
-  const pick = (n: string, sym: string) => on(n).find((a) => a.symbol === sym)?.id ?? on(n)[0]?.id ?? "";
+  // Only what the server allows in V1 is offered: sources with a validated deposit flow, destinations SPak can verify.
+  const on = (n: string, p: "source" | "destination" = "source") => assets.filter((a) => a.network === n && (p === "source" || a.destination)).sort((a, b) => a.symbol.localeCompare(b.symbol));
+  const usable = useMemo(() => ({
+    source: nets.filter((n) => n.source && assets.some((a) => a.network === n.id)),
+    destination: nets.filter((n) => n.destination && assets.some((a) => a.network === n.id && a.destination)),
+  }), [nets, assets]);
+  const pick = (n: string, sym: string, p: "source" | "destination" = "source") => on(n, p).find((a) => a.symbol === sym)?.id ?? on(n, p)[0]?.id ?? "";
   useEffect(() => {
     if (!assets.length) return;
-    setF((p) => ({ ...p, sourceAsset: p.sourceAsset || pick(p.sourceNetwork, "USDC"), destinationAsset: p.destinationAsset || pick(p.destinationNetwork, "SOL") }));
+    setF((p) => ({ ...p, sourceAsset: p.sourceAsset || pick(p.sourceNetwork, "USDC"), destinationAsset: p.destinationAsset || pick(p.destinationNetwork, "SOL", "destination") }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assets]);
   const set = (k: keyof typeof f, v: string | number) => setF((p) => ({ ...p, [k]: v }));
@@ -42,6 +46,7 @@ export function Manual({ ownAddress, onReady }: { ownAddress: (network: string) 
         return;
       }
       // The server's Guard decision on this plan. When it blocks, stop before any execution is created.
+      if (r.route) { setProblems([r.route.message]); return; }
       const block = planBlock(r.guard);
       if (block) { setGuardBlock(block); return; }
       const { execution, quote } = await startExecution(r.plan.hash);
@@ -54,13 +59,13 @@ export function Manual({ ownAddress, onReady }: { ownAddress: (network: string) 
     return (
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label={p === "source" ? "From network" : "To network"}>
-          <Select value={f[nk]} onChange={(e) => { set(nk, e.target.value); set(ak, pick(e.target.value, assets.find((a) => a.id === f[ak])?.symbol ?? "USDC")); }}>
-            {usable.map((n) => <option key={n.id} value={n.id}>{n.name}</option>)}
+          <Select value={f[nk]} onChange={(e) => { set(nk, e.target.value); set(ak, pick(e.target.value, assets.find((a) => a.id === f[ak])?.symbol ?? "USDC", p)); }}>
+            {usable[p].map((n) => <option key={n.id} value={n.id}>{n.name}</option>)}
           </Select>
         </Field>
         <Field label={p === "source" ? "Send asset" : "Receive asset"}>
           <Select value={f[ak]} onChange={(e) => set(ak, e.target.value)}>
-            {on(f[nk]).map((a) => <option key={a.id} value={a.id}>{a.symbol}</option>)}
+            {on(f[nk], p).map((a) => <option key={a.id} value={a.id}>{a.symbol}</option>)}
           </Select>
         </Field>
       </div>
@@ -70,6 +75,7 @@ export function Manual({ ownAddress, onReady }: { ownAddress: (network: string) 
   return (
     <Card>
       <SectionTitle sub="Choose exactly what to send and receive. You review a quote before anything can be sent.">Manual swap</SectionTitle>
+      <p className="type-caption -mt-2 mb-3 text-fg-2" data-v1-scope>Send from EVM networks or Solana. Receive on EVM networks (tokens), Solana or NEAR. Sending from NEAR, receiving native coins on EVM networks, and other networks are not available yet: SPak only offers routes where it can verify delivery itself.</p>
       <form onSubmit={submit} className="flex flex-col gap-4">
         {side("source")}
         <Field label="Amount"><input className={`${inputCls} type-amount`} inputMode="decimal" placeholder="0.0" value={f.amount} onChange={(e) => set("amount", e.target.value.replace(/[^\d.]/g, ""))} /></Field>

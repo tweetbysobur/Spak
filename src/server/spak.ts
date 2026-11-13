@@ -10,6 +10,7 @@ import { DestinationVerifier, ExecutionMonitor, TrackingRecords, TrackingService
 import { FailureRecords, FailureService, RefundVerifier, ReviewService } from "@/failures";
 import { AuthError } from "@/auth/types";
 import { GuardService } from "@/guard";
+import { routeProblem } from "@/execution/v1-scope";
 import { authService, requireUser, route } from "./auth";
 
 /**
@@ -103,6 +104,9 @@ export async function guardedInterpret(userId: string, run: (g: Awaited<ReturnTy
   const s = await spak();
   const g = await s.guard.interpretContext(userId);
   const result = await run(g);
-  const guard = result.plan ? await s.guard.checkPlan(userId, result.plan, result.recipient?.kind ?? null) : null;
-  return { ...result, guard };
+  // V1 route scope, reported with the result so the UI can explain it and stop. Execution enforces it again.
+  const leg = result.plan?.executable ? result.plan.legs[0] : undefined;
+  const route = leg ? routeProblem({ sourceNetwork: leg.sourceNetwork, destinationNetwork: leg.destinationNetwork, destinationAssetId: leg.destinationAssetId }) : null;
+  const guard = result.plan && !route ? await s.guard.checkPlan(userId, result.plan, result.recipient?.kind ?? null) : null;
+  return { ...result, guard, route };
 }

@@ -4,6 +4,7 @@ import { getNetwork } from "../spak-in/registries/networks";
 import { isAddressFor } from "../spak-in/validator/address";
 import { isDecimal, isZero } from "../spak-in/lib/decimal";
 import { ExecutionError } from "./errors";
+import { routeProblem } from "./v1-scope";
 
 /** A plan as SPak-in recorded it: owner, intent and revision come from the server's intent log. */
 export interface IssuedPlan {
@@ -72,6 +73,10 @@ export async function validateExecutionPlan(args: { planHash: string; userId: st
   if (leg.amount.kind !== "EXACT" || !isDecimal(leg.amount.value) || isZero(leg.amount.value)) {
     throw new ExecutionError("INVALID_AMOUNT", "Execution needs an exact amount greater than zero.");
   }
+  // V1 scope: only routes whose deposit flow is validated and whose delivery SPak can verify itself. Checked here, on
+  // the server's own copy of the plan, before any asset is resolved or quote requested.
+  const scope = routeProblem({ sourceNetwork: leg.sourceNetwork, destinationNetwork: leg.destinationNetwork, destinationAssetId: leg.destinationAssetId });
+  if (scope) throw new ExecutionError(scope.code, scope.message);
   for (const [n, addr, label] of [[leg.sourceNetwork, leg.refundAddress, "refund"], [leg.destinationNetwork, leg.recipient, "recipient"]] as const) {
     const net = getNetwork(n);
     if (!net) throw new ExecutionError("UNSUPPORTED_NETWORK", `Network ${n} is not supported.`);

@@ -33,7 +33,7 @@ function NavItem({ item, active, onSelect, compact = false }: { item: (typeof NA
         : `type-nav flex min-h-11 w-full items-center gap-3 rounded-control px-3 text-left transition-colors ${active ? "bg-secondary text-fg dark:bg-elevated" : "text-fg-2 hover:bg-secondary hover:text-fg dark:hover:bg-elevated"}`}>
       <Icon name={item.icon} size={compact ? 20 : 18} className={active ? "text-primary" : ""} />
       <span className="truncate">{item.label}</span>
-      {item.planned && !compact && <span className="type-caption ml-auto rounded-full border border-dashed border-line-strong px-2 text-fg-2">Planned</span>}
+      {item.planned && !compact && <span className="type-caption ml-auto rounded-full border border-dashed border-line-strong px-2 text-fg-2">Soon</span>}
     </button>
   );
 }

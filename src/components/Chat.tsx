@@ -7,7 +7,7 @@ import { guardMessage, planBlock } from "@/lib/guard";
 
 interface Msg { from: "you" | "spak"; text: string; detail?: string[]; options?: string[]; guard?: boolean }
 
-const EXAMPLES = ["Swap 100 USDC on Base to ETH on Arbitrum", "Swap 50 USDC on Base to SOL on Solana", "Bridge 0.5 ETH from Ethereum to NEAR"];
+const EXAMPLES = ["Swap 100 USDC on Base to ARB on Arbitrum", "Swap 50 USDC on Base to SOL on Solana", "Bridge 25 USDC from Base to Arbitrum"];
 const net = (id: string | null) => (id ? getNetwork(id)?.name ?? id : "?");
 
 export function Chat({ timezone, onReady, onInterpret, initial }: {
@@ -38,6 +38,9 @@ export function Chat({ timezone, onReady, onInterpret, initial }: {
         add({ from: "spak", text: r.status === "POLICY_REJECTED" ? "Your Guard settings block this." : r.status === "UNSUPPORTED" ? "SPak cannot do this yet." : "This instruction has a problem.", detail: errs });
       } else if (!r.plan?.executable) {
         add({ from: "spak", text: `Understood: ${r.intentType.replaceAll("_", " ").toLowerCase()}. This needs ${r.plan?.requires.join(", ").toLowerCase() || "features"} that are not live yet, so nothing will run.`, detail: r.plan?.steps.map((s) => s.description) });
+      } else if (r.route) {
+        // The server says this route is outside V1. Stop here: nothing is quoted or created.
+        add({ from: "spak", text: "This route is not available yet.", detail: [r.route.message] });
       } else if (planBlock(r.guard)) {
         // The server's Guard decision on this plan. Stop here: no execution is created.
         const b = planBlock(r.guard)!;

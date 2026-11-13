@@ -1,4 +1,5 @@
 import type { GuardService } from "../guard/service";
+import { sourceProblem } from "../execution/v1-scope";
 import type { OneClickClient } from "../integrations/near-intents/client";
 import { getAsset } from "../spak-in/registries/assets";
 import { getNetwork } from "../spak-in/registries/networks";
@@ -79,6 +80,9 @@ export class DepositService {
    */
   async prepare(args: { userId: string; executionId: string; wallets: VerifiedWallet[] }): Promise<{ deposit: DepositRow; transaction: DepositTransaction; balance: { balance: string | null; sufficient: boolean | null } }> {
     const { ex, approval, quote } = await this.approvedExecution(args.userId, args.executionId, args.wallets);
+    // V1 scope: no new deposit instructions from a source SPak has not validated (NEAR is manual and unvalidated).
+    const scope = sourceProblem(ex.sourceNetwork);
+    if (scope) throw new ExecutionError(scope.code, scope.message);
     const live = await this.d.records.inStates(ex.id, [...DEPOSIT_LIVE]);
     if (live.length) throw new ExecutionError("DEPOSIT_IN_PROGRESS", "A deposit for this execution was already submitted.", { depositId: live[0].id });
     // Resolve the asset again against the live provider listing: the token contract must still match.
@@ -141,7 +145,7 @@ export class DepositService {
       if (e instanceof ExecutionError && e.code === "INSUFFICIENT_BALANCE") return this.prepareWithoutBalance(args);
       // The user says the deposit was already broadcast. Guard stops SPak giving new deposit instructions, never the
       // recording of funds that already left the wallet: those must be tracked, verified and, if needed, refunded.
-      if (e instanceof ExecutionError && (e.code === "GUARD_BLOCKED" || e.code === "GUARD_NEEDS_CONFIGURATION")) return this.prepareWithoutBalance(args, false);
+      if (e instanceof ExecutionError && (e.code === "GUARD_BLOCKED" || e.code === "GUARD_NEEDS_CONFIGURATION" || e.code === "V1_SOURCE_NOT_SUPPORTED")) return this.prepareWithoutBalance(args, false);
       throw e;
     });
     await this.d.records.touch(deposit.id, { method: "MANUAL" });

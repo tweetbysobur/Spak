@@ -63,7 +63,7 @@ export function Overview({ session, onSelect, onExecute, onOpen }: {
         <p className="type-body-sm mt-1 text-[var(--spak-brand-muted-sage)]">Describe it in plain words. SPak plans it and gets a quote. Nothing moves until you approve and sign.</p>
         <form onSubmit={(e) => { e.preventDefault(); if (text.trim()) onExecute(text.trim()); }} className="mt-5 flex flex-col gap-2 sm:flex-row">
           <label htmlFor="quick-intent" className="sr-only">Instruction</label>
-          <input id="quick-intent" value={text} onChange={(e) => setText(e.target.value)} placeholder="Swap 100 USDC on Base to ETH on Arbitrum" className={`${inputCls} flex-1 border-transparent`} />
+          <input id="quick-intent" value={text} onChange={(e) => setText(e.target.value)} placeholder="Swap 100 USDC on Base to ARB on Arbitrum" className={`${inputCls} flex-1 border-transparent`} />
           <button type="submit" disabled={!text.trim()} className="type-button inline-flex min-h-11 items-center justify-center gap-2 rounded-control bg-[var(--spak-brand-warm-white)] px-5 text-[var(--spak-brand-forest-green)] disabled:opacity-70">
             Plan it<Icon name="arrow" size={16} />
           </button>
@@ -98,7 +98,7 @@ export function Overview({ session, onSelect, onExecute, onOpen }: {
           <Card>
             <SectionTitle>Balances</SectionTitle>
             <p className="type-body-sm text-fg-2">Balance reading across networks is not built yet. SPak checks your balance for the exact asset when it prepares a deposit.</p>
-            <p className="type-caption mt-2 inline-block rounded-full border border-dashed border-line-strong px-2 text-fg-2">Planned</p>
+            <p className="type-caption mt-2 inline-block rounded-full border border-dashed border-line-strong px-2 text-fg-2">Coming soon</p>
           </Card>
           <Card>
             <div className="flex items-start gap-3">
