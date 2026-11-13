@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Chat } from "@/components/Chat";
 import { Manual } from "@/components/Manual";
@@ -19,6 +19,8 @@ import { Activity } from "@/components/app/Activity";
 import { Agent, Guard, Portfolio, Settings } from "@/components/app/Sections";
 import { api, type ExecutionView, type IntentResult, type QuoteView } from "@/lib/client";
 import { takeNearRedirectResult } from "@/wallets/near";
+import { notificationFor } from "@/components/tracking/model";
+import { IN_FLIGHT } from "@/components/app/Overview";
 import { classifyWalletError } from "@/wallets/errors";
 
 const VIEWS = NAV.map((n) => n.id);
@@ -37,6 +39,36 @@ export default function AppPage() {
   const [toast, setToast] = useState<string | null>(null);
 
   const refresh = useCallback(async () => { setSession(await loadSession().catch(() => null)); }, []);
+
+  // Notifications: one per transfer and event, however many sources report it.
+  const notified = useRef(new Set<string>());
+  const notify = useCallback((id: string, key: string, message: string) => {
+    const k = `${id}:${key}`;
+    if (notified.current.has(k)) return;
+    notified.current.add(k);
+    setToast(message);
+  }, []);
+
+  // Background check of transfers still in flight, using the existing history endpoint. The open transfer reports
+  // its own changes, so it is skipped here. Polling stops when nothing is in flight.
+  const lastStates = useRef(new Map<string, string>());
+  const activeId = active?.id;
+  useEffect(() => {
+    if (!session) return;
+    let stop = false;
+    const tick = async () => {
+      const r = await api<{ items: ExecutionView[] }>("/api/executions?limit=20").catch(() => null);
+      if (!r || stop) return;
+      for (const x of r.items) {
+        const prev = lastStates.current.get(x.id);
+        lastStates.current.set(x.id, x.state);
+        if (prev && x.id !== activeId) { const msg = notificationFor(prev, x.state); if (msg) notify(x.id, x.state, msg); }
+      }
+    };
+    tick();
+    const i = setInterval(() => { if ([...lastStates.current.values()].some((v) => IN_FLIGHT.includes(v) || v === "FAILED")) tick(); }, 30_000);
+    return () => { stop = true; clearInterval(i); };
+  }, [session, activeId, notify]);
   const setView = useCallback((v: View) => { setViewState(v); setActive(undefined); if (window.location.hash.slice(1) !== v) history.replaceState(null, "", `#${v}`); window.scrollTo(0, 0); }, []);
 
   useEffect(() => {
@@ -91,7 +123,7 @@ export default function AppPage() {
       {active ? (
         <div className="mx-auto flex max-w-[48rem] flex-col gap-4">
           <div><Button variant="ghost" size="sm" onClick={() => setActive(undefined)}>← Back</Button></div>
-          <Tracker key={active.id} initial={active} />
+          <Tracker key={active.id} initial={active} onNotify={notify} />
         </div>
       ) : (
         <>

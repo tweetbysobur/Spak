@@ -140,7 +140,15 @@ async function shot(page, name) { await page.screenshot({ path: `${OUT}/${name}.
       await page.locator(`[data-status-role]`).first().waitFor();
       await page.waitForTimeout(400);
       const roles = await page.evaluate(() => [...document.querySelectorAll('[data-status-role]')].map((e) => e.getAttribute('data-status-role')));
-      const want = { 'failed-refund-pending': 'error', refunded: 'refunded', 'unknown-review': 'warning', completed: 'success' }[name];
+      // The transfer's phase: a failed swap whose refund is still pending reads as a refund in progress, not a bare failure.
+      const want = { 'failed-refund-pending': 'processing', refunded: 'refunded', 'unknown-review': 'warning', completed: 'success' }[name];
+      const wantPhase = { 'failed-refund-pending': 'REFUND_PENDING', refunded: 'REFUNDED', 'unknown-review': 'UNKNOWN', completed: 'COMPLETED' }[name];
+      const phase = await page.locator('[data-phase]').first().getAttribute('data-phase');
+      ok(`[mocked] ${name} (${theme}): phase ${wantPhase}`, phase === wantPhase, phase);
+      const receipt = await page.getByRole('heading', { name: 'Receipt' }).count();
+      ok(`[mocked] ${name} (${theme}): receipt ${name === 'completed' ? 'shown' : 'absent'}`, (receipt > 0) === (name === 'completed'));
+      const verified = await page.locator('[data-stage="VERIFIED"]').getAttribute('data-status');
+      ok(`[mocked] ${name} (${theme}): delivery stage ${name === 'completed' ? 'done' : 'not done'}`, (verified === 'done') === (name === 'completed'), verified);
       const headerBadge = await page.locator('h2:has-text("Transfer") ~ [data-status-role], h2:has-text("Transfer") + span[data-status-role]').first().getAttribute('data-status-role').catch(() => roles[0]);
       ok(`[mocked] ${name} (${theme}): status role ${want}`, roles.includes(want), roles.join(','));
       if (name === 'unknown-review') ok(`[mocked] unknown never shows success (${theme})`, !roles.includes('success'));
