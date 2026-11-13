@@ -359,3 +359,37 @@ describe("migration 0009 backfill", () => {
     expect(await code(h.deposits.prepare({ userId: u.userId, executionId: live.id, wallets: await u.wallets() }))).toBe("OK");
   });
 });
+
+describe("audit regressions", () => {
+  it("a user with no policy row (approved before Guard) still gets deposit instructions", async () => {
+    const ex = await approved();
+    await h.db.execute(sql`delete from spak_guard_policies where user_id = ${u.userId}`);
+    h.chain.setBalance("base", u.evm.address, 100_000_000n, USDC);
+    expect(await code(h.deposits.prepare({ userId: u.userId, executionId: ex.id, wallets: await u.wallets() }))).toBe("OK");
+  });
+  it("re-approving an execution that already holds a reservation is still refused when Guard now blocks", async () => {
+    const x = await create();
+    const f = await firm(x);
+    await approve(x, f.id);
+    await h.guard.pause(u.userId, "REQUESTS");
+    const row = (await h.records.get(x.execution.id))!;
+    const quote = (await h.records.getQuote(f.id))!;
+    await expect(h.db.transaction(async (tx) => h.guard.reserveInTx(tx as never, row, quote))).rejects.toThrow(/paused/);
+  });
+  it("disabling all execution never stops recording a deposit the user already sent", async () => {
+    const ex = await approved();
+    await h.guard.pause(u.userId, "ALL");
+    const txHash = `0x${"ab".repeat(32)}`;
+    h.chain.evmTx(txHash, { from: u.evm.address, to: USDC, logs: [{ address: USDC, from: u.evm.address, to: ex.depositAddress!, amount: 50_000_000n }] });
+    const r = await code(h.deposits.submitManual({ userId: u.userId, executionId: ex.id, txHash, wallets: await u.wallets() }));
+    expect(r).not.toMatch(/GUARD/);
+  });
+  it("provider USD values that are not plain numbers fail closed", async () => {
+    const { cleanUsd } = await import("@/guard");
+    expect(cleanUsd("1,234.56")).toBeNull();
+    expect(cleanUsd("1.2e3")).toBeNull();
+    expect(cleanUsd("50.0")).toBe("50.0");
+    h.fake.usdIn = "1,234.56";
+    expect(await code(create())).toBe("GUARD_BLOCKED");
+  });
+});

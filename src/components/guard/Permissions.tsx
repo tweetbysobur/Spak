@@ -106,11 +106,13 @@ function NetworksForm({ view, run, close }: { view: GuardView; run: Run; close: 
   const [draft, setDraft] = useState<Record<string, Rule>>(() => Object.fromEntries(all.map((n) => [n.id, start[n.id] ?? { allowSource: false, allowDestination: false, disabled: false }])));
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<GuardMessage | null>(null);
-  const set = (id: string, k: keyof Rule, v: boolean) => setDraft((d) => ({ ...d, [id]: { ...d[id], [k]: v } }));
+  // Networks with no rule yet are sent only once the user touches them, so saving never decides them silently.
+  const [touched, setTouched] = useState<Set<string>>(() => new Set());
+  const set = (id: string, k: keyof Rule, v: boolean) => { setDraft((d) => ({ ...d, [id]: { ...d[id], [k]: v } })); setTouched((t) => new Set(t).add(id)); };
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const s = start;
-    const networks = all.filter((n) => { const a = s[n.id], b = draft[n.id]; return !a || a.allowSource !== b.allowSource || a.allowDestination !== b.allowDestination || a.disabled !== b.disabled; })
+    const networks = all.filter((n) => { const a = s[n.id], b = draft[n.id]; return !a ? touched.has(n.id) : a.allowSource !== b.allowSource || a.allowDestination !== b.allowDestination || a.disabled !== b.disabled; })
       .map((n) => ({ network: n.id, ...draft[n.id] }));
     if (!networks.length) { close(); return; }
     setBusy(true); setResult(null);

@@ -14,7 +14,7 @@ import { getNetwork, listNetworks } from "../spak-in/registries/networks";
 import { getAsset } from "../spak-in/registries/assets";
 import { isAddressFor } from "../spak-in/validator/address";
 import { platformCeilingUsd } from "./ceiling";
-import { cleanUsd, evaluateGuard } from "./engine";
+import { cleanUsd, effectiveMaxUsd, evaluateGuard } from "./engine";
 import { WINDOWS_MS, type GuardDecision, type GuardPolicy, type GuardStage, type GuardSubject, type Spending } from "./types";
 
 const id = (prefix: string) => `${prefix}_${randomBytes(12).toString("hex")}`;
@@ -109,8 +109,8 @@ export class GuardService {
         userId, version: 1, status: "ACTIVE", executionDisabled: false, maxSlippageBps: 100, assetMode: "ANY", recipientMode: "ANY", createdAt: now, updatedAt: now,
       }).onConflictDoNothing().returning();
       if (!created) return; // another request created it first
-      await tx.insert(guardNetworkRules).values(listNetworks().map((n) => ({ userId, network: n.id, allowSource: true, allowDestination: true, disabled: false })));
-      await tx.insert(guardPolicyHistory).values({ userId, version: 1, actor: "system", action: "CREATED_DEFAULT", changes: {}, at: now });
+      await tx.insert(guardNetworkRules).values(listNetworks().map((n) => ({ userId, network: n.id, allowSource: true, allowDestination: true, disabled: false }))).onConflictDoNothing();
+      await tx.insert(guardPolicyHistory).values({ userId, version: 1, actor: "system", action: "CREATED_DEFAULT", changes: {}, at: now }).onConflictDoNothing();
     });
     const p = await this.load(userId);
     if (!p) throw unavailable();
@@ -257,8 +257,7 @@ export class GuardService {
     try {
       const p = await this.ensure(userId);
       const s = await this.spending(userId);
-      const ceiling = this.ceilingUsd();
-      const max = p.limits.maxTransactionUsd && compareDecimal(p.limits.maxTransactionUsd, ceiling) < 0 ? p.limits.maxTransactionUsd : ceiling;
+      const max = effectiveMaxUsd(p, this.ceilingUsd());
       return {
         policy: {
           maxTransactionUsd: max, ...(p.limits.dailyUsd ? { dailyLimitUsd: p.limits.dailyUsd } : {}),
@@ -332,7 +331,10 @@ export class GuardService {
     const [existing] = await tx.select().from(guardReservations).where(eq(guardReservations.executionId, row.id)).limit(1);
     if (existing) {
       if (existing.status === "RESERVED" && existing.quoteId === quote.id) {
-        return evaluateGuard({ policy, subject, spending: await this.spending(row.userId, tx, row.id), stage: "APPROVAL", ceilingUsd: this.ceilingUsd(), now, quoteChecked: true });
+        // Still evaluated against the current policy: a pause, disabled execution or lowered limit stops it here too.
+        const again = evaluateGuard({ policy, subject, spending: await this.spending(row.userId, tx, row.id), stage: "APPROVAL", ceilingUsd: this.ceilingUsd(), now, quoteChecked: true });
+        if (again.outcome !== "ALLOWED") throw new GuardDecisionError(again);
+        return again;
       }
       const reason = "This transfer's spending reservation was already settled. Start a new transfer.";
       throw new GuardDecisionError({ outcome: "BLOCKED", stage: "APPROVAL", rules: [{ rule: "POLICY", status: "FAIL", reason }], reasons: [reason],
@@ -357,7 +359,9 @@ export class GuardService {
     let d: GuardDecision;
     try {
       const reservation = await this.reservationFor(row.userId, row.id);
-      const policy = await this.load(row.userId);
+      // ensure, not load: a transfer approved before Guard existed (backfilled reservation) belongs to a user who may
+      // have no policy row yet, and its deposit must still be preparable under the default policy.
+      const policy = await this.ensure(row.userId);
       d = evaluateGuard({ policy, subject: subjectOf(row, quote), spending: zero, stage: "DEPOSIT", ceilingUsd: this.ceilingUsd(), now: this.clock() });
       if (!reservation || reservation.status !== "RESERVED") {
         d = { ...d, outcome: "BLOCKED", rules: [...d.rules, { rule: "POLICY", status: "FAIL", reason: "This transfer has no Guard spending reservation. Start a new transfer." }] };

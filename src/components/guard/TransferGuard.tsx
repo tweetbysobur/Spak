@@ -36,8 +36,8 @@ export function TransferGuard({ executionId }: { executionId: string }) {
                     <p className="type-caption text-fg-2">Policy version {d.policyVersion ?? "–"} · {new Date(d.at).toLocaleString()}</p>
                   </div>
                   <ul className="mt-2 grid gap-x-6 gap-y-1 sm:grid-cols-2">
-                    {d.rules.filter((r) => r.rule !== "POLICY" || r.status !== "PASS").map((r) => (
-                      <li key={r.rule} title={r.reason} className="type-body-sm flex items-start gap-2">
+                    {d.rules.filter((r) => r.rule !== "POLICY" || r.status !== "PASS").map((r, i) => (
+                      <li key={`${r.rule}-${i}`}title={r.reason} className="type-body-sm flex items-start gap-2">
                         <span aria-hidden className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: `var(--spak-status-${RULE_ROLE[r.status]}-icon)` }} />
                         <span><span className="text-fg">{RULE_LABEL[r.rule]} {STATUS_WORD[r.status]}</span>{r.status !== "PASS" && <span className="block text-fg-2">{r.reason}</span>}</span>
                       </li>

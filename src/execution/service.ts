@@ -9,6 +9,7 @@ import { compareDecimal } from "../spak-in/lib/decimal";
 import { QuoteService, newId, providerError } from "./quote-service";
 import type { ExecutionRecords, ExecutionRow, QuoteRow } from "./records";
 import { GuardDecisionError, guardError, type GuardService } from "../guard/service";
+import { cleanUsd } from "../guard/engine";
 import { DELAYED_AFTER_MS, TERMINAL, stateFromProvider, type ExecutionState } from "./state";
 
 export const PROVIDER_ID = "near-intents";
@@ -141,7 +142,7 @@ export class ExecutionService {
     if (!current || current.status !== "VALID") throw new ExecutionError("QUOTE_NOT_CURRENT", "That quote can no longer be used.");
     if (current.kind === "FIRM" && now.getTime() - current.createdAt.getTime() < FIRM_APPROVAL_TTL_MS) {
       // The policy may have changed since: check the reused firm quote again before showing it.
-      await this.d.guard.enforceQuote("FIRM_QUOTE", row, current);
+      await this.guardQuote("FIRM_QUOTE", row, current);
       return { execution: row, quote: current, reused: true };
     }
     if (current.kind === "INDICATIVE" && current.expiresAt.getTime() <= now.getTime()) {
@@ -149,7 +150,7 @@ export class ExecutionService {
       throw new ExecutionError("QUOTE_EXPIRED", "The quote expired. Get a new quote.");
     }
     // Guard before asking for a firm quote (no deposit address is issued under a policy that would block it)...
-    await this.d.guard.enforceQuote("QUOTE", row, current);
+    await this.guardQuote("QUOTE", row, current);
     const { v, src, dst } = await this.prepare(args.userId, row.planHash, args.wallets);
     const firm = await this.quotes.quote({ executionId: row.id, userId: args.userId, v, src, dst, dry: false });
     // ...and on the firm quote itself, before it is shown for review.
@@ -195,7 +196,8 @@ export class ExecutionService {
       throw new ExecutionError("APPROVAL_MISMATCH", "The quote no longer matches this execution. Get a new quote.");
     }
     const limit = maxExecutionUsd();
-    if (!firm.amountInUsd || compareDecimal(firm.amountInUsd.replace(/^(\d+(?:\.\d+)?).*$/, "$1"), limit) > 0) {
+    const usdIn = cleanUsd(firm.amountInUsd);
+    if (!usdIn || compareDecimal(usdIn, limit) > 0) {
       throw new ExecutionError("AMOUNT_LIMIT_EXCEEDED", firm.amountInUsd ? `This is about $${Number(firm.amountInUsd).toFixed(2)}, above the $${limit} limit per execution.` : "The USD value of this execution is unknown, so it cannot be checked against the limit.");
     }
     await this.prepare(args.userId, row.planHash, args.wallets);

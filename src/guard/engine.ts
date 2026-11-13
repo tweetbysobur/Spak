@@ -12,10 +12,13 @@ export function sameAddress(network: string, a: string, b: string): boolean {
   return getNetwork(network)?.family === "evm" ? a.toLowerCase() === b.toLowerCase() : a === b;
 }
 
-/** USD amount from a provider string such as "50.0" or "50.01 USD". Null when it is not a plain number. */
+/**
+ * USD amount from a provider string such as "50.0" or "50.01 USD". Null when it is not a plain number: anything
+ * after the number other than a unit word ("1,234.56", "1.2e3") is refused rather than truncated to a smaller value.
+ */
 export function cleanUsd(v: string | null | undefined): string | null {
   if (!v) return null;
-  const m = /^\s*(\d+(?:\.\d+)?)/.exec(v);
+  const m = /^\s*(\d+(?:\.\d+)?)(?:\s+[A-Za-z]+)?\s*$/.exec(v);
   return m && isDecimal(m[1]) ? m[1] : null;
 }
 
@@ -38,6 +41,12 @@ export function quoteWithinSlippage(amountOut: string, minAmountOut: string, max
   if (out <= 0n) return null;
   const floor = (out * BigInt(10_000 - maxBps)) / 10_000n;
   return min + 1n >= floor;
+}
+
+/** The per-transfer limit that applies: the user's own limit when it is lower than the platform ceiling, else the ceiling. */
+export function effectiveMaxUsd(p: GuardPolicy, ceilingUsd: string): string {
+  const own = p.limits.maxTransactionUsd;
+  return own && compareDecimal(own, ceilingUsd) < 0 ? own : ceilingUsd;
 }
 
 const PRE_APPROVAL: GuardStage[] = ["PLAN", "QUOTE", "FIRM_QUOTE", "APPROVAL"];
@@ -117,7 +126,7 @@ export function evaluateGuard(args: {
     else add("RECIPIENT", "FAIL", "This recipient is not on your approved list.");
 
     // Value and limits. The platform ceiling always applies and no setting can raise it.
-    const max = p.limits.maxTransactionUsd && compareDecimal(p.limits.maxTransactionUsd, ceilingUsd) < 0 ? p.limits.maxTransactionUsd : ceilingUsd;
+    const max = effectiveMaxUsd(p, ceilingUsd);
     const v = s.valueUsd;
     if (v === null) {
       if (stage === "PLAN") add("VALUE_KNOWN", "NOT_APPLICABLE", "The USD value is not known before a quote. Limits are checked on the quote.");

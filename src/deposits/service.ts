@@ -44,7 +44,7 @@ export class DepositService {
   private readonly clock: () => Date;
   constructor(private readonly d: DepositDeps) { this.clock = d.clock ?? (() => new Date()); }
 
-  private async approvedExecution(userId: string, executionId: string, wallets: VerifiedWallet[]) {
+  private async approvedExecution(userId: string, executionId: string, wallets: VerifiedWallet[], checkGuard = true) {
     const ex = await this.d.executions.getForUser(executionId, userId);
     if (!ex) throw new ExecutionError("EXECUTION_NOT_FOUND", "No such execution.");
     if (ex.state !== "AWAITING_DEPOSIT") throw new ExecutionError("DEPOSIT_NOT_ALLOWED", `This execution is ${ex.state.toLowerCase().replaceAll("_", " ")}; it does not accept a deposit.`);
@@ -63,7 +63,7 @@ export class DepositService {
       && (fam === "solana" ? w.address === ex.refundAddress : w.address.toLowerCase() === ex.refundAddress.toLowerCase()));
     if (!ok) throw new ExecutionError("WALLET_NOT_VERIFIED", "The wallet that must send this deposit is no longer verified on the source network.");
     // Guard: emergency controls, disabled networks and a live spending reservation.
-    await this.d.guard.enforceDeposit(ex, quote);
+    if (checkGuard) await this.d.guard.enforceDeposit(ex, quote);
     return { ex, approval, quote };
   }
 
@@ -139,14 +139,17 @@ export class DepositService {
     const { deposit } = await this.prepare({ userId: args.userId, executionId: args.executionId, wallets: args.wallets }).catch(async (e) => {
       // Insufficient balance after sending is expected for manual deposits: the funds already left the wallet.
       if (e instanceof ExecutionError && e.code === "INSUFFICIENT_BALANCE") return this.prepareWithoutBalance(args);
+      // The user says the deposit was already broadcast. Guard stops SPak giving new deposit instructions, never the
+      // recording of funds that already left the wallet: those must be tracked, verified and, if needed, refunded.
+      if (e instanceof ExecutionError && (e.code === "GUARD_BLOCKED" || e.code === "GUARD_NEEDS_CONFIGURATION")) return this.prepareWithoutBalance(args, false);
       throw e;
     });
     await this.d.records.touch(deposit.id, { method: "MANUAL" });
     return this.submit({ userId: args.userId, depositId: deposit.id, txHash: args.txHash });
   }
 
-  private async prepareWithoutBalance(args: { userId: string; executionId: string; wallets: VerifiedWallet[] }) {
-    const { ex, approval, quote } = await this.approvedExecution(args.userId, args.executionId, args.wallets);
+  private async prepareWithoutBalance(args: { userId: string; executionId: string; wallets: VerifiedWallet[] }, checkGuard = true) {
+    const { ex, approval, quote } = await this.approvedExecution(args.userId, args.executionId, args.wallets, checkGuard);
     const [open] = await this.d.records.inStates(ex.id, ["WALLET_CONFIRMATION_REQUESTED"]);
     if (open) return { deposit: open };
     const input = this.input(ex);

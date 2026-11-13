@@ -9,18 +9,18 @@ import type { ExecutionView } from "@/lib/client";
 import type { TrackingView } from "@/tracking/service";
 
 export type Phase =
-  | "AWAITING_DEPOSIT" | "DEPOSIT_DETECTED" | "PROCESSING" | "VERIFYING" | "COMPLETED" | "FAILED"
+  | "AWAITING_APPROVAL" | "AWAITING_DEPOSIT" | "DEPOSIT_DETECTED" | "PROCESSING" | "VERIFYING" | "COMPLETED" | "FAILED"
   | "UNKNOWN" | "REFUND_PENDING" | "REFUND_REVIEW" | "REFUNDED" | "EXPIRED" | "CANCELLED";
 
 /** Status role per phase, from the approved semantic colours. */
 export const PHASE_ROLE: Record<Phase, string> = {
-  AWAITING_DEPOSIT: "pending", DEPOSIT_DETECTED: "processing", PROCESSING: "processing", VERIFYING: "processing",
+  AWAITING_APPROVAL: "pending", AWAITING_DEPOSIT: "pending", DEPOSIT_DETECTED: "processing", PROCESSING: "processing", VERIFYING: "processing",
   COMPLETED: "success", FAILED: "error", UNKNOWN: "warning", REFUND_PENDING: "processing", REFUND_REVIEW: "warning",
   REFUNDED: "refunded", EXPIRED: "neutral", CANCELLED: "neutral",
 };
 
 export const PHASE_TITLE: Record<Phase, string> = {
-  AWAITING_DEPOSIT: "Waiting for your deposit", DEPOSIT_DETECTED: "Deposit detected", PROCESSING: "NEAR Intents is processing",
+  AWAITING_APPROVAL: "Waiting for your approval", AWAITING_DEPOSIT: "Waiting for your deposit", DEPOSIT_DETECTED: "Deposit detected", PROCESSING: "NEAR Intents is processing",
   VERIFYING: "Verifying delivery", COMPLETED: "Delivered and verified", FAILED: "Transfer failed",
   UNKNOWN: "Outcome not confirmed yet", REFUND_PENDING: "Refund in progress", REFUND_REVIEW: "Refund under review",
   REFUNDED: "Refunded", EXPIRED: "Expired", CANCELLED: "Cancelled",
@@ -41,6 +41,8 @@ export function phaseOf(x: Pick<ExecutionView, "state">, t: TrackingView | null)
     case "CANCELLED": return "CANCELLED";
     case "VERIFYING_DESTINATION": return "VERIFYING";
     case "PROCESSING": return "PROCESSING";
+    // Not approved yet (opened from Activity): never shown as approved or waiting for a deposit.
+    case "DRAFT": case "QUOTED": case "AWAITING_APPROVAL": return "AWAITING_APPROVAL";
     case "FAILED": case "REFUNDING":
       if (reviewOpen || (refundState && REVIEW_REFUND.includes(refundState))) return "REFUND_REVIEW";
       if (state === "REFUNDING" || (refundState && PENDING_REFUND.includes(refundState))) return "REFUND_PENDING";
@@ -55,6 +57,7 @@ export function phaseOf(x: Pick<ExecutionView, "state">, t: TrackingView | null)
 /** One plain sentence per phase. Never claims more than the server state supports. */
 export function phaseSummary(phase: Phase, dest: string): string {
   switch (phase) {
+    case "AWAITING_APPROVAL": return "Not approved yet. Nothing has moved: review and approve the firm quote to continue.";
     case "AWAITING_DEPOSIT": return "Approved. Nothing has moved yet: send the deposit from your wallet to start the transfer.";
     case "DEPOSIT_DETECTED": return "Your deposit transaction was submitted. SPak is confirming it on the source chain.";
     case "PROCESSING": return "NEAR Intents has your deposit and is executing the cross-chain transfer. Delivery is not confirmed yet.";
