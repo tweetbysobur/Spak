@@ -6,7 +6,7 @@
 import { IS_TESTNET } from "../environment";
 
 export const MAINNET_RPC: Readonly<Record<string, string[]>> = {
-  ethereum: ["https://ethereum-rpc.publicnode.com"],
+  ethereum: ["https://ethereum-rpc.publicnode.com", "https://eth.drpc.org"],
   base: ["https://mainnet.base.org", "https://base-rpc.publicnode.com"],
   arbitrum: ["https://arb1.arbitrum.io/rpc", "https://arbitrum-one-rpc.publicnode.com"],
   optimism: ["https://mainnet.optimism.io", "https://optimism-rpc.publicnode.com"],

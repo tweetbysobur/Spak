@@ -21,14 +21,17 @@ import { getNetwork } from "../spak-in/registries/networks";
  *   to its destination transaction. 29 of 29 sampled payouts on 2026-11-14 (19 USDC: 12 Arbitrum, 7 Base; 10 native
  *   ETH: 5 Arbitrum, 5 Base) were sent by 0x2cff890f0378a11913b6129b2e97417a2c302680, with amounts equal to the bridge's records
  *   (tests/tracking/fixtures/oneclick-mainnet-payouts.json; re-derived by tests/live/payout-senders.live.test.ts).
- *   Payouts through any other bridge (for example *.omdep.near tokens) have no evidence and go to manual review.
+ *   Ethereum and Gnosis mainnet: the same method on 2026-11-14 found 7 of 7 Ethereum and 8 of 8 Gnosis PoA USDC payouts
+ *   sent by the same address, amounts equal to the bridge's records.
+ *   Payouts through any other bridge have no evidence and go to manual review: HOT Omni (Optimism), the *.omdep.near
+ *   bridge (Polygon, BSC, Avalanche since 2026-11-14) and Omni Bridge (Solana USDC, burned through omni.bridge.near).
  * - Other EVM networks and Solana on mainnet: no evidence collected. None is assumed. Operators may add addresses
  *   through SPAK_TRUSTED_DESTINATION_SENDERS only from the same kind of evidence.
  */
 export const POA_BRIDGE_EVM_SENDER = "0x2cff890f0378a11913b6129b2e97417a2c302680";
 
 export const BUILTIN_TRUSTED_SENDERS: Readonly<Record<SpakNetworkEnv, Readonly<Record<string, readonly string[]>>>> = {
-  mainnet: { near: ["intents.near"], base: [POA_BRIDGE_EVM_SENDER], arbitrum: [POA_BRIDGE_EVM_SENDER] },
+  mainnet: { near: ["intents.near"], base: [POA_BRIDGE_EVM_SENDER], arbitrum: [POA_BRIDGE_EVM_SENDER], ethereum: [POA_BRIDGE_EVM_SENDER], gnosis: [POA_BRIDGE_EVM_SENDER] },
   "tidepool-testnet": {
     "base-sepolia": ["0x2e6ad9e6d59bb4585ea0e6762c3b637dde29dad2"],
     "arbitrum-sepolia": ["0x2e6ad9e6d59bb4585ea0e6762c3b637dde29dad2"],
@@ -38,6 +41,19 @@ export const BUILTIN_TRUSTED_SENDERS: Readonly<Record<SpakNetworkEnv, Readonly<R
 };
 
 export type TrustedSenders = (network: string) => readonly string[];
+
+/**
+ * Can SPak bind a payout of this destination asset to the route automatically? Only when the payout path is the one the
+ * evidence covers: NEP-141 tokens on NEAR (paid by intents.near itself), and PoA tokens (*.omft.near) on a network with a
+ * trusted PoA sender. Anything else still executes, but delivery goes to manual review, and the user is told before approving.
+ */
+export function automaticDelivery(destinationNetwork: string, providerAssetId: string | null | undefined, trusted: TrustedSenders): boolean {
+  if (!providerAssetId || !trusted(destinationNetwork).length) return false;
+  // Tidepool testnet: the vault evidence covers each network's payouts as a whole (see BUILTIN_TRUSTED_SENDERS).
+  if (NETWORK_ENV === "tidepool-testnet") return true;
+  if (destinationNetwork === "near") return providerAssetId.startsWith("nep141:");
+  return /^nep141:[a-z0-9-]+\.omft\.near$/.test(providerAssetId) && trusted(destinationNetwork).includes(POA_BRIDGE_EVM_SENDER);
+}
 
 /** Canonical form for comparison: EVM addresses are case-insensitive; everything else is exact. */
 export function canonicalSender(network: string, address: string): string {

@@ -11,7 +11,7 @@ import evidence from "./fixtures/oneclick-mainnet-payouts.json";
 import type { ChainRpc } from "@/deposits/rpc";
 import { verifyEvmDelivery } from "@/tracking/verifiers/evm";
 import { bind } from "@/tracking/destination";
-import { BUILTIN_TRUSTED_SENDERS, POA_BRIDGE_EVM_SENDER, trustedSendersFromEnv } from "@/tracking/route-trust";
+import { automaticDelivery, BUILTIN_TRUSTED_SENDERS, POA_BRIDGE_EVM_SENDER, trustedSendersFromEnv } from "@/tracking/route-trust";
 
 const USDC = { arbitrum: "0xaf88d065e77c8cc2239327c5edb3a432268e5831", base: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913" } as const;
 
@@ -30,11 +30,13 @@ describe("mainnet payout sender evidence", () => {
     expect(new Set(evidence.payouts.map((p) => p.network))).toEqual(new Set(["arbitrum", "base"]));
   });
 
-  it("the built-in list trusts that sender only on Base and Arbitrum mainnet, never on testnet or other networks", () => {
+  it("the built-in list trusts that sender only on the PoA networks with evidence, never on testnet or other networks", () => {
     const t = trustedSendersFromEnv({}, "mainnet");
     expect(t("arbitrum")).toEqual([POA_BRIDGE_EVM_SENDER]);
     expect(t("base")).toEqual([POA_BRIDGE_EVM_SENDER]);
-    for (const n of ["ethereum", "optimism", "polygon", "bsc", "avalanche", "gnosis", "solana"]) expect(t(n)).toEqual([]);
+    expect(t("ethereum")).toEqual([POA_BRIDGE_EVM_SENDER]);
+    expect(t("gnosis")).toEqual([POA_BRIDGE_EVM_SENDER]);
+    for (const n of ["optimism", "polygon", "bsc", "avalanche", "solana"]) expect(t(n)).toEqual([]);
     expect(Object.values(BUILTIN_TRUSTED_SENDERS["tidepool-testnet"]).flat()).not.toContain(POA_BRIDGE_EVM_SENDER);
   });
 });
@@ -68,3 +70,21 @@ describe("real Arbitrum mainnet payout through the real EVM verifier", () => {
     expect(bind(r, blockTime - 60, new Set(), "arbitrum", "Arbitrum")).toMatchObject({ outcome: "UNTRUSTED_SENDER", counted: 0n });
   });
 });
+
+describe("automatic delivery is decided per destination asset, not per network", () => {
+  const t = trustedSendersFromEnv({}, "mainnet");
+  it.each([
+    ["arbitrum", "nep141:arb-0xaf88d065e77c8cc2239327c5edb3a432268e5831.omft.near", true],
+    ["base", "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near", true],
+    ["ethereum", "nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near", true],
+    ["gnosis", "nep141:gnosis-0x2a22f9c3b484c3629090feed35f17ff8f88f76f0.omft.near", true],
+    ["near", "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1", true],
+    ["base", "nep141:base-0xc2bc2a4cd04358281c7cf36a057fc15e5552b18b.omdep.near", false],
+    ["polygon", "nep141:pol-0x3c499c542cef5e3811e1192ce70d8cc03d5c3359.omdep.near", false],
+    ["optimism", "nep245:v2_1.omni.hot.tg:10_A2ewyUyDp6qsue1jqZsGypkCxRJ", false],
+    ["solana", "nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near", false],
+    ["near", "nep245:v2_1.omni.hot.tg:1117_", false],
+    ["arbitrum", null, false],
+  ])("%s %s: %s", (net, id, expected) => expect(automaticDelivery(net as string, id as string | null, t)).toBe(expected));
+});
+

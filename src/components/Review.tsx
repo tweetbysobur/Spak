@@ -56,6 +56,9 @@ export function Review({ intent, execution, quote: initial, onApproved, onCancel
   const src = quote.source.assetId, dst = quote.destination.assetId;
   const srcSym = getAsset(src)?.symbol ?? src, dstSym = getAsset(dst)?.symbol ?? dst;
   const fees = quote.fees as Fee[];
+  // Share of the input value lost to fees, from the provider's own USD figures for input and output (same source, so comparable).
+  const inUsd = Number(quote.source.amountInUsd), outUsd = Number(quote.destination.amountOutUsd);
+  const costPct = inUsd > 0 && outUsd >= 0 && Number.isFinite(inUsd) && Number.isFinite(outUsd) ? Math.max(0, (1 - outUsd / inUsd) * 100) : null;
   const approveBy = new Date(Date.parse(quote.createdAt) + FIRM_APPROVAL_WINDOW_MS);
   const quoteRole = firm ? "pending" : "info";
   return (
@@ -119,6 +122,21 @@ export function Review({ intent, execution, quote: initial, onApproved, onCancel
           <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--spak-primary)]" />
           <span>I approve exactly this transaction: send <b className="type-amount">{formatUnits(quote.source.amountIn, src)}</b> to the deposit address above, delivering at least <b className="type-amount">{formatUnits(quote.destination.minAmountOut, dst)}</b> to the recipient. My wallet will still ask me to sign the deposit.</span>
         </label>
+      )}
+      {quote.route.delivery === "MANUAL_REVIEW" && (
+        <Notice role="warning" title="SPak cannot confirm delivery on this route automatically" className="mt-4">
+          SPak has no verified record of who pays out {dstSym} on {net(quote.destination.network)}. The transfer still runs, but SPak will mark it for manual review instead of complete until delivery is checked by hand.
+        </Notice>
+      )}
+      {quote.route.deposit === "MANUAL_HASH" && (
+        <Notice role="neutral" title="You send this deposit from your NEAR wallet" className="mt-4">
+          After you approve, SPak shows the exact NEAR transaction. Send it from your NEAR wallet, then paste the transaction hash. SPak checks it on chain.
+        </Notice>
+      )}
+      {costPct !== null && costPct >= 5 && (
+        <Notice role="warning" title={`About ${costPct.toFixed(1)}% of this amount goes to fees`} className="mt-4">
+          Network and bridge fees are mostly fixed, so they weigh more on small amounts. A larger amount costs less in percentage terms.
+        </Notice>
       )}
       {dupe && <Notice role="warning" title="You started the same transfer recently" className="mt-4">Approve again only if you really want to send it twice.</Notice>}
       {error && <ErrorText>{error}</ErrorText>}

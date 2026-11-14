@@ -1,8 +1,8 @@
 {
  "meta": {
   "source": "https://1click.chaindefuser.com/v0/tokens",
-  "fetchedAt": "2026-11-10T11:58:05.103Z",
-  "count": 169
+  "fetchedAt": "2026-11-14T13:33:32.760Z",
+  "count": 170
  },
  "assets": [
   {
@@ -354,13 +354,6 @@
    "symbol": "USDC",
    "decimals": 18,
    "contract": "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d"
-  },
-  {
-   "id": "bsc:0xaa036928c9c0df07d525b55ea8ee690bb5a628c1",
-   "network": "bsc",
-   "symbol": "EVAA",
-   "decimals": 18,
-   "contract": "0xaa036928c9c0df07d525b55ea8ee690bb5a628c1"
   },
   {
    "id": "bsc:native",
@@ -804,6 +797,13 @@
    "contract": "npro.nearmobile.near"
   },
   {
+   "id": "near:nzhipu.rwa.assetize.near",
+   "network": "near",
+   "symbol": "nZHIPU",
+   "decimals": 8,
+   "contract": "nzhipu.rwa.assetize.near"
+  },
+  {
    "id": "near:prl.omft.near",
    "network": "near",
    "symbol": "PRL",
@@ -1047,6 +1047,13 @@
    "symbol": "PUBLIC",
    "decimals": 9,
    "contract": "AXCp86262ZPfpcV9bmtmtnzmJSL5sD99mCVJD4GR9vS"
+  },
+  {
+   "id": "solana:Bn9oW3GVKQdgNJG5w5P53dbuZfUtAehwFAniZYry68T8",
+   "network": "solana",
+   "symbol": "QTC",
+   "decimals": 9,
+   "contract": "Bn9oW3GVKQdgNJG5w5P53dbuZfUtAehwFAniZYry68T8"
   },
   {
    "id": "solana:CtzPWv73Sn1dMGVU3ZtLv9yWSyUAanBni19YWDaznnkn",

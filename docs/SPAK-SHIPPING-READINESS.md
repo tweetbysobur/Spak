@@ -237,18 +237,26 @@ No funds were moved. Every item below is real mainnet data or a live 1Click main
 
 Not yet evidenced: a settlement, a refund, payouts from any non-PoA bridge, and whether 1Click registers storage for a NEAR recipient that has none. Until that is known, a NEAR recipient must already hold storage on the destination token contract.
 
-## 14b. Mainnet route matrix (USDC, 2026-11-14)
+## 14b. Mainnet route coverage (live, read-only, 2026-11-14)
 
-The payout sender depends on the destination leg (the bridge that pays out), not on the source. Evidence is per destination leg; no route has a completed 1Click settlement yet.
+Discovery: 1Click `/v0/tokens` lists 231 provider tokens. SPak's registry, refreshed from it on 2026-11-14, holds 170 on 19 networks. SPak can execute on 10 of them (it has a deposit builder and a delivery verifier for EVM, NEAR and Solana): Ethereum 29 tokens, Base 18, Arbitrum 7, Optimism 6, Polygon 5, BNB Smart Chain 9, Avalanche 3, Gnosis 9, NEAR 36, Solana 23. Aptos, Bitcoin, Dogecoin, Litecoin, Stellar, Sui, TON, Tron and XRP are listed but not executable: SPak has no wallet, deposit builder or delivery verifier for them.
 
-| Route | SPak-in | Signed live quote and firm deposit address | Deposit by | Destination proof | Auto-verification |
-| --- | --- | --- | --- | --- | --- |
-| Base → Arbitrum | PASS | PASS | EVM wallet in the browser | PoA bridge sender `0x2cff…2680`, 12 real USDC payouts on Arbitrum | Enabled |
-| Base → NEAR | PASS | PASS | EVM wallet in the browser | `intents.near` receipts, 5 real USDC payouts verified by SPak's NEAR verifier | Enabled; recipient must hold USDC storage (checked before deposit instructions) |
-| Arbitrum → NEAR | PASS | PASS | EVM wallet in the browser | as Base → NEAR | Enabled; same storage check |
-| NEAR → Base | PASS | PASS | User's NEAR wallet, hash pasted (storage_deposit plus ft_transfer) | PoA bridge sender, 7 real USDC payouts on Base | Enabled |
-| NEAR → Arbitrum | PASS | PASS | as NEAR → Base | PoA bridge sender, 12 real USDC payouts on Arbitrum | Enabled |
-| Any other destination network, or a non-PoA token | not checked | not checked | | none | Manual review (fail closed) |
+**All 90 directed USDC routes between the 10 networks** (25 USDC, through SPak-in, live 1Click with mandatory signature check, SPak valuation and Guard): 90 of 90 quote. Before the registry refresh, 48 failed the signature check: SPak's map used HOT Omni ids that 1Click has retired on Polygon, BSC and Avalanche, and the official SDK also rejects those quotes. The sync now skips retired ids, and the resolver refuses them at runtime.
+
+| Level | Routes | Meaning |
+| --- | --- | --- |
+| Quote available, signature verified, valued | 90 of 90 | Official 1Click (quotes only) |
+| Deposit instructions validated | EVM sources: browser wallet. NEAR source: one transaction (storage_deposit plus ft_transfer) sent from the user's NEAR wallet, hash pasted. Solana source: built and checked in the live deposit test | Mainnet read-only plus Mock |
+| Delivery verified automatically | 45: any source into Ethereum, Base, Arbitrum, Gnosis (PoA bridge sender, 34 real payouts) or NEAR (intents.near, 5 real payouts) | Mainnet read-only evidence |
+| Delivery goes to manual review | 45: any source into Optimism (HOT Omni), Polygon, BSC, Avalanche (`*.omdep.near` bridge) or Solana (Omni Bridge). The Review screen says so before approval | No payout evidence |
+| Settlement verified | None on mainnet | |
+
+**Amounts** (any amount the user types; SPak never changes it):
+- Minimum: set by 1Click per route and reported in its own words, for example "Amount is too low for bridge, try at least 150000" (0.15 USDC, Base to NEAR) and 300001 (Ethereum to Solana). NEAR to Arbitrum quoted 0.01 USDC.
+- Maximum: the Guard per-transfer limit, by default the platform ceiling of $1,000 (`SPAK_MAX_EXECUTION_USD`), lower if the user set one. 999 USDC quoted on every swept route; 1,001 and 50,000 were blocked by Guard.
+- Cost: shown in full. On small amounts fixed bridge fees dominate (1 USDC Ethereum to Solana delivers 0.80). Review now warns when fees exceed 5% of the amount.
+
+**Other tokens** (12 live combinations): 11 quote and value (ETH, SOL, wNEAR, BNB, AVAX, USDT, xDAI across chains). POL is refused by Guard: no independent price source, so its value cannot be checked (fail closed). "NEAR" means wNEAR (`wrap.near`), the only NEAR asset 1Click lists; a user holding only native NEAR must wrap it first.
 
 ## 15. First controlled mainnet transactions (prepared, not executed)
 

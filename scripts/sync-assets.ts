@@ -28,6 +28,9 @@ async function main() {
   for (const t of tokens) {
     const network = ONECLICK_TO_SPAK[t.blockchain];
     if (!network) continue;
+    // 1Click keeps retired asset ids in the list, marked in the symbol. Their quotes do not verify against the
+    // published key (observed 2026-11-14 for the HOT Omni ids on Polygon, BSC and Avalanche). Use the replacement.
+    if (/\(deprecated\)/i.test(t.symbol)) continue;
     const contract = t.contractAddress ? (/^0x[0-9a-fA-F]{40}$/.test(t.contractAddress) ? t.contractAddress.toLowerCase() : t.contractAddress) : null;
     const id = `${network}:${contract ?? "native"}`;
     if (map[id]) continue; // keep first; duplicates of the exact same id are provider aliases

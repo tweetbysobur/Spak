@@ -1,4 +1,6 @@
 import { logEvent } from "../ops/log";
+import { getNetwork } from "../spak-in/registries/networks";
+import { automaticDelivery, trustedSendersFromEnv, type TrustedSenders } from "../tracking/route-trust";
 import { z } from "zod";
 import { OneClickError, type OneClickClient } from "../integrations/near-intents/client";
 import { hashObject } from "../spak-in/lib/hash";
@@ -454,6 +456,9 @@ function fingerprint(userId: string, v: ValidatedPlan): string {
 
 // ------------------------------------------------------------------ views (API shapes; no raw provider payloads)
 
+let trustCache: TrustedSenders | null = null;
+const routeTrust = () => (trustCache ??= trustedSendersFromEnv());
+
 export function toQuoteView(q: QuoteRow, now: Date = new Date()) {
   const expired = q.status === "VALID" && q.expiresAt.getTime() <= now.getTime();
   return {
@@ -463,6 +468,13 @@ export function toQuoteView(q: QuoteRow, now: Date = new Date()) {
     valuation: q.valuation ?? null,
     destination: { network: q.destinationNetwork, assetId: q.destinationAssetId, providerAssetId: q.providerDestinationAsset, amountOut: q.amountOut, minAmountOut: q.minAmountOut, amountOutUsd: q.amountOutUsd },
     slippageBps: q.slippageBps, fees: q.fees, timeEstimateSec: q.timeEstimateSec,
+    // What SPak can do on this route, shown before approval. MANUAL_REVIEW: delivery is not bound to the route
+    // automatically, so the execution ends in review instead of COMPLETED. MANUAL_HASH: the user sends the deposit
+    // from their own wallet app and pastes the transaction hash.
+    route: {
+      delivery: automaticDelivery(q.destinationNetwork, q.providerDestinationAsset, routeTrust()) ? "AUTOMATIC" as const : "MANUAL_REVIEW" as const,
+      deposit: getNetwork(q.sourceNetwork)?.family === "near" ? "MANUAL_HASH" as const : "WALLET" as const,
+    },
     deposit: q.depositAddress ? { address: q.depositAddress, memo: q.depositMemo, deadline: q.providerDeadline?.toISOString() ?? null } : null,
     expiresAt: q.expiresAt.toISOString(), rejectionReason: q.rejectionReason,
     providerReference: { provider: PROVIDER_ID, correlationId: q.providerCorrelationId, signature: q.providerSignature, timestamp: q.providerTimestamp },

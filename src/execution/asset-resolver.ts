@@ -53,6 +53,7 @@ export class AssetResolver {
     // A miss in a cached list is re-checked against a fresh list before refusing.
     const live = (await this.liveTokens()).get(providerAssetId) ?? (await this.liveTokens(true)).get(providerAssetId);
     if (!live) throw new ExecutionError("UNSUPPORTED_ASSET", `NEAR Intents no longer lists ${asset.symbol} on ${network.name} (${providerAssetId}).`);
+    if (/\(deprecated\)/i.test(live.symbol)) throw new ExecutionError("UNSUPPORTED_ASSET", `NEAR Intents has retired this ${asset.symbol} route on ${network.name} (${providerAssetId}). SPak's asset list needs a refresh.`, { providerAssetId });
     const problems: string[] = [];
     if (live.blockchain !== providerChain) problems.push(`chain ${live.blockchain} != ${providerChain}`);
     if (live.decimals !== asset.decimals) problems.push(`decimals ${live.decimals} != ${asset.decimals}`);
