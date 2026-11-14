@@ -10,7 +10,7 @@ import { handle, spak } from "@/server/spak";
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   return handle(req, async () => {
     const c = await executionContext(req);
-    rateLimit(req, "deposit-submit", 20, 60_000, c.userId);
+    await rateLimit(req, "deposit-submit", 20, 60_000, c.userId);
     const id = idSchema("dep").parse((await ctx.params).id);
     const { txHash } = txBody.parse(await req.json());
     const s = await spak();

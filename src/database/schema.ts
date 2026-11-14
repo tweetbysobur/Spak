@@ -227,7 +227,11 @@ export const quotes = pgTable("spak_quotes", {
   amountIn: text("amount_in").notNull(),
   amountOut: text("amount_out"),
   minAmountOut: text("min_amount_out"),
-  amountInUsd: text("amount_in_usd"),
+  amountInUsd: text("amount_in_usd"), // provider-reported; informational, never authorises spending on its own
+  /** SPak's own USD value of amountIn (src/pricing), used by Guard, Agent permissions and the ceiling. Null: unknown. */
+  valuationUsd: text("valuation_usd"),
+  /** The full valuation decision: source, reading, provider value, deviation, status and reasons. Audit evidence. */
+  valuation: jsonb("valuation"),
   amountOutUsd: text("amount_out_usd"),
   slippageBps: integer("slippage_bps").notNull(),
   fees: jsonb("fees").notNull().default([]),
@@ -902,3 +906,40 @@ export const environmentMarker = pgTable("spak_environment", {
   networkEnv: text("network_env").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
 });
+
+/* ------------------------------------------------------------ Shared rate limits and alerts ------------------------------------------------------------ */
+
+/**
+ * S-10: fixed-window request counters shared by every server instance and kept across restarts. One row per bucket and
+ * subject (user id, or the trusted client address when not signed in). Updated with one atomic upsert per request.
+ */
+export const rateLimits = pgTable("spak_rate_limits", {
+  key: text("key").primaryKey(),
+  windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+  count: integer("count").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+}, (t) => [index("spak_rate_limits_updated_idx").on(t.updatedAt)]);
+
+/**
+ * Operational alerts. Raised by the monitor scan and by security-sensitive failures; delivered to the configured
+ * destination (SPAK_ALERT_WEBHOOK_URL). One open alert per dedupe key: repeats increase count instead of re-paging.
+ */
+export const alerts = pgTable("spak_alerts", {
+  id: text("id").primaryKey(),
+  kind: text("kind").notNull(),
+  severity: text("severity").notNull(), // CRITICAL | HIGH | MEDIUM
+  dedupeKey: text("dedupe_key").notNull(),
+  ref: text("ref"),
+  message: text("message").notNull(),
+  data: jsonb("data").notNull().default({}),
+  count: integer("count").notNull().default(1),
+  firstAt: timestamp("first_at", { withTimezone: true }).notNull(),
+  lastAt: timestamp("last_at", { withTimezone: true }).notNull(),
+  deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+  deliveryAttempts: integer("delivery_attempts").notNull().default(0),
+  deliveryError: text("delivery_error"),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+}, (t) => [
+  uniqueIndex("spak_alerts_open_uq").on(t.dedupeKey).where(sql`resolved_at is null`),
+  index("spak_alerts_undelivered_idx").on(t.deliveredAt, t.lastAt),
+]);

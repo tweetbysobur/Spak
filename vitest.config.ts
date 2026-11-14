@@ -15,6 +15,7 @@ export default defineConfig({
     include: ["src/**/*.test.ts", "tests/**/*.test.ts"],
     exclude: process.env.LIVE ? [] : ["tests/live/**"],
     testTimeout: 20_000,
-    env: { SPAK_PGLITE_DIR: "memory://", SPAK_APP_ORIGIN: "http://localhost:3000" },
+    setupFiles: ["tests/setup-prices.ts"],
+    env: { SPAK_PGLITE_DIR: "memory://", SPAK_APP_ORIGIN: "http://localhost:3000", SPAK_TRUSTED_PROXY: "x-forwarded-for" },
   },
 });

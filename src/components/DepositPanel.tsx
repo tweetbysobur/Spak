@@ -121,7 +121,14 @@ export function DepositPanel({ execution }: { execution: ExecutionView }) {
         <Notice role={dep.state === "EXPIRED" ? "neutral" : "error"} title={`Last attempt: ${DEPOSIT_LABEL[dep.state]}`} className="mt-3">{dep.reason ?? undefined}</Notice>
       )}
 
-      {!tx && family !== "near" && <Button className="mt-4 w-full sm:w-auto" onClick={prepare} disabled={!!busy}>{busy === "prepare" ? "Preparing" : "Prepare deposit"}</Button>}
+      {!tx && <Button className="mt-4 w-full sm:w-auto" onClick={prepare} disabled={!!busy}>{busy === "prepare" ? "Preparing" : "Prepare deposit"}</Button>}
+
+      {tx && tx.family === "near" && (
+        <div className="mt-4">
+          <p className="type-label text-fg-2">Send one transaction from <span className="type-address text-fg">{execution.refundAddress}</span> to <span className="type-address text-fg">{tx.receiverId}</span> with these actions, in this order</p>
+          <ol className="type-body-sm mt-1 list-decimal pl-5 text-fg">{tx.steps.map((s) => <li key={s.action}><b>{s.action}</b>: {s.detail}</li>)}</ol>
+        </div>
+      )}
 
       {tx && tx.family !== "near" && (
         <div className="mt-4 flex flex-col gap-3">

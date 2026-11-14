@@ -127,6 +127,20 @@
       "when": 1794604542600,
       "tag": "0017_environment_marker",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1794642438366,
+      "tag": "0018_quote_valuation",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1794644427423,
+      "tag": "0019_rate_limits_alerts",
+      "breakpoints": true
     }
   ]
 }

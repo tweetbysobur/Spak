@@ -4,6 +4,7 @@ import { Pool } from "pg";
 import * as schema from "./schema";
 import type { Db } from "./repositories";
 import { NETWORK_ENV } from "../environment";
+import { logEvent } from "../ops/log";
 import { assertDatabaseEnvironment, assertServerEnvironment } from "./environment";
 
 export const MIGRATIONS_FOLDER = "src/database/migrations";
@@ -44,5 +45,7 @@ export function getDb(url = process.env.DATABASE_URL): Promise<Db> {
 export async function runMigrations(url = process.env.DATABASE_URL): Promise<void> {
   if (!url) throw new Error("DATABASE_URL is not set.");
   const pool = new Pool({ connectionString: url, max: 1 });
-  try { await migrate(drizzle(pool), { migrationsFolder: MIGRATIONS_FOLDER }); } finally { await pool.end(); }
+  try { await migrate(drizzle(pool), { migrationsFolder: MIGRATIONS_FOLDER }); logEvent("info", "database.migrated", {}); }
+  catch (e) { logEvent("error", "database.migration_failed", { error: (e as Error).message }); throw e; }
+  finally { await pool.end(); }
 }

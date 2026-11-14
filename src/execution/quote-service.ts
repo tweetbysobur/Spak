@@ -7,6 +7,8 @@ import { ExecutionError } from "./errors";
 import type { ValidatedPlan } from "./plan-validator";
 import { checkQuote } from "./quote-validator";
 import { verifyQuoteSignature } from "../integrations/near-intents/signature";
+import type { PriceService } from "../pricing/oracle";
+import { logEvent } from "../ops/log";
 import type { ExecutionRecords, QuoteRow } from "./records";
 
 /** How long SPak honours an indicative (dry) quote for approval. Prices move; re-quote after this. */
@@ -23,6 +25,7 @@ const PROVIDER = PROVIDER_LABEL;
 
 export function providerError(e: unknown): ExecutionError {
   if (e instanceof ExecutionError) return e;
+  logEvent("warn", "provider.error", { provider: PROVIDER, kind: (e as { kind?: string })?.kind ?? "UNKNOWN", status: (e as { httpStatus?: number })?.httpStatus ?? null });
   if (e instanceof OneClickError) {
     switch (e.kind) {
       case "BAD_REQUEST": return new ExecutionError("QUOTE_REJECTED", `${PROVIDER} could not quote this: ${e.message}`);
@@ -37,8 +40,8 @@ export function providerError(e: unknown): ExecutionError {
 
 /** Quote Service: build the 1Click request from a validated plan, call the provider, validate and persist. */
 export class QuoteService {
-  /** quotePublicKey: when set (always in the Tidepool testnet build), a quote whose signature does not verify is rejected. */
-  constructor(private readonly client: OneClickClient, private readonly records: ExecutionRecords, private readonly clock: () => Date = () => new Date(), private readonly quotePublicKey: string | null = null) {}
+  /** quotePublicKey: every quote must verify against it; without one, every quote is rejected (fail closed). */
+  constructor(private readonly client: OneClickClient, private readonly records: ExecutionRecords, private readonly clock: () => Date = () => new Date(), private readonly quotePublicKey: string | null = null, private readonly prices: PriceService | null = null) {}
 
   buildRequest(v: ValidatedPlan, src: ResolvedAsset, dst: ResolvedAsset, dry: boolean): OneClickQuoteRequest {
     let amount: string;
@@ -64,7 +67,9 @@ export class QuoteService {
     const now = this.clock();
 
     const check = checkQuote(req, res, { sourceNetwork: src.network, now });
-    if (this.quotePublicKey && !verifyQuoteSignature(res, this.quotePublicKey)) check.problems.push("the quote signature does not verify against the provider's published key");
+    // S-3: every quote must carry a valid signature from the provider's configured key. No key means no acceptance.
+    if (!this.quotePublicKey) check.problems.push("no provider quote-signing key is configured, so the quote cannot be authenticated");
+    else if (!verifyQuoteSignature(res, this.quotePublicKey)) check.problems.push("the quote signature does not verify against the provider's published key");
     if (!dry && req.depositMode === "MEMO" && !res.quote.depositMemo) check.problems.push("memo deposit mode but no memo returned");
     const min = v.plan.constraints.minOutput;
     if (min) {
@@ -73,6 +78,11 @@ export class QuoteService {
         check.problems.push(`worst-case output ${fromBaseUnits(res.quote.minAmountOut, dst.decimals)} ${dst.symbol} is below your minimum ${min.value}`);
       }
     }
+    // S-6: SPak's own USD value of what the user sends. The provider's amountInUsd is only cross-checked.
+    const valuation = this.prices
+      ? await this.prices.value({ symbol: src.symbol, decimals: src.decimals, amountUnits: res.quote.amountIn, providerUsd: res.quote.amountInUsd ?? null })
+      : { status: "UNAVAILABLE" as const, usd: null, reasons: ["No independent price service is configured, so the USD value cannot be checked."] };
+    if (valuation.status === "REJECTED") check.problems.push(`price check failed: ${valuation.reasons.join(" ")}`);
     const ok = check.problems.length === 0;
     const q = res.quote;
     const appFeeBps = (res.quoteRequest.appFees ?? []).reduce((s, f) => s + f.fee, 0);
@@ -89,12 +99,15 @@ export class QuoteService {
       sourceNetwork: src.network, destinationNetwork: dst.network, sourceAssetId: src.id, destinationAssetId: dst.id,
       providerOriginAsset: src.providerAssetId, providerDestinationAsset: dst.providerAssetId,
       amountIn: q.amountIn, amountOut: q.amountOut, minAmountOut: q.minAmountOut, amountInUsd: q.amountInUsd ?? null, amountOutUsd: q.amountOutUsd ?? null,
+      valuationUsd: valuation.status === "OK" ? valuation.usd : null, valuation,
       slippageBps: req.slippageTolerance, fees, depositAddress: dry ? null : q.depositAddress ?? null, depositMemo: dry ? null : q.depositMemo ?? null,
       timeEstimateSec: q.timeEstimate != null ? Math.round(q.timeEstimate) : null, expiresAt, providerDeadline,
       providerCorrelationId: res.correlationId ?? null, providerSignature: res.signature, providerTimestamp: res.timestamp,
       rejectionReason: ok ? null : check.problems.join("; "), request: req, response: res, createdAt: now,
     });
     if (!ok) {
+      const security = check.problems.some((x) => /signature|price check|quote-signing key/.test(x));
+      logEvent(security ? "error" : "warn", security ? "quote.security_rejected" : "quote.rejected", { executionId: args.executionId, quoteId: row.id, dry, problems: check.problems });
       const code = min && check.problems.some((x) => x.includes("below your minimum")) && check.problems.length === 1 ? "QUOTE_REJECTED" : "QUOTE_MISMATCH";
       throw new ExecutionError(code, `The quote was rejected: ${check.problems.join("; ")}.`, { quoteId: row.id });
     }

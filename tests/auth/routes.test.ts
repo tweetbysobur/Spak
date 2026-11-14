@@ -62,8 +62,9 @@ describe("auth routes", () => {
     const w = evmWallet();
     const codes = [];
     for (let i = 0; i < 12; i++) codes.push((await challenge(req("/api/auth/challenge", { body: { family: "evm", address: w.address }, ip: "10.9.9.9" }))).status);
-    expect(codes.slice(0, 10).every((c) => c === 200)).toBe(true);
-    expect(codes.slice(10)).toEqual([429, 429]);
+    // S-10: unauthenticated callers get half the bucket's limit (10 / 2 = 5), counted in the shared store.
+    expect(codes.slice(0, 5).every((c) => c === 200)).toBe(true);
+    expect(codes.slice(5).every((c) => c === 429)).toBe(true);
   });
 
   it("validates input", async () => {

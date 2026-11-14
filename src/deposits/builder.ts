@@ -29,7 +29,11 @@ export interface DisplayStep { action: string; detail: string }
 export type DepositTransaction =
   | { family: "evm"; kind: "NATIVE" | "ERC20"; chainId: number; request: { from: string; to: string; value: string; data: Hex }; steps: DisplayStep[]; approvals: [] }
   | { family: "solana"; kind: "NATIVE" | "SPL"; chain: "solana:mainnet"; transactionBase64: string; lastValidBlockHeight: number; tokenProgram: string | null; steps: DisplayStep[]; approvals: [] }
-  | { family: "near"; kind: "NATIVE" | "NEP141"; receiverId: string; actions: { type: "Transfer"; deposit: string }[] | { type: "FunctionCall"; methodName: "ft_transfer"; args: { receiver_id: string; amount: string; memo?: string }; gas: string; deposit: "1" }[]; steps: DisplayStep[]; approvals: []; walletSigning: false; reason: string };
+  | { family: "near"; kind: "NATIVE" | "NEP141"; receiverId: string; actions: { type: "Transfer"; deposit: string }[] | NearFunctionCall[]; steps: DisplayStep[]; approvals: []; walletSigning: false; reason: string };
+
+export type NearFunctionCall =
+  | { type: "FunctionCall"; methodName: "storage_deposit"; args: { account_id: string; registration_only: true }; gas: string; deposit: string }
+  | { type: "FunctionCall"; methodName: "ft_transfer"; args: { receiver_id: string; amount: string; memo?: string }; gas: string; deposit: "1" };
 
 export function depositKind(family: string, contract: string | null): DepositKind {
   if (!contract) return "NATIVE";
@@ -114,11 +118,33 @@ export async function buildDepositTransaction(rpc: ChainRpc, d: DepositInput): P
       return { family: "near", kind: "NATIVE", receiverId: d.depositAddress, actions: [{ type: "Transfer", deposit: d.amount }], approvals: [], walletSigning: false, reason,
         steps: [{ action: "Send NEAR", detail: `${human} (yoctoNEAR) to ${d.depositAddress}` }] };
     }
-    return { family: "near", kind: "NEP141", receiverId: d.contract, walletSigning: false, reason, approvals: [],
-      actions: [{ type: "FunctionCall", methodName: "ft_transfer", args: { receiver_id: d.depositAddress, amount: d.amount, ...(d.depositMemo ? { memo: d.depositMemo } : {}) }, gas: "30000000000000", deposit: "1" }],
-      steps: [{ action: `ft_transfer on ${d.contract}`, detail: `${human} to ${d.depositAddress}, attach 1 yoctoNEAR` }] };
+    // NEP-141 rejects ft_transfer to an account without storage on the token contract, and 1Click deposit accounts
+    // start unregistered (observed on mainnet USDC, 2026-11-14). Register it first, in the same transaction, when needed.
+    const storage = await nearStorageRequired(rpc, d.network, d.contract, d.depositAddress);
+    const actions: NearFunctionCall[] = [];
+    const steps: DisplayStep[] = [];
+    if (storage) {
+      actions.push({ type: "FunctionCall", methodName: "storage_deposit", args: { account_id: d.depositAddress, registration_only: true }, gas: "30000000000000", deposit: storage });
+      steps.push({ action: `storage_deposit on ${d.contract}`, detail: `account_id ${d.depositAddress}, registration_only true, attach ${storage} yoctoNEAR` });
+    }
+    actions.push({ type: "FunctionCall", methodName: "ft_transfer", args: { receiver_id: d.depositAddress, amount: d.amount, ...(d.depositMemo ? { memo: d.depositMemo } : {}) }, gas: "30000000000000", deposit: "1" });
+    steps.push({ action: `ft_transfer on ${d.contract}`, detail: `${human} to ${d.depositAddress}, attach 1 yoctoNEAR` });
+    return { family: "near", kind: "NEP141", receiverId: d.contract, walletSigning: false, reason, approvals: [], actions, steps };
   }
   throw new ExecutionError("UNSUPPORTED_NETWORK", `Deposits on ${net.name} are not supported yet.`);
+}
+
+/** yoctoNEAR to attach to storage_deposit when `account` is not registered on `contract`; null when it already is. */
+export async function nearStorageRequired(rpc: ChainRpc, network: string, contract: string, account: string): Promise<string | null> {
+  const view = async (method: string, args: object) => {
+    const r = await rpc.call<{ result: number[] }>(network, "query", { request_type: "call_function", finality: "final", account_id: contract, method_name: method, args_base64: Buffer.from(JSON.stringify(args)).toString("base64") });
+    return JSON.parse(Buffer.from(r.result).toString("utf8")) as unknown;
+  };
+  const balance = await view("storage_balance_of", { account_id: account });
+  if (balance !== null) return null;
+  const bounds = (await view("storage_balance_bounds", {})) as { min?: string } | null;
+  if (!bounds?.min || !/^\d+$/.test(bounds.min)) throw new ExecutionError("CHAIN_UNAVAILABLE", `${contract} did not report its storage deposit.`);
+  return bounds.min;
 }
 
 /** Sender balance of the deposit asset. "unknown" when the chain cannot be read; the wallet still checks. */

@@ -8,7 +8,7 @@ import { toQuoteView } from "@/execution";
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   return handle(req, async () => {
     const c = await executionContext(req);
-    rateLimit(req, "exec-quote", 30, 60_000, c.userId);
+    await rateLimit(req, "exec-quote", 30, 60_000, c.userId);
     const id = idSchema("exe").parse((await ctx.params).id);
     const s = (await spak()).execution;
     const r = await s.requote({ userId: c.userId, executionId: id, wallets: c.wallets });

@@ -44,7 +44,6 @@ beforeEach(async () => {
 });
 
 async function start(amount = 50, via: string | null = agentId, text = `Swap ${amount} USDC on Base to SOL on Solana`) {
-  h.fake.usdIn = `${amount}.0`;
   const r = await u.plan(text);
   expect(r.status, JSON.stringify(r.errors)).toBe("VALIDATED");
   const x = await h.svc.create({ userId: u.userId, planHash: r.plan!.hash, idempotencyKey: `k-${Math.random().toString(36).slice(2)}`, wallets: await u.wallets(), agentId: via });

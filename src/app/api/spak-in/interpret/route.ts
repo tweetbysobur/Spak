@@ -12,7 +12,7 @@ export async function POST(req: Request) {
   return handle(req, async () => {
     const body = await req.json();
     const ctx = await spakContext(req, body?.sessionId);
-    rateLimit(req, "interpret", 60, 60_000, ctx.userId);
+    await rateLimit(req, "interpret", 60, 60_000, ctx.userId);
     const engine = (await spak()).engine;
     const result = await guardedInterpret(ctx.userId, (g) => engine.interpret({
       text: body?.text, timezone: body?.timezone, transactions: body?.transactions,

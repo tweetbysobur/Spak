@@ -603,8 +603,25 @@ describe("stage 8: background re-verification", () => {
   });
   it("duplicate concurrent jobs check each account once", async () => {
     await activeDue();
-    const [x, y] = await Promise.all([svc.recheckDue({ sleep: noSleep }), svc.recheckDue({ sleep: noSleep })]);
-    expect(x.checked + y.checked).toBe(1);
+    const runs = await Promise.all(Array.from({ length: 6 }, () => svc.recheckDue({ sleep: noSleep })));
+    expect(runs.reduce((s, r) => s + r.checked, 0)).toBe(1);
+  });
+  // Deterministic interleaving (PostgreSQL only; PGlite has one connection): job A has claimed the account and not yet
+  // committed when job B runs. Before the fix, B waited on A's row lock, re-checked only `id in (...)` against a stale
+  // subquery snapshot, and claimed the same account again after A committed.
+  it.runIf(!!process.env.SPAK_TEST_PG_URL)("a job that races an uncommitted claim never claims the same account", async () => {
+    await activeDue();
+    const pool = (db as unknown as { $client: { connect(): Promise<{ query(q: string, p?: unknown[]): Promise<{ rowCount: number | null }>; release(): void }> } }).$client;
+    const a = await pool.connect();
+    try {
+      await a.query("begin");
+      const held = await a.query("update spak_agent_accounts set check_lease_until = $1 where status = 'ACTIVE' and check_lease_until is null", [new Date(clock.now + 10 * 60_000)]);
+      expect(held.rowCount).toBe(1);
+      const b = svc.recheckDue({ sleep: noSleep });
+      await new Promise((r) => setTimeout(r, 300));
+      await a.query("commit");
+      expect((await b).checked).toBe(0);
+    } finally { a.release(); }
   });
   it("disabled or unconfigured: does nothing", async () => {
     await activeDue();

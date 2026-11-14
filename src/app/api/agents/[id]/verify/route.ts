@@ -11,7 +11,7 @@ import { agentIdParam } from "@/server/agent-ids";
  */
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   return agentRoute(req, async (userId) => {
-    rateLimit(req, "agent-verify", 20, 60_000, userId);
+    await rateLimit(req, "agent-verify", 20, 60_000, userId);
     const b = z.object({
       challengeId: z.string().regex(/^ach_[0-9a-f]{24}$/), method: z.string().max(64), accountId: z.string().min(2).max(64),
       publicKey: z.string().max(100), signature: z.string().max(200),

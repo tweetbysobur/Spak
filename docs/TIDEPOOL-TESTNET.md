@@ -17,7 +17,7 @@ One build and one server run exactly one environment.
 | Assets | `data/assets.json` (from 1Click) | `data/testnet-assets.json` (from Tidepool `/v0/tokens`) |
 | Provider ids | `asset-map.json` | `tidepool-asset-map.json` (every id ends in `.testnet`) |
 | Provider | 1Click, `ONECLICK_API_URL` | Tidepool, `SPAK_TIDEPOOL_API_URL` |
-| Quote signatures | Optional (`SPAK_ONECLICK_VERIFY_SIGNATURES=1`) | Always verified against Tidepool's maker key |
+| Quote signatures | Always verified against 1Click's published key | Always verified against Tidepool's maker key |
 | Source and destination RPC | Mainnet RPCs | Testnet RPCs (`SPAK_RPC_BASE_SEPOLIA`, …) |
 | NEAR identity RPC | Mainnet | Testnet |
 | Database | Marked `mainnet` | Marked `tidepool-testnet` |

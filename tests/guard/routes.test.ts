@@ -3,9 +3,12 @@
  * MOCKED: the 1Click provider (Fake1Click).
  */
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { Fake1Click } from "../execution/fake-1click";
+import { Fake1Click, TEST_QUOTE_PUBLIC_KEY } from "../execution/fake-1click";
+import { honestUsd } from "../pricing/fake-prices";
 
 const fake = new Fake1Click();
+fake.usdIn = (b) => honestUsd(b.originAsset, b.amount); // an honest provider (S-6 cross-check)
+process.env.SPAK_ONECLICK_QUOTE_PUBLIC_KEY = TEST_QUOTE_PUBLIC_KEY; // the fake signs with a test key (S-3)
 const realFetch = globalThis.fetch;
 vi.stubGlobal("fetch", async (url: string | URL, init?: RequestInit) => {
   const u = String(url);
@@ -147,18 +150,18 @@ describe("Guard enforcement through the API", () => {
     const ap = await j(await approveExec(req(`/api/executions/${id}/approve`, { cookie: alice.cookie, body: { quoteId: f.quote.id, approval: { planHash: r.plan.hash, planRevision: c.execution.plan.revision, approvedAt: new Date().toISOString(), allowDuplicate: true } } }), p(id)));
     expect(ap.status, JSON.stringify(ap.body)).toBe(200);
     const mine = (await j(await execGuard(req(`/api/executions/${id}/guard`, { method: "GET", cookie: alice.cookie }), p(id)))).body;
-    expect(mine.reservation).toMatchObject({ status: "RESERVED", amountUsd: "50.0" });
+    expect(mine.reservation).toMatchObject({ status: "RESERVED", amountUsd: "14.000000" }); // SPak's own valuation of 14 USDC (S-6)
     expect(mine.decisions.map((d: { stage: string }) => d.stage)).toContain("APPROVAL");
     expect((await execGuard(req(`/api/executions/${id}/guard`, { method: "GET", cookie: bob.cookie }), p(id))).status).toBe(404);
-    expect((await guard(alice)).spending.dayUsd).toBe("50");
+    expect((await guard(alice)).spending.dayUsd).toMatch(/^14(\.0+)?$/);
   });
   it("a daily limit set through the API blocks the next transfer at its first quote, with a plain reason", async () => {
-    await patch(alice, { dailyLimitUsd: "60", weeklyLimitUsd: null, monthlyLimitUsd: null });
+    await patch(alice, { dailyLimitUsd: "20", weeklyLimitUsd: null, monthlyLimitUsd: null });
     const r = await plan(alice, "Bridge 15 USDC from Base to Arbitrum");
     const f = await create(alice, r.plan.hash);
     expect(f.status).toBe(403);
     expect(f.body.error).toMatchObject({ code: "GUARD_BLOCKED", details: { outcome: "BLOCKED", stage: "QUOTE", failedRules: ["DAILY_LIMIT"] } });
-    expect(f.body.error.message).toMatch(/last 24 hours to \$100/);
+    expect(f.body.error.message).toMatch(/last 24 hours to \$29/);
     expect(f.body.error.message).not.toMatch(/sql|stack|select|undefined/i);
   });
 });

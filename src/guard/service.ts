@@ -1,3 +1,4 @@
+import { logEvent } from "../ops/log";
 import { randomBytes } from "node:crypto";
 import { and, desc, eq, gt, inArray, ne, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -284,6 +285,7 @@ export class GuardService {
 
   async record(userId: string, d: GuardDecision, q: Db = this.d.db): Promise<string> {
     const decisionId = id("gdc");
+    if (d.outcome === "BLOCKED" || d.outcome === "NEEDS_CONFIGURATION") logEvent("warn", "guard.denied", { stage: d.stage, outcome: d.outcome, executionId: d.executionId, rules: d.rules.filter((r) => r.status === "FAIL" || r.status === "NEEDS_CONFIGURATION").map((r) => r.rule) });
     await q.insert(guardDecisions).values({
       id: decisionId, userId, executionId: d.executionId, stage: d.stage, outcome: d.outcome, planHash: d.planHash, quoteId: d.quoteId,
       policyVersion: d.policyVersion, valueUsd: d.valueUsd, rules: d.rules, reasons: d.reasons, at: new Date(d.evaluatedAt),
@@ -390,7 +392,7 @@ export class GuardService {
   }
 
   private fail(e: unknown): ExecutionError {
-    console.error("[spak-guard] evaluation failed", e);
+    logEvent("error", "guard.unavailable", { error: (e as Error)?.message ?? String(e) });
     return unavailable();
   }
 }
@@ -401,7 +403,7 @@ function subjectOf(row: ExecutionRow, quote: QuoteRow): GuardSubject {
   return {
     sourceNetwork: row.sourceNetwork, destinationNetwork: row.destinationNetwork, sourceAssetId: row.sourceAssetId, destinationAssetId: row.destinationAssetId,
     recipient: row.recipient, recipientKind: row.recipientKind === "SELF" ? "SELF" : "EXTERNAL", slippageBps: quote.slippageBps,
-    valueUsd: cleanUsd(quote.amountInUsd), quote: { amountOut: quote.amountOut, minAmountOut: quote.minAmountOut },
+    valueUsd: cleanUsd(quote.valuationUsd), quote: { amountOut: quote.amountOut, minAmountOut: quote.minAmountOut },
     planHash: row.planHash, quoteId: quote.id, executionId: row.id,
   };
 }

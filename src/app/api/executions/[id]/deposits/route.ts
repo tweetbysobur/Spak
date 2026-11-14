@@ -21,7 +21,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   return handle(req, async () => {
     const c = await executionContext(req);
-    rateLimit(req, "deposit-prepare", 20, 60_000, c.userId);
+    await rateLimit(req, "deposit-prepare", 20, 60_000, c.userId);
     const id = idSchema("exe").parse((await ctx.params).id);
     const s = await spak();
     const r = await s.deposits.prepare({ userId: c.userId, executionId: id, wallets: c.wallets });

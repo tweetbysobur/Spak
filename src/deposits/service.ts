@@ -9,7 +9,7 @@ import type { VerifiedWallet } from "../execution/plan-validator";
 import { newId } from "../execution/quote-service";
 import type { ExecutionRecords, ExecutionRow } from "../execution/records";
 import type { ExecutionService } from "../execution/service";
-import { buildDepositTransaction, depositKind, senderBalance, type DepositInput, type DepositTransaction } from "./builder";
+import { buildDepositTransaction, depositKind, nearStorageRequired, senderBalance, type DepositInput, type DepositTransaction } from "./builder";
 import { DepositRecords, DuplicateTxError, type DepositRow } from "./records";
 import { RpcUnavailable, type ChainRpc } from "./rpc";
 import { DEPOSIT_LIVE, type DepositExpectation, type DepositState } from "./types";
@@ -101,6 +101,15 @@ export class DepositService {
     let transaction: DepositTransaction;
     try { transaction = await buildDepositTransaction(this.d.rpc, input); }
     catch (e) { if (e instanceof RpcUnavailable) throw new ExecutionError("CHAIN_UNAVAILABLE", e.message); throw e; }
+    // A NEP-141 payout to a NEAR account without storage on the token contract fails after the deposit. No sampled
+    // NEAR Intents payout registered storage for the recipient, so SPak refuses before any funds move.
+    const dest = getAsset(ex.destinationAssetId);
+    if (getNetwork(ex.destinationNetwork)?.family === "near" && dest?.contract) {
+      let missing: string | null;
+      try { missing = await nearStorageRequired(this.d.rpc, ex.destinationNetwork, dest.contract, ex.recipient); }
+      catch (e) { if (e instanceof RpcUnavailable) throw new ExecutionError("CHAIN_UNAVAILABLE", e.message); throw e; }
+      if (missing) throw new ExecutionError("RECIPIENT_NOT_REGISTERED", `${ex.recipient} is not registered for ${dest.symbol} on NEAR, so the payout would fail. Register it first (storage_deposit on ${dest.contract}, ${missing} yoctoNEAR), or choose another NEAR account.`);
+    }
     const balance = await senderBalance(this.d.rpc, input);
     if (balance.sufficient === false) {
       throw new ExecutionError("INSUFFICIENT_BALANCE", `Your wallet holds ${balance.balance} base units of ${input.symbol}; this deposit needs ${input.amount}.`, { balance: balance.balance, required: input.amount });

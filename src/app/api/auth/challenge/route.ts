@@ -14,7 +14,7 @@ const body = z.object({
 /** POST /api/auth/challenge  Issue a one-time message for the wallet to sign. LINK needs a session. */
 export async function POST(req: Request) {
   return route(req, async () => {
-    rateLimit(req, "auth-challenge", 10);
+    await rateLimit(req, "auth-challenge", 10);
     const b = body.parse(await req.json());
     const user = b.purpose === "LINK" ? await currentUser(req) : null;
     const origin = appOrigin(req);

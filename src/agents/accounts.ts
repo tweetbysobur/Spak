@@ -410,8 +410,12 @@ export class AgentAccountService {
     if (!this.cfg || !this.d.chain || !this.cfg.recheck.enabled) return { ...out, disabled: true };
     const sleep = opts.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
     const now = this.clock();
+    // The lease conditions are repeated outside the subquery: under READ COMMITTED a job that waited on a row lock
+    // re-checks only the outer WHERE against the committed row, while the subquery keeps its older snapshot. SKIP LOCKED
+    // lets concurrent jobs take different rows instead of queueing. Each due account is claimed by exactly one job.
+    const unleased = sql`${agentAccounts.status} = 'ACTIVE' and ${agentAccounts.nextCheckAt} <= ${now.toISOString()}::timestamptz and (${agentAccounts.checkLeaseUntil} is null or ${agentAccounts.checkLeaseUntil} < ${now.toISOString()}::timestamptz)`;
     const claimed = await this.d.db.update(agentAccounts).set({ checkLeaseUntil: new Date(now.getTime() + 10 * 60_000) })
-      .where(sql`${agentAccounts.id} in (select id from ${agentAccounts} where ${agentAccounts.status} = 'ACTIVE' and ${agentAccounts.nextCheckAt} <= ${now.toISOString()}::timestamptz and (${agentAccounts.checkLeaseUntil} is null or ${agentAccounts.checkLeaseUntil} < ${now.toISOString()}::timestamptz) order by ${agentAccounts.nextCheckAt} limit ${opts.limit ?? 50})`)
+      .where(sql`${unleased} and ${agentAccounts.id} in (select id from ${agentAccounts} where ${unleased} order by ${agentAccounts.nextCheckAt} limit ${opts.limit ?? 50} for update skip locked)`)
       .returning();
     for (const r of claimed) {
       out.checked++;

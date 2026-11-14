@@ -64,12 +64,18 @@ export class FakeChain implements ChainRpc {
       case "query": {
         const q = params as { request_type: string; account_id: string; args_base64?: string };
         if (q.request_type === "view_account") return { amount: bal(q.account_id).toString() } as T;
+        const method = (params as { method_name?: string }).method_name;
+        if (method === "storage_balance_bounds") return { result: [...Buffer.from(JSON.stringify({ min: "1250000000000000000000", max: "1250000000000000000000" }))] } as T;
         const who = JSON.parse(Buffer.from(q.args_base64 ?? "", "base64").toString()).account_id as string;
+        if (method === "storage_balance_of") return { result: [...Buffer.from(JSON.stringify(this.nearUnregistered.has(`${q.account_id}|${who}`) ? null : { total: "1250000000000000000000", available: "0" }))] } as T;
         return { result: [...Buffer.from(JSON.stringify(bal(who, q.account_id).toString()))] } as T;
       }
       default: throw new Error(`FakeChain: unsupported ${method}`);
     }
   }
+
+  /** NEP-145: "<token contract>|<account>" pairs with no storage on the contract. */
+  nearUnregistered = new Set<string>();
 
   setBalance(network: string, owner: string, amount: bigint, token = "native") { this.balances.set(`${network}|${owner.toLowerCase()}|${token.toLowerCase()}`, amount); }
 

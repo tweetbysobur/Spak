@@ -12,7 +12,7 @@ const patch = z.object({
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
   return route(req, async () => {
     const u = await requireUser(req);
-    rateLimit(req, "wallets", 60, 60_000, u.userId);
+    await rateLimit(req, "wallets", 60, 60_000, u.userId);
     const { id } = await ctx.params;
     const b = patch.parse(await req.json());
     const auth = await authService();

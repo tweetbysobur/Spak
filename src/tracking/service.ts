@@ -3,7 +3,8 @@ import { toDepositView } from "../deposits/service";
 import { ExecutionError } from "../execution/errors";
 import type { ExecutionRecords, ExecutionRow } from "../execution/records";
 import type { ExecutionService } from "../execution/service";
-import type { DestinationVerifier } from "./destination";
+import { isDestinationReference, NOT_DESTINATION_CHAIN, type DestinationVerifier } from "./destination";
+import { getNetwork } from "../spak-in/registries/networks";
 import { txExplorerUrl } from "./explorers";
 import type { DestinationVerificationRow, TrackingRecords } from "./records";
 import type { FailureService } from "../failures/service";
@@ -50,15 +51,22 @@ export class TrackingService {
     let row = await this.owned(userId, id);
     if (row.monitorGaveUpAt) await this.d.tracking.resume(row.id);
     row = (await this.d.execution.checkProvider(row)).row;
+    // A-3: provider references that cannot be destination-chain transactions are classified in any state (audit kept).
+    await this.d.destination.classifyReferences(row);
     if (row.state === "VERIFYING_DESTINATION") await this.d.destination.verify(row);
     if (this.d.failures && (row.state === "FAILED" || row.state === "REFUNDING")) await this.d.failures.verifyRefund(userId, id, true).catch(() => undefined);
     return this.view(userId, id);
   }
 }
 
+/**
+ * A reference that cannot be a transaction on the destination chain is shown as what it is (a provider reference),
+ * with no explorer link, whatever its stored outcome: the view never presents it as a pending destination transaction.
+ */
 function destinationView(v: DestinationVerificationRow) {
+  const onChain = isDestinationReference(getNetwork(v.network)?.family, v.txHash);
   return {
-    network: v.network, txHash: v.txHash, explorerUrl: txExplorerUrl(v.network, v.txHash), outcome: v.outcome, recipient: v.recipient,
+    network: v.network, txHash: v.txHash, explorerUrl: onChain ? txExplorerUrl(v.network, v.txHash) : null, outcome: onChain ? v.outcome : NOT_DESTINATION_CHAIN, recipient: v.recipient,
     assetId: v.assetId, tokenContract: v.tokenContract, receivedAmount: v.receivedAmount, confirmations: v.confirmations, problems: v.problems,
     attempts: v.attempts, firstCheckedAt: v.firstCheckedAt.toISOString(), lastCheckedAt: v.lastCheckedAt.toISOString(), verifiedAt: v.verifiedAt?.toISOString() ?? null,
   };
@@ -101,7 +109,10 @@ export function toTrackingView(
     recipient: r.recipient, refundAddress: r.refundAddress, refundedAmount: r.refundedAmount,
     sourceTxs: [...new Set([...deps.filter((d) => d.txHash).map((d) => d.txHash!), ...originHashes])].map((h) => ({ hash: h, explorerUrl: txExplorerUrl(r.sourceNetwork, h) })),
     deposits: deps.map((d) => toDepositView(d, [])),
-    destinationTxs: dest.length ? dest.map(destinationView) : destHashes.map((h) => ({ network: r.destinationNetwork, txHash: h, explorerUrl: txExplorerUrl(r.destinationNetwork, h), outcome: "NOT_CHECKED" })),
+    destinationTxs: dest.length ? dest.map(destinationView) : destHashes.map((h) => {
+      const onChain = isDestinationReference(getNetwork(r.destinationNetwork)?.family, h);
+      return { network: r.destinationNetwork, txHash: h, explorerUrl: onChain ? txExplorerUrl(r.destinationNetwork, h) : null, outcome: onChain ? "NOT_CHECKED" : NOT_DESTINATION_CHAIN };
+    }),
     needsReconciliation: (r.error as { code?: string } | null)?.code === "NEEDS_RECONCILIATION" || !!r.monitorGaveUpAt,
     note: r.lastStatusError,
     monitoring: { nextCheckAt: r.monitorNextAt?.toISOString() ?? null, consecutiveFailures: r.monitorFailures, stoppedAt: r.monitorGaveUpAt?.toISOString() ?? null },

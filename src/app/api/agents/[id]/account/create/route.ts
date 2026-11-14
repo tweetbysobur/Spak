@@ -12,7 +12,7 @@ import { agentIdParam } from "@/server/agent-ids";
  */
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   return agentRoute(req, async (userId) => {
-    rateLimit(req, "agent-account-create", 5, 60_000, userId);
+    await rateLimit(req, "agent-account-create", 5, 60_000, userId);
     const idempotencyKey = idempotencyKeySchema.parse(req.headers.get("idempotency-key"));
     const b = z.object({ challengeId: z.string().regex(/^aac_[0-9a-f]{24}$/), accountId: z.string().min(2).max(64), publicKey: z.string().max(100), signature: z.string().max(200) }).strict().parse(await req.json());
     return NextResponse.json({ account: await (await agentAccountService()).create(userId, agentIdParam((await ctx.params).id), { ...b, idempotencyKey: `${userId}:${idempotencyKey}`, domain: agentDomain(req) }) });

@@ -11,7 +11,7 @@ import { toQuoteView } from "@/execution";
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   return handle(req, async () => {
     const c = await executionContext(req);
-    rateLimit(req, "exec-firm", 10, 60_000, c.userId);
+    await rateLimit(req, "exec-firm", 10, 60_000, c.userId);
     const id = idSchema("exe").parse((await ctx.params).id);
     const b = firmQuoteBody.parse(await req.json());
     const s = (await spak()).execution;

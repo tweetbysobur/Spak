@@ -11,7 +11,7 @@ import { agentIdParam } from "@/server/agent-ids";
  */
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   return agentRoute(req, async (userId) => {
-    rateLimit(req, "agent-wallet-challenge", 20, 60_000, userId);
+    await rateLimit(req, "agent-wallet-challenge", 20, 60_000, userId);
     const b = z.object({ walletId: z.string().min(1).max(64), chainId: z.number().int().positive().optional() }).strict().parse(await req.json());
     return NextResponse.json(await (await agentWalletService()).challenge(userId, agentIdParam((await ctx.params).id), { ...b, domain: agentDomain(req), uri: agentUri(req) }));
   });

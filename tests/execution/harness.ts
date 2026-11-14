@@ -13,12 +13,16 @@ import { Fake1Click } from "./fake-1click";
 import { GuardService } from "@/guard";
 import { DbAgentGate } from "@/agents/gate";
 import { AgentGrantService } from "@/agents/grants";
+import { PriceService } from "@/pricing/oracle";
+import { FakePrices, honestUsd } from "../pricing/fake-prices";
+import { TEST_QUOTE_PUBLIC_KEY } from "./fake-1click";
 import type { NearRpc } from "@/auth/verify/near";
 
 export const T0 = Date.parse("2026-11-10T10:00:00Z");
 
 /** A real user (signed in with real keys) with a verified EVM and Solana wallet, real SPak-in, mocked 1Click. */
-export async function harness(opts: { client?: OneClickClient } = {}) {
+/** Live runs pass the real client, the published 1Click key and a real price reader; everything else stays as below. */
+export async function harness(opts: { client?: OneClickClient; quotePublicKey?: string; priceService?: PriceService } = {}) {
   const db: Db = await freshDb();
   const clock = { now: T0 };
   const now = () => new Date(clock.now);
@@ -33,13 +37,22 @@ export async function harness(opts: { client?: OneClickClient } = {}) {
   const nearKeys = new Map<string, "FullAccess" | "FunctionCall">();
   const nearRpc: NearRpc = { accessKey: async (a, k) => nearKeys.get(`${a}|${k}`) ?? null };
   const grants = new AgentGrantService({ db, clock: now, nearRpc });
-  const svc = new ExecutionService({ guard, agents: agentGate, grants, client: opts.client ?? new OneClickClient({ fetchImpl: fake.fetch as typeof fetch }), records, plans: new IntentLogPlanStore(db), audit: new PgAuditLog(db), clock: now });
+  // MOCKED independent prices (S-6). Tests change h.prices.usd, ageSec or down.
+  const prices = new FakePrices(now);
+  // By default the fake provider reports the same USD value SPak computes from the test prices (an honest provider).
+  fake.usdIn = (body) => honestUsd(body.originAsset, body.amount, prices.usd);
+  const svc = new ExecutionService({ guard, agents: agentGate, grants, prices: opts.priceService ?? new PriceService(prices, now), quotePublicKey: opts.quotePublicKey ?? TEST_QUOTE_PUBLIC_KEY, client: opts.client ?? new OneClickClient({ fetchImpl: fake.fetch as typeof fetch }), records, plans: new IntentLogPlanStore(db), audit: new PgAuditLog(db), clock: now });
 
   const chain = new FakeChain();
   const depositRecords = new DepositRecords(db, now);
   const deposits = new DepositService({ guard, agents: agentGate, grants, records: depositRecords, executions: records, executionService: svc, rpc: chain, client: new OneClickClient({ fetchImpl: fake.fetch as typeof fetch }), audit: new PgAuditLog(db), clock: now });
   const tracking = new TrackingRecords(db, now);
-  const destination = new DestinationVerifier({ executions: records, tracking, rpc: chain, audit: new PgAuditLog(db), clock: now });
+  // Trusted route senders per destination network (MOCKED route evidence for the fake chain). Tests may change it.
+  const trusted = new Map<string, string[]>([
+    ["solana", ["7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"]], ["near", ["intents.near"]],
+    ["arbitrum", ["0x2e6ad9e6d59bb4585ea0e6762c3b637dde29dad2"]], ["base", ["0x2e6ad9e6d59bb4585ea0e6762c3b637dde29dad2"]], ["ethereum", ["0x2e6ad9e6d59bb4585ea0e6762c3b637dde29dad2"]],
+  ]);
+  const destination = new DestinationVerifier({ executions: records, tracking, rpc: chain, audit: new PgAuditLog(db), clock: now, trustedSenders: (n) => trusted.get(n) ?? [] });
   const failureRecords = new FailureRecords(db, now);
   // Refund-evidence capability for tests. Lifecycle tests run as if NEAR Intents' refund evidence were CONFIRMED (SIMULATED);
   // production defaults to UNCONFIRMED (see docs/NEAR-INTENTS-REFUND-EVIDENCE.md). Tests switch it via h.capability.value.
@@ -67,7 +80,7 @@ export async function harness(opts: { client?: OneClickClient } = {}) {
     };
     return { userId, evm: e, sol: s, near: n, wallets, plan };
   }
-  return { db, clock, now, auth, guard, grants, nearKeys, spakIn, fake, svc, records, newUser, chain, deposits, depositRecords, tracking, destination, monitor, trackingService, failureRecords, refunds, failures, reviews, capability };
+  return { db, clock, now, auth, guard, grants, nearKeys, trusted, prices, spakIn, fake, svc, records, newUser, chain, deposits, depositRecords, tracking, destination, monitor, trackingService, failureRecords, refunds, failures, reviews, capability };
 }
 
 export const approval = (planHash: string, at: Date, allowDuplicate = false, planRevision = 0) => ({ planHash, planRevision, approvedAt: at.toISOString(), allowDuplicate });

@@ -1,3 +1,4 @@
+import { PROVIDER_LABEL } from "@/environment";
 /**
  * Tracking model: turns the server's own execution and tracking views into what the user sees. It only reads.
  * Rules it must never break (tested in tests/tracking/model.test.ts):
@@ -95,8 +96,8 @@ export function stagesOf(x: ExecutionView, t: TrackingView | null): Stage[] {
     { id: "DEPOSIT_SUBMITTED", title: "Deposit sent", detail: "Your wallet signed and sent the deposit.", status: st("DEPOSIT_SUBMITTED"), at: step("DEPOSIT_SUBMITTED")?.at ?? null,
       refs: (t?.sourceTxs ?? []).map((s) => ({ hash: s.hash, url: s.explorerUrl ?? null })) },
     { id: "DEPOSIT_CONFIRMED", title: "Deposit confirmed", detail: "SPak checked the deposit on the source chain.", status: st("DEPOSIT_CONFIRMED"), at: step("DEPOSIT_CONFIRMED")?.at ?? null, refs: [] },
-    { id: "PROCESSING", title: "NEAR Intents processing", detail: "NEAR Intents executes the cross-chain transfer.", status: st("PROCESSING"), at: step("PROCESSING")?.at ?? null, refs: [] },
-    { id: "DESTINATION_DETECTED", title: "Destination transaction detected", detail: "NEAR Intents reported a transaction on the destination network.", status: st("DESTINATION_DETECTED"), at: step("DESTINATION_DETECTED")?.at ?? null,
+    { id: "PROCESSING", title: `${PROVIDER_LABEL} processing`, detail: `${PROVIDER_LABEL} executes the cross-chain transfer.`, status: st("PROCESSING"), at: step("PROCESSING")?.at ?? null, refs: [] },
+    { id: "DESTINATION_DETECTED", title: "Destination transaction detected", detail: `${PROVIDER_LABEL} reported a transaction on the destination network.`, status: st("DESTINATION_DETECTED"), at: step("DESTINATION_DETECTED")?.at ?? null,
       refs: (t?.destinationTxs ?? []).map((d) => ({ hash: d.txHash, url: d.explorerUrl ?? null, label: d.outcome })) },
     { id: "VERIFIED", title: "Delivery verified", detail: "SPak read the destination chain and confirmed the recipient received at least the approved minimum.", status: verifyStatus,
       at: step("COMPLETED")?.at ?? null, refs: [] },

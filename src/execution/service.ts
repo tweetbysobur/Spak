@@ -1,3 +1,4 @@
+import { logEvent } from "../ops/log";
 import { z } from "zod";
 import { OneClickError, type OneClickClient } from "../integrations/near-intents/client";
 import { hashObject } from "../spak-in/lib/hash";
@@ -9,6 +10,7 @@ import { compareDecimal } from "../spak-in/lib/decimal";
 import { QuoteService, newId, providerError } from "./quote-service";
 import type { ExecutionRecords, ExecutionRow, QuoteRow } from "./records";
 import type { Db } from "../database/repositories";
+import type { PriceService } from "../pricing/oracle";
 import { GuardDecisionError, guardError, type GuardService } from "../guard/service";
 import { cleanUsd } from "../guard/engine";
 import { DELAYED_AFTER_MS, TERMINAL, stateFromProvider, type ExecutionState } from "./state";
@@ -20,7 +22,7 @@ export const MIN_STATUS_INTERVAL_MS = 3_000;
 
 /** A firm quote must be approved within this window after SPak received it; otherwise request a new one. */
 export const FIRM_APPROVAL_TTL_MS = 10 * 60_000;
-/** Per-execution ceiling in USD (from the provider's amountInUsd). Fails closed when the value is unknown. No Guard setting can raise it. */
+/** Per-execution ceiling in USD (from SPak's own valuation, src/pricing; the provider's amountInUsd is only cross-checked). Fails closed when the value is unknown. No Guard setting can raise it. */
 export { platformCeilingUsd as maxExecutionUsd } from "../guard/ceiling";
 import { platformCeilingUsd as maxExecutionUsd } from "../guard/ceiling";
 
@@ -46,8 +48,10 @@ export interface ExecutionDeps {
   agents?: AgentGate;
   /** Stage 10: Agent permissions. Without it, an Agent can never approve; the user approves every transfer. */
   grants?: GrantAuthority;
-  /** Provider quote-signing key. Set in the Tidepool testnet build: unsigned or mis-signed quotes are rejected. */
-  quotePublicKey?: string | null;
+  /** Provider quote-signing key (S-3). Required: unsigned or mis-signed quotes are rejected; without a key, every quote is. */
+  quotePublicKey: string | null;
+  /** S-6: independent valuation. Without it no quote has a USD value, so Guard blocks every transfer (fail closed). */
+  prices?: PriceService | null;
 }
 
 /** Stage 10: the Agent's permission, checked before and inside an Agent approval. Implemented by AgentGrantService. */
@@ -78,7 +82,7 @@ export class ExecutionService {
   constructor(private readonly d: ExecutionDeps) {
     this.clock = d.clock ?? (() => new Date());
     this.resolver = new AssetResolver(d.client, this.clock);
-    this.quotes = new QuoteService(d.client, d.records, this.clock, d.quotePublicKey ?? null);
+    this.quotes = new QuoteService(d.client, d.records, this.clock, d.quotePublicKey ?? null, d.prices ?? null);
   }
 
   private async prepare(userId: string, planHash: string, wallets: VerifiedWallet[]) {
@@ -257,15 +261,17 @@ export class ExecutionService {
       throw new ExecutionError("APPROVAL_MISMATCH", "The quote no longer matches this execution. Get a new quote.");
     }
     const limit = maxExecutionUsd();
-    const usdIn = cleanUsd(firm.amountInUsd);
+    // S-6: SPak's own valuation, never the provider's figure alone.
+    const usdIn = cleanUsd(firm.valuationUsd);
     if (!usdIn || compareDecimal(usdIn, limit) > 0) {
-      throw new ExecutionError("AMOUNT_LIMIT_EXCEEDED", firm.amountInUsd ? `This is about $${Number(firm.amountInUsd).toFixed(2)}, above the $${limit} limit per execution.` : "The USD value of this execution is unknown, so it cannot be checked against the limit.");
+      throw new ExecutionError("AMOUNT_LIMIT_EXCEEDED", usdIn ? `This is about $${Number(usdIn).toFixed(2)}, above the $${limit} limit per execution.` : "SPak could not establish the USD value of this execution independently, so it cannot be checked against the limit.");
     }
     await this.prepare(userId, row.planHash, wallets);
     // An Agent transfer is approved only while the Agent can still act: a suspended or revoked Agent stops it here.
     await assertAgent(this.d.agents, userId, row.agentId);
     if (!allowDuplicate) {
       const recent = await this.d.records.recentSameTransfer(userId, row.fingerprint, new Date(now.getTime() - DUPLICATE_WINDOW_MS), row.id);
+      if (recent.length) logEvent("warn", "execution.duplicate_suspected", { executionId: row.id, existing: recent[0].id });
       if (recent.length) throw new ExecutionError("DUPLICATE_SUSPECTED", "You started the same transfer less than 2 minutes ago. Confirm to do it again.", { existing: recent[0].id });
     }
     return firm;
@@ -300,11 +306,11 @@ export class ExecutionService {
       }
       if ((e as Error).name === "GrantDecisionError") throw asApprovalRequired(e);
       if (e instanceof ExecutionError) throw e;
-      console.error("[spak-execution] approval failed", e);
+      logEvent("error", "execution.approval_failed", { executionId: row.id, error: (e as Error)?.message });
       throw new ExecutionError("GUARD_UNAVAILABLE", "Guard could not check this transfer, so it was not approved. Try again shortly.");
     }
     if (!r) throw new ExecutionError("INVALID_STATE", "The execution changed during approval. Reload it.");
-    await this.d.audit?.record({ at: now.toISOString(), actor: c.actor, event: "EXECUTION_APPROVED", ref: row.id, data: { approvalId: approval.id, approvedBy: approval.approvedBy, grantId: approval.grantId, grantVersion: approval.grantVersion, planHash: row.planHash, planRevision: row.planRevision, firmQuoteId: firm.id, depositAddress: firm.depositAddress, amountInUsd: firm.amountInUsd } });
+    await this.d.audit?.record({ at: now.toISOString(), actor: c.actor, event: "EXECUTION_APPROVED", ref: row.id, data: { approvalId: approval.id, approvedBy: approval.approvedBy, grantId: approval.grantId, grantVersion: approval.grantVersion, planHash: row.planHash, planRevision: row.planRevision, firmQuoteId: firm.id, depositAddress: firm.depositAddress, amountInUsd: firm.amountInUsd, valuationUsd: firm.valuationUsd } });
     return { execution: r, quote: firm, duplicate: false, approval };
   }
 
@@ -437,6 +443,7 @@ export class ExecutionService {
 function asApprovalRequired(e: unknown): unknown {
   const g = e as { name?: string; message?: string; reasons?: string[]; rules?: unknown[] };
   if (g?.name !== "GrantDecisionError") return e;
+  logEvent("warn", "agent.permission_denied", { rules: (g.rules as { rule: string; ok: boolean }[] | undefined)?.filter((r) => !r.ok).map((r) => r.rule) ?? [] });
   return new ExecutionError("AGENT_APPROVAL_REQUIRED", `${g.message} Approve this transfer yourself.`, { reasons: g.reasons ?? [], rules: g.rules ?? [] });
 }
 
@@ -452,7 +459,8 @@ export function toQuoteView(q: QuoteRow, now: Date = new Date()) {
   return {
     id: q.id, kind: q.kind, status: expired ? "EXPIRED" : q.status, executionId: q.executionId,
     plan: { planId: q.planId, planHash: q.planHash, revision: q.planRevision },
-    source: { network: q.sourceNetwork, assetId: q.sourceAssetId, providerAssetId: q.providerOriginAsset, amountIn: q.amountIn, amountInUsd: q.amountInUsd },
+    source: { network: q.sourceNetwork, assetId: q.sourceAssetId, providerAssetId: q.providerOriginAsset, amountIn: q.amountIn, amountInUsd: q.amountInUsd, valuationUsd: q.valuationUsd },
+    valuation: q.valuation ?? null,
     destination: { network: q.destinationNetwork, assetId: q.destinationAssetId, providerAssetId: q.providerDestinationAsset, amountOut: q.amountOut, minAmountOut: q.minAmountOut, amountOutUsd: q.amountOutUsd },
     slippageBps: q.slippageBps, fees: q.fees, timeEstimateSec: q.timeEstimateSec,
     deposit: q.depositAddress ? { address: q.depositAddress, memo: q.depositMemo, deadline: q.providerDeadline?.toISOString() ?? null } : null,

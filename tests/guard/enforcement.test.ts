@@ -44,7 +44,7 @@ describe("default policy and the existing flow", () => {
     expect(Object.keys(p.networks)).toContain("base");
     const ex = await approved();
     expect(ex.state).toBe("AWAITING_DEPOSIT");
-    expect(await reservation(ex.id)).toMatchObject({ status: "RESERVED", amountUsd: "50.0" });
+    expect(await reservation(ex.id)).toMatchObject({ status: "RESERVED", amountUsd: "50.000000" }); // SPak's own valuation (S-6)
     const stages = (await h.guard.decisionsFor(u.userId, ex.id)).map((d) => `${d.stage}:${d.outcome}`);
     expect(stages).toEqual(["QUOTE:REQUIRES_APPROVAL", "QUOTE:REQUIRES_APPROVAL", "FIRM_QUOTE:REQUIRES_APPROVAL", "APPROVAL:ALLOWED"]);
   });
@@ -77,9 +77,14 @@ describe("enforcement at every step", () => {
     const [q] = await h.db.execute(sql`select status from spak_quotes`).then((r) => (r as unknown as { rows: { status: string }[] }).rows);
     expect(q.status).toBe("REJECTED");
   });
-  it("quote: an unknown USD value fails closed", async () => {
+  it("quote: an unknown USD value fails closed (SPak cannot price the asset independently)", async () => {
     h.fake.usdIn = null;
+    h.prices.down = true;
     expect(await code(create())).toBe("GUARD_BLOCKED");
+  });
+  it("quote: a missing provider USD value is not required when SPak prices the asset itself", async () => {
+    h.fake.usdIn = null;
+    expect(await code(create())).toBe("OK");
   });
   it("firm quote: a policy change after the indicative quote blocks the firm quote, and no deposit address is shown", async () => {
     const x = await create();
@@ -352,7 +357,7 @@ describe("migration 0009 backfill", () => {
     await h.db.delete(guardReservations);
     await h.db.execute(sql.raw(backfill));
     await h.db.execute(sql.raw(backfill));
-    expect(await reservation(live.id)).toMatchObject({ status: "RESERVED", amountUsd: "50.0", decisionId: "migration-0009" });
+    expect(await reservation(live.id)).toMatchObject({ status: "RESERVED", amountUsd: "50.000000", decisionId: "migration-0009" });
     expect(await reservation(done.id)).toMatchObject({ status: "RELEASED" });
     expect(await h.db.select().from(guardReservations)).toHaveLength(2);
     h.chain.setBalance("base", u.evm.address, 100_000_000n, USDC);
@@ -390,6 +395,6 @@ describe("audit regressions", () => {
     expect(cleanUsd("1.2e3")).toBeNull();
     expect(cleanUsd("50.0")).toBe("50.0");
     h.fake.usdIn = "1,234.56";
-    expect(await code(create())).toBe("GUARD_BLOCKED");
+    expect(await code(create())).toBe("QUOTE_MISMATCH"); // refused as a price disagreement, never ignored
   });
 });

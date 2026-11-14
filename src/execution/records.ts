@@ -7,6 +7,8 @@ import type { ExecutionPlan } from "../spak-in/schemas/plan";
 import type { IssuedPlan, PlanStore } from "./plan-validator";
 import type { ExecutionState } from "./state";
 import { assertTransition } from "./state";
+import { logEvent } from "../ops/log";
+import { AlertService } from "../ops/alerts";
 
 export type ExecutionRow = typeof executions.$inferSelect;
 export type ExecutionInsert = typeof executions.$inferInsert;
@@ -43,6 +45,7 @@ export class ExecutionRecords {
   /** Insert, or return the existing row when the idempotency key or the plan was already used by this user. */
   async createOrGet(row: ExecutionInsert): Promise<{ row: ExecutionRow; created: boolean }> {
     try {
+      logEvent("info", "execution.create", { userId: row.userId, planHash: row.planHash, agent: !!row.agentId });
       await this.db.transaction(async (tx) => {
         await tx.insert(executions).values(row);
         await tx.insert(executionEvents).values({ executionId: row.id, at: row.createdAt, fromState: null, toState: row.state, reason: "Execution created.", data: {} });
@@ -96,7 +99,11 @@ export class ExecutionRecords {
    */
   async transition(id: string, from: ExecutionState, to: ExecutionState, reason: string, patch: Partial<ExecutionInsert> = {}, data: Record<string, unknown> = {},
     inTx?: (tx: Db, row: ExecutionRow) => Promise<void>) {
-    assertTransition(from, to);
+    try { assertTransition(from, to); } catch (e) {
+      logEvent("error", "execution.unexpected_transition", { executionId: id, from, to });
+      await new AlertService(this.db).raise({ kind: "UNEXPECTED_TRANSITION", severity: "CRITICAL", dedupeKey: `transition:${id}:${from}:${to}`, ref: id, message: `Refused unexpected state transition ${from} to ${to} for ${id}.` }).catch(() => undefined);
+      throw e;
+    }
     const now = this.clock();
     return this.db.transaction(async (t) => {
       const tx = t as unknown as Db;
@@ -119,6 +126,7 @@ export class ExecutionRecords {
       if (from !== to || Object.keys(data).length) {
         await tx.insert(executionEvents).values({ executionId: id, at: now, fromState: from, toState: to, reason, data });
       }
+      if (from !== to) logEvent("info", "execution.transition", { executionId: id, from, to, reason: reason.slice(0, 200) });
       return r;
     });
   }
@@ -127,6 +135,12 @@ export class ExecutionRecords {
   async hasConfirmedDeposit(executionId: string): Promise<boolean> {
     const [r] = await this.db.select({ id: deposits.id }).from(deposits).where(and(eq(deposits.executionId, executionId), eq(deposits.state, "CONFIRMED"))).limit(1);
     return !!r;
+  }
+
+  /** The confirmed source deposit (the one SPak verified on chain), or null. */
+  async confirmedDeposit(executionId: string) {
+    const [r] = await this.db.select().from(deposits).where(and(eq(deposits.executionId, executionId), eq(deposits.state, "CONFIRMED"))).limit(1);
+    return r ?? null;
   }
 
   /** True when a deposit transaction was submitted, is being verified, or was confirmed. */

@@ -103,16 +103,10 @@ const post = (page, url, body) => page.evaluate(async ({ url, body }) => { const
   try {
     await firmBtn.waitFor({ timeout: 45000 });
     await firmBtn.click();
-    const agentBtn = page.locator('[data-agent-approve]');
-    await agentBtn.waitFor({ timeout: 45000 });
-    ok('firm quote for an Agent transfer offers "Let my Agent approve"', true);
+    // This release: the user approves every transfer in their own wallet. Agent approval is not offered on Review.
+    await page.getByRole('button', { name: 'Approve', exact: true }).waitFor({ timeout: 45000 });
+    ok('firm quote offers only the user\'s own Approve (no Agent approval in this release)', (await page.locator('[data-agent-approve]').count()) === 0 && (await page.getByText('Let my Agent approve').count()) === 0);
     await page.screenshot({ path: `${OUT}/permissions-03-review.png`, fullPage: true });
-    await agentBtn.click();
-    const outcome = await Promise.race([
-      page.getByText('Your Agent cannot approve this one').waitFor({ timeout: 30000 }).then(() => 'REQUIRED'),
-      page.getByText(/Step 3 of 7/).waitFor({ timeout: 30000 }).then(() => 'APPROVED'),
-    ]).catch(() => 'NONE');
-    ok('Agent approval resolves to approved (deposit step) or a clear "approve it yourself"', outcome !== 'NONE', outcome);
     await page.screenshot({ path: `${OUT}/permissions-04-after-agent.png`, fullPage: true });
   } catch {
     const said = (await page.locator('[aria-live=polite]').first().innerText().catch(() => '')).replace(/\s+/g, ' ').slice(-300);

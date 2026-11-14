@@ -10,7 +10,7 @@ import { spak } from "@/server/spak";
  */
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   return agentRoute(req, async (userId) => {
-    rateLimit(req, "agent-grant-prepare", 10, 60_000, userId);
+    await rateLimit(req, "agent-grant-prepare", 10, 60_000, userId);
     return NextResponse.json(await (await spak()).grants.prepare(userId, agentIdParam((await ctx.params).id), await req.json(), agentDomain(req)));
   });
 }

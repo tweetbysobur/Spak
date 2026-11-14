@@ -356,7 +356,7 @@ export class AgentGrantService {
 
   private subject(row: ExecutionRow, firm: QuoteRow): GrantSubject {
     return { sourceNetwork: row.sourceNetwork, destinationNetwork: row.destinationNetwork, sourceAssetId: row.sourceAssetId, destinationAssetId: row.destinationAssetId,
-      recipient: row.recipient, recipientKind: row.recipientKind === "SELF" ? "SELF" : "EXTERNAL", valueUsd: cleanUsd(firm.amountInUsd) };
+      recipient: row.recipient, recipientKind: row.recipientKind === "SELF" ? "SELF" : "EXTERNAL", valueUsd: cleanUsd(firm.valuationUsd) };
   }
   private async assess(q: Db, userId: string, row: ExecutionRow, firm: QuoteRow, lock: boolean) {
     if (!row.agentId) throw new GrantDecisionError(["This transfer was not started through your Agent."], []);

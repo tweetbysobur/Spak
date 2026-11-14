@@ -24,3 +24,16 @@ jobs:
           code=$(curl -sS -o out.json -w '%{http_code}' -X POST -H "Authorization: Bearer $SECRET" --max-time 90 "$URL")
           cat out.json; echo
           test "$code" = "200"
+      # The isolated Tidepool testnet deployment (community-run sandbox, test tokens only), when configured.
+      - name: Run testnet monitor
+        if: always()
+        env:
+          URL: ${{ secrets.SPAK_TESTNET_MONITOR_URL }}
+          SECRET: ${{ secrets.SPAK_TESTNET_MONITOR_SECRET }}
+        run: |
+          URL=$(printf '%s' "$URL" | tr -d '[:space:]')
+          SECRET=$(printf '%s' "$SECRET" | tr -d '[:space:]')
+          if [ -z "$URL" ] || [ -z "$SECRET" ]; then echo "Testnet monitor secrets not set; skipping."; exit 0; fi
+          code=$(curl -sS -o out.json -w '%{http_code}' -X POST -H "Authorization: Bearer $SECRET" --max-time 90 "$URL")
+          cat out.json; echo
+          test "$code" = "200"

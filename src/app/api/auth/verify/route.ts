@@ -12,7 +12,7 @@ const body = z.object({
 /** POST /api/auth/verify  Check the signature. SIGN_IN sets the session cookie; LINK adds the wallet. */
 export async function POST(req: Request) {
   return route(req, async () => {
-    rateLimit(req, "auth-verify", 20);
+    await rateLimit(req, "auth-verify", 20);
     const b = body.parse(await req.json());
     const user = await currentUser(req);
     const auth = await authService();

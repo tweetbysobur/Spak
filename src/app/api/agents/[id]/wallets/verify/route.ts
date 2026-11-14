@@ -10,7 +10,7 @@ import { agentIdParam } from "@/server/agent-ids";
  */
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   return agentRoute(req, async (userId) => {
-    rateLimit(req, "agent-wallet-verify", 30, 60_000, userId);
+    await rateLimit(req, "agent-wallet-verify", 30, 60_000, userId);
     const b = z.object({
       challengeId: z.string().regex(/^awc_[0-9a-f]{24}$/), signature: z.string().min(1).max(300),
       publicKey: z.string().max(100).optional(), accountId: z.string().max(64).optional(),

@@ -4,6 +4,20 @@
  * see tests/live/execution.live.test.ts for that.
  */
 import { randomBytes } from "node:crypto";
+import { ed25519 } from "@noble/curves/ed25519.js";
+import { base58 } from "@scure/base";
+import { quoteSigningMessage } from "@/integrations/near-intents/signature";
+import type { OneClickQuoteResponse } from "@/integrations/near-intents/client";
+
+/**
+ * MOCKED provider signing key (TEST ONLY). The fake signs every quote with the same scheme 1Click and Tidepool use, so
+ * SPak's signature check runs in every unit test. Never a real provider key.
+ */
+const TEST_QUOTE_SECRET = new Uint8Array(32).fill(7);
+export const TEST_QUOTE_PUBLIC_KEY = `ed25519:${base58.encode(ed25519.getPublicKey(TEST_QUOTE_SECRET))}`;
+export function signQuote(r: Omit<OneClickQuoteResponse, "signature">): string {
+  return `ed25519:${base58.encode(ed25519.sign(new TextEncoder().encode(quoteSigningMessage({ ...r, signature: "" } as OneClickQuoteResponse)), TEST_QUOTE_SECRET))}`;
+}
 import mapData from "@/integrations/near-intents/data/asset-map.json";
 import { SPAK_TO_ONECLICK } from "@/integrations/near-intents/networks";
 import { listAssets } from "@/spak-in/registries/assets";
@@ -12,7 +26,7 @@ const MAP = (mapData as { map: Record<string, string> }).map;
 
 export type FakeMode =
   | "ok" | "http400" | "http401" | "http429" | "http500" | "timeout" | "network" | "invalid-json-shape"
-  | "echo-wrong-recipient" | "echo-wrong-asset" | "amount-in-differs" | "excess-slippage" | "no-deposit-address" | "bad-deposit-address" | "worse-firm";
+  | "echo-wrong-recipient" | "echo-wrong-asset" | "amount-in-differs" | "excess-slippage" | "no-deposit-address" | "bad-deposit-address" | "worse-firm" | "bad-signature";
 
 export class Fake1Click {
   mode: FakeMode = "ok";
@@ -25,7 +39,8 @@ export class Fake1Click {
   rate = { num: 12n, den: 1n };
   firmRate: { num: bigint; den: bigint } | null = null;
   /** USD value the quote reports for the input amount. Null leaves it out. */
-  usdIn: string | null = "50.0";
+  /** Provider-reported USD for amountIn. A function lets the harness quote consistently with the test prices. */
+  usdIn: string | null | ((body: { originAsset: string; amount: string }) => string | null) = "50.0";
 
   tokens() {
     return listAssets().filter((a) => MAP[a.id] && !this.delistedAssets.has(MAP[a.id])).map((a) => ({
@@ -70,7 +85,7 @@ export class Fake1Click {
     if (this.mode === "echo-wrong-recipient") echo.recipient = "0x9999999999999999999999999999999999999999";
     if (this.mode === "echo-wrong-asset") echo.destinationAsset = "nep141:eth.bridge.near";
     const quote: Record<string, unknown> = {
-      amountIn: this.mode === "amount-in-differs" ? String(BigInt(body.amount) - 1n) : body.amount, amountInFormatted: "x", ...(this.usdIn !== null ? { amountInUsd: this.usdIn } : {}),
+      amountIn: this.mode === "amount-in-differs" ? String(BigInt(body.amount) - 1n) : body.amount, amountInFormatted: "x", ...((u) => (u !== null ? { amountInUsd: u } : {}))(typeof this.usdIn === "function" ? this.usdIn(body) : this.usdIn),
       minAmountIn: body.amount, amountOut: amountOut.toString(), amountOutFormatted: "y", amountOutUsd: "49.9", minAmountOut: minAmountOut.toString(),
       timeEstimate: 32, refundFee: "2400", withdrawFee: "1000",
     };
@@ -79,7 +94,8 @@ export class Fake1Click {
       quote.deadline = body.deadline;
       quote.timeWhenInactive = body.deadline;
     }
-    return json(201, { correlationId: randomBytes(8).toString("hex"), timestamp: new Date().toISOString(), signature: `ed25519:${randomBytes(16).toString("hex")}`, quoteRequest: echo, quote });
+    const res = { correlationId: randomBytes(8).toString("hex"), timestamp: new Date().toISOString(), quoteRequest: echo, quote };
+    return json(201, { ...res, signature: this.mode === "bad-signature" ? signQuote({ ...res, quote: { ...quote, amountOut: "1" } }) : signQuote(res) });
   };
 }
 

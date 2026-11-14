@@ -14,7 +14,8 @@ import { PHASE_ROLE, PHASE_TITLE, fundsText, notificationFor, phaseOf, phaseSumm
 const TERMINAL: string[] = ["COMPLETED", "REFUNDED", "EXPIRED", "CANCELLED"];
 const net = (id: string) => getNetwork(id)?.name ?? id;
 const time = (s: string | null) => (s ? new Date(s).toLocaleString() : "");
-const OUTCOME: Record<string, string> = { CONFIRMED: "verified", PENDING: "pending", NOT_FOUND: "not found yet", FAILED: "failed", NO_TRANSFER: "no transfer to recipient", UNVERIFIABLE: "cannot be read by SPak", NOT_CHECKED: "not checked yet" };
+const OUTCOME: Record<string, string> = { CONFIRMED: "verified", PENDING: "pending", NOT_FOUND: "not found yet", FAILED: "failed", NO_TRANSFER: "no transfer to recipient", UNVERIFIABLE: "cannot be read by SPak", NOT_CHECKED: "not checked yet",
+  NOT_DESTINATION_CHAIN: "provider reference, not a destination transaction", UNTRUSTED_SENDER: "not from the route's sender; not counted", BEFORE_DEPOSIT: "older than your deposit; not counted" };
 
 /**
  * Progress marker. A finished stage uses the brand primary (a checkpoint), not the success colour: only the phase

@@ -3,6 +3,7 @@ import type { DeliveryExpectation, DeliveryResult } from "../types";
 
 interface TokenBal { mint: string; owner?: string; programId?: string; uiTokenAmount: { amount: string } }
 interface ParsedTx {
+  blockTime?: number | null;
   meta: { err: unknown; preBalances: number[]; postBalances: number[]; preTokenBalances?: TokenBal[]; postTokenBalances?: TokenBal[] } | null;
   transaction: { message: { accountKeys: { pubkey: string }[] } };
 }
@@ -35,5 +36,8 @@ export async function verifySolanaDelivery(rpc: ChainRpc, e: DeliveryExpectation
   }
   observed.received = received.toString();
   if (received === 0n) return { outcome: "NO_TRANSFER", received: "0", confirmations: null, problems, observed };
-  return { outcome: st.confirmationStatus === "finalized" ? "CONFIRMED" : "PENDING", received: received.toString(), confirmations: null, problems: [], observed };
+  // The fee payer signed and paid for the payout: it is the delivering party SPak can bind to a route.
+  const from = tx.transaction.message.accountKeys[0]?.pubkey ?? "";
+  return { outcome: st.confirmationStatus === "finalized" ? "CONFIRMED" : "PENDING", received: received.toString(), confirmations: null, problems: [], observed: { ...observed, feePayer: from },
+    transfers: [{ from, amount: received.toString() }], blockTime: typeof tx.blockTime === "number" ? tx.blockTime : null };
 }

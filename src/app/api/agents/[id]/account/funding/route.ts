@@ -11,7 +11,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
 /** POST /api/agents/:id/account/funding  Read the dedicated account's balance on NEAR now and record it. */
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   return agentRoute(req, async (userId) => {
-    rateLimit(req, "agent-funding-check", 10, 60_000, userId);
+    await rateLimit(req, "agent-funding-check", 10, 60_000, userId);
     return NextResponse.json({ funding: await (await agentFundingService()).check(userId, agentIdParam((await ctx.params).id)) });
   });
 }

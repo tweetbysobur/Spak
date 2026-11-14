@@ -97,11 +97,14 @@ describe("provider configuration: strict separation, no fallback", () => {
     const { providerConfig } = await import("@/integrations/near-intents/provider");
     expect(() => providerConfig(env as Record<string, string>, "mainnet")).toThrow();
   });
-  it("mainnet default is unchanged: 1Click, signature check off unless opted in", async () => {
+  it("mainnet: 1Click with its official quote key always enforced; it cannot be turned off or set to Tidepool's key", async () => {
     vi.resetModules();
     const { providerConfig } = await import("@/integrations/near-intents/provider");
-    expect(providerConfig({}, "mainnet")).toMatchObject({ kind: "ONECLICK_MAINNET", baseUrl: "https://1click.chaindefuser.com", quotePublicKey: null });
-    expect(providerConfig({ SPAK_ONECLICK_VERIFY_SIGNATURES: "1" }, "mainnet").quotePublicKey).toMatch(/^ed25519:/);
+    const { ONECLICK_QUOTE_PUBLIC_KEY, TIDEPOOL_QUOTE_PUBLIC_KEY } = await import("@/integrations/near-intents/signature");
+    expect(providerConfig({}, "mainnet")).toMatchObject({ kind: "ONECLICK_MAINNET", baseUrl: "https://1click.chaindefuser.com", quotePublicKey: ONECLICK_QUOTE_PUBLIC_KEY });
+    expect(() => providerConfig({ SPAK_ONECLICK_VERIFY_SIGNATURES: "0" }, "mainnet")).toThrow();
+    expect(() => providerConfig({ SPAK_ONECLICK_QUOTE_PUBLIC_KEY: TIDEPOOL_QUOTE_PUBLIC_KEY }, "mainnet")).toThrow();
+    expect(() => providerConfig({ SPAK_ONECLICK_QUOTE_PUBLIC_KEY: "nope" }, "mainnet")).toThrow();
   });
 });
 

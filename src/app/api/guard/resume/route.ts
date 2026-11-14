@@ -7,7 +7,7 @@ import { handle, spak } from "@/server/spak";
 export async function POST(req: Request) {
   return handle(req, async () => {
     const u = await requireUser(req);
-    rateLimit(req, "guard-write", 30, 60_000, u.userId);
+    await rateLimit(req, "guard-write", 30, 60_000, u.userId);
     const b = z.object({ version: z.number() }).parse(await req.json());
     return NextResponse.json(await (await spak()).guard.resume(u.userId, b.version));
   });

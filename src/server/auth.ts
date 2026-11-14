@@ -1,4 +1,6 @@
 import "server-only";
+import { RateLimiter, trustedClientIp } from "@/ops/rate-limit";
+import { logEvent } from "@/ops/log";
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { AuthService } from "@/auth/service";
@@ -67,21 +69,25 @@ export function assertSameOrigin(req: Request) {
 // ------------------------------------------------------------------ rate limiting
 
 /**
- * Fixed-window limiter in process memory. Good for one instance and for slowing brute force;
- * use a shared store (Redis, Postgres) when running several instances.
+ * S-10: shared rate limiting (PostgreSQL, see src/ops/rate-limit.ts). Authenticated requests are limited per user;
+ * unauthenticated ones per trusted client address (never a spoofable header unless the deployment says it is
+ * overwritten by its proxy) and at half the limit. If the counter store cannot be reached the request is refused (503):
+ * expensive provider and chain calls never run unmetered.
  */
-const windows = new Map<string, { start: number; count: number }>();
-export function rateLimit(req: Request, bucket: string, limit: number, windowMs = 60_000, key?: string) {
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() || req.headers.get("x-real-ip") || "local";
-  const k = `${bucket}:${key ?? ip}`;
-  const now = Date.now();
-  const w = windows.get(k);
-  if (!w || now - w.start >= windowMs) {
-    windows.set(k, { start: now, count: 1 });
-    if (windows.size > 50_000) for (const [kk, v] of windows) if (now - v.start >= windowMs) windows.delete(kk);
-    return;
+export async function rateLimit(req: Request, bucket: string, limit: number, windowMs = 60_000, key?: string): Promise<void> {
+  const subject = key ? `u:${key}` : `ip:${trustedClientIp(req) ?? "unidentified"}`;
+  const effective = key ? limit : Math.max(1, Math.ceil(limit / 2));
+  let r;
+  try {
+    r = await new RateLimiter(await getDb()).hit(bucket, subject, effective, windowMs);
+  } catch (e) {
+    logEvent("error", "rate_limit.store_unavailable", { bucket, error: (e as Error).message });
+    throw new AuthError("RATE_LIMIT_UNAVAILABLE", "SPak cannot check request limits right now. Try again shortly.");
   }
-  if (++w.count > limit) throw new AuthError("RATE_LIMITED", "Too many requests. Wait a minute and try again.");
+  if (!r.allowed) {
+    logEvent("warn", "rate_limit.exceeded", { bucket, authenticated: !!key, count: r.count, limit: r.limit });
+    throw new AuthError("RATE_LIMITED", "Too many requests. Wait a minute and try again.");
+  }
 }
 
 // ------------------------------------------------------------------ guards

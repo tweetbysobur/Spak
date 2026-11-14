@@ -13,7 +13,7 @@ const body = z.object({ txHash: z.string().trim().min(10).max(120) }).strict();
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   return handle(req, async () => {
     const c = await executionContext(req);
-    rateLimit(req, "exec-refund-submit", 10, 60_000, c.userId);
+    await rateLimit(req, "exec-refund-submit", 10, 60_000, c.userId);
     const id = idSchema("exe").parse((await ctx.params).id);
     const { txHash } = body.parse(await req.json());
     return NextResponse.json(await (await spak()).failures.submitRefundTx(c.userId, id, txHash));

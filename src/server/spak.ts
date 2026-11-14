@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { SpakIn, SpakInError, type SpakError } from "@/spak-in";
 import type { IntentResult } from "@/spak-in/schemas/result";
 import { providerClient, providerConfig } from "@/integrations/near-intents";
+import { logEvent } from "@/ops/log";
 import { getDb, PgAuditLog, PgIntentLog, PgSessionStore } from "@/database";
 import { ExecutionError, ExecutionRecords, ExecutionService, IntentLogPlanStore } from "@/execution";
 import { DepositRecords, DepositService, httpChainRpc } from "@/deposits";
@@ -12,6 +13,7 @@ import { AuthError } from "@/auth/types";
 import { GuardService } from "@/guard";
 import { DbAgentGate } from "@/agents/gate";
 import { AgentGrantService } from "@/agents/grants";
+import { httpPriceReader, PriceService } from "@/pricing/oracle";
 import { actingProblem } from "@/agents/authority";
 import { agents as agentsTable } from "@/database/schema";
 import { and, eq } from "drizzle-orm";
@@ -42,7 +44,7 @@ async function build() {
   const agentGate = new DbAgentGate(db);
   // Stage 10: the Agent's signed permission. Checked before and inside an Agent approval, and again at deposit.
   const grants = new AgentGrantService({ db });
-  const execution = new ExecutionService({ client, records: executionRecords, plans: new IntentLogPlanStore(db), audit, guard, agents: agentGate, grants, quotePublicKey: provider.quotePublicKey });
+  const execution = new ExecutionService({ client, records: executionRecords, plans: new IntentLogPlanStore(db), audit, guard, agents: agentGate, grants, quotePublicKey: provider.quotePublicKey, prices: new PriceService(httpPriceReader()) });
   // Deposits extend the same execution engine: same records, same provider client, plus source-chain RPC.
   const rpc = httpChainRpc();
   const depositRecords = new DepositRecords(db);
@@ -103,7 +105,7 @@ export function handle(req: Request, fn: () => Promise<Response>): Promise<Respo
       if (e instanceof ExecutionError) return NextResponse.json({ error: e.toJSON() }, { status: e.status });
       if (e instanceof AuthError) throw e;
       if (e instanceof SyntaxError || (e as { name?: string }).name === "ZodError") throw e;
-      console.error("[spak-in]", e);
+      logEvent("error", "request.unhandled", { error: (e as Error)?.message ?? String(e) });
       return NextResponse.json({ error: { code: "PROVIDER_ERROR", message: "Internal error." } }, { status: 500 });
     }
   });

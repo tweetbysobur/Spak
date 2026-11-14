@@ -14,7 +14,7 @@ import { toQuoteView } from "@/execution";
 export async function POST(req: Request) {
   return handle(req, async () => {
     const ctx = await executionContext(req);
-    rateLimit(req, "exec-create", 20, 60_000, ctx.userId);
+    await rateLimit(req, "exec-create", 20, 60_000, ctx.userId);
     const b = createBody.parse(await req.json());
     const idempotencyKey = idempotencyKeySchema.parse(req.headers.get("idempotency-key") ?? b.idempotencyKey);
     const s = (await spak()).execution;

@@ -281,9 +281,30 @@ describe("persistence", () => {
     await approve(x);
     const { ExecutionService, ExecutionRecords, IntentLogPlanStore } = await import("@/execution");
     const { OneClickClient } = await import("@/integrations/near-intents/client");
-    const fresh = new ExecutionService({ client: new OneClickClient({ fetchImpl: h.fake.fetch as typeof fetch }), records: new ExecutionRecords(h.db, h.now), plans: new IntentLogPlanStore(h.db), clock: h.now, guard: h.guard });
+    const fresh = new ExecutionService({ client: new OneClickClient({ fetchImpl: h.fake.fetch as typeof fetch }), records: new ExecutionRecords(h.db, h.now), plans: new IntentLogPlanStore(h.db), clock: h.now, guard: h.guard, quotePublicKey: null });
     const d = await fresh.details(x.execution.id, u.userId);
     expect(d).toMatchObject({ state: "AWAITING_DEPOSIT", plan: { planHash: x.execution.planHash } });
     expect((await fresh.history(u.userId, { limit: 5 }))[0].id).toBe(x.execution.id);
+  });
+});
+
+describe("S-3: provider quote signatures are mandatory", () => {
+  it("a quote with a signature from the wrong key, or over different content, is rejected; no key configured rejects every quote", async () => {
+    const { harness: mk } = await import("./harness");
+    const hh = await mk();
+    const uu = await hh.newUser();
+    const r = await uu.plan("Swap 50 USDC on Base to SOL on Solana");
+    hh.fake.mode = "bad-signature";
+    const err = await hh.svc.create({ userId: uu.userId, planHash: r.plan!.hash, idempotencyKey: "sig-bad-0001", wallets: await uu.wallets() }).then(() => null, (e) => e);
+    expect(err?.code).toBe("QUOTE_MISMATCH");
+    expect(err?.message).toMatch(/signature does not verify/);
+    hh.fake.mode = "ok";
+    const { ExecutionService, ExecutionRecords, IntentLogPlanStore } = await import("@/execution");
+    const { OneClickClient } = await import("@/integrations/near-intents/client");
+    const { PriceService } = await import("@/pricing/oracle");
+    const unkeyed = new ExecutionService({ client: new OneClickClient({ fetchImpl: hh.fake.fetch as typeof fetch }), records: new ExecutionRecords(hh.db, hh.now), plans: new IntentLogPlanStore(hh.db), clock: hh.now, guard: hh.guard, quotePublicKey: null, prices: new PriceService(hh.prices, hh.now) });
+    const r2 = await uu.plan("Swap 51 USDC on Base to SOL on Solana");
+    const e2 = await unkeyed.create({ userId: uu.userId, planHash: r2.plan!.hash, idempotencyKey: "sig-none-0001", wallets: await uu.wallets() }).then(() => null, (e) => e);
+    expect(e2?.message).toMatch(/no provider quote-signing key/);
   });
 });

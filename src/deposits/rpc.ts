@@ -62,8 +62,9 @@ export function httpChainRpc(fetchImpl: typeof fetch = fetch, timeoutMs = 10_000
           const body = (await res.json().catch(() => null)) as { result?: T; error?: { code?: number | string; message?: string; cause?: { name?: string }; data?: unknown } } | null;
           if (!body) { last = `${url}: HTTP ${res.status}`; continue; }
           if (body.error) {
-            // Rate limits and server faults are transport problems: try the next endpoint.
-            if (res.status === 429 || res.status >= 500 || /limit|too many|unavailable|timeout/i.test(body.error.message ?? "")) { last = `${url}: ${body.error.message}`; continue; }
+            // Rate limits, server faults and an endpoint refusing what it does not serve (for example publicnode's
+            // "Archive requests require a personal token" for older Arbitrum receipts) are endpoint problems: try the next one.
+            if (res.status === 429 || res.status >= 500 || /limit|too many|unavailable|timeout|archive|personal token|not supported/i.test(body.error.message ?? "")) { last = `${url}: ${body.error.message}`; continue; }
             throw new RpcAnswerError(body.error.cause?.name ?? body.error.code, body.error.message ?? "RPC error", body.error.data ?? body.error.cause);
           }
           return body.result as T;

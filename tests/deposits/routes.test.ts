@@ -3,11 +3,14 @@
  * MOCKED: the 1Click provider (Fake1Click) and the chain RPC (FakeChain behind http://chain.test).
  */
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { Fake1Click } from "../execution/fake-1click";
+import { Fake1Click, TEST_QUOTE_PUBLIC_KEY } from "../execution/fake-1click";
+import { honestUsd } from "../pricing/fake-prices";
 import { FakeChain } from "./fake-chain";
 
 process.env.SPAK_RPC_BASE = "http://chain.test/base";
 const fake = new Fake1Click();
+fake.usdIn = (b) => honestUsd(b.originAsset, b.amount); // an honest provider (S-6 cross-check)
+process.env.SPAK_ONECLICK_QUOTE_PUBLIC_KEY = TEST_QUOTE_PUBLIC_KEY; // the fake signs with a test key (S-3)
 const chain = new FakeChain();
 const realFetch = globalThis.fetch;
 vi.stubGlobal("fetch", async (url: string | URL, init?: RequestInit) => {

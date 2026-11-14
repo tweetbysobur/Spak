@@ -14,7 +14,7 @@ export async function GET(req: Request) {
  */
 export async function POST(req: Request) {
   return agentRoute(req, async (userId) => {
-    rateLimit(req, "agent-create", 10, 60_000, userId);
+    await rateLimit(req, "agent-create", 10, 60_000, userId);
     const b = z.object({ displayName: z.string().max(80) }).strict().parse(await req.json());
     return NextResponse.json({ agent: await (await agentService()).create(userId, b.displayName) }, { status: 201 });
   });

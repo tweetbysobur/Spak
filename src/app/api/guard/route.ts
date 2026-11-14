@@ -17,7 +17,7 @@ export async function GET(req: Request) {
 export async function PATCH(req: Request) {
   return handle(req, async () => {
     const u = await requireUser(req);
-    rateLimit(req, "guard-write", 30, 60_000, u.userId);
+    await rateLimit(req, "guard-write", 30, 60_000, u.userId);
     return NextResponse.json(await (await spak()).guard.update(u.userId, await req.json()));
   });
 }
