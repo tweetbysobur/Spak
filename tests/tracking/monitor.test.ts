@@ -17,8 +17,8 @@ const SOLVER = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
 let n = 0;
 
 /** Approved execution with a source deposit SPak verified on chain. */
-async function deposited(who = u) {
-  const r = await who.plan("Swap 50 USDC on Base to SOL on Solana");
+async function deposited(who = u, text = "Swap 50 USDC on Base to SOL on Solana") {
+  const r = await who.plan(text);
   const wallets = await who.wallets();
   const x = await h.svc.create({ userId: who.userId, planHash: r.plan!.hash, idempotencyKey: `k-${++n}-${Math.random()}`, wallets });
   const f = await h.svc.firmQuote({ userId: who.userId, executionId: x.execution.id, quoteId: x.quote!.id, wallets });
@@ -40,6 +40,28 @@ const tick = async (ms = 60_000) => { h.clock.now += ms; return h.monitor.run({ 
 const get = async (id: string) => (await h.records.get(id))!;
 
 describe("background monitoring with destination verification", () => {
+  it("EVM destination: a provider's non-EVM settlement hash among destination hashes is ignored, delivery is still proven on chain", async () => {
+    // Regression from the first real Tidepool settlement: Tidepool lists its NEAR settlement hash next to the Arbitrum payout.
+    const USDC_ARB = "0xaf88d065e77c8cc2239327c5edb3a432268e5831";
+    const { ex, sig, min } = await deposited(u, "Swap 50 USDC on Base to USDC on Arbitrum");
+    const payout = `0x${"97a4".padEnd(64, "0")}`;
+    providerSuccess(ex.depositAddress!, sig, ["isvXCRDGHHCVZ7jBjPrWmuTVXyE1oqGt4BgaNp5Wv4f", payout]);
+    h.chain.evmTx(payout, { network: "arbitrum", from: "0x2e6ad9e6d59bb4585ea0e6762c3b637dde29dad2", to: USDC_ARB, logs: [{ address: USDC_ARB, from: "0x2e6ad9e6d59bb4585ea0e6762c3b637dde29dad2", to: u.evm.address, amount: min }] });
+    await tick(); await tick();
+    const done = await get(ex.id);
+    expect(done).toMatchObject({ state: "COMPLETED", amountOutVerified: min.toString() });
+    const ev = (await h.db.select().from(executionEvents).where(eq(executionEvents.executionId, ex.id))).find((e) => e.toState === "COMPLETED");
+    expect(ev?.data).toMatchObject({ txs: [payout], ignoredNonChainReferences: ["isvXCRDGHHCVZ7jBjPrWmuTVXyE1oqGt4BgaNp5Wv4f"] });
+  });
+  it("EVM destination with only non-EVM references: never COMPLETED, goes to manual reconciliation", async () => {
+    const { ex, sig } = await deposited(u, "Swap 50 USDC on Base to USDC on Arbitrum");
+    providerSuccess(ex.depositAddress!, sig, ["isvXCRDGHHCVZ7jBjPrWmuTVXyE1oqGt4BgaNp5Wv4f"]);
+    await tick(); await tick();
+    const r = await get(ex.id);
+    expect(r.state).toBe("UNKNOWN");
+    expect(r.amountOutVerified).toBeNull();
+  });
+
   it("deposit confirmed → processing → destination detected → verified on chain → COMPLETED", async () => {
     const { ex, sig, min } = await deposited();
     expect((await get(ex.id)).state).toBe("PROCESSING"); // confirmed source deposit, provider has not reported yet

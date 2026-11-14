@@ -22,12 +22,17 @@ export class DestinationVerifier {
   async verify(row: ExecutionRow): Promise<{ row: ExecutionRow; ok: boolean; error?: string }> {
     if (row.state !== "VERIFYING_DESTINATION") return { row, ok: true };
     const net = getNetwork(row.destinationNetwork), asset = getAsset(row.destinationAssetId);
-    const hashes = (row.destinationTxHashes as string[]) ?? [];
+    const reported = (row.destinationTxHashes as string[]) ?? [];
+    // Providers can list their own settlement transactions (e.g. a NEAR intents hash) among "destination" hashes.
+    // On an EVM destination only a 32-byte 0x hash can be a transaction there; anything else is recorded as ignored and
+    // never counted. Delivery must still be proven on chain from the remaining references.
+    const ignored = net?.family === "evm" ? reported.filter((h) => !/^0x[0-9a-fA-F]{64}$/.test(h)) : [];
+    const hashes = reported.filter((h) => !ignored.includes(h));
     const firm = row.firmQuoteId ? await this.d.executions.getQuote(row.firmQuoteId) : null;
     const min = firm?.minAmountOut && /^\d+$/.test(firm.minAmountOut) ? BigInt(firm.minAmountOut) : null;
     if (!net || !asset || !hashes.length || min === null) {
       // Fail closed: without the approved minimum or a known asset, delivery cannot be proven.
-      return { row: await this.toUnknown(row, !hashes.length ? "No destination transaction reference to verify." : "Approved minimum output or destination asset is unknown; delivery cannot be verified."), ok: true };
+      return { row: await this.toUnknown(row, !hashes.length ? (ignored.length ? `No ${net?.name ?? "destination"} transaction among the provider's references (${ignored.join(", ")}).` : "No destination transaction reference to verify.") : "Approved minimum output or destination asset is unknown; delivery cannot be verified."), ok: true };
     }
 
     let total = 0n, allFinal = true, rpcError: string | undefined;
@@ -65,8 +70,8 @@ export class DestinationVerifier {
       const now = this.now();
       const r = await this.d.executions.transition(row.id, "VERIFYING_DESTINATION", "COMPLETED",
         `Delivery verified on ${net.name}: recipient received ${total} (minimum ${min}).`,
-        { amountOutVerified: total.toString(), destinationVerifiedAt: now }, { amountOutVerified: total.toString(), minAmountOut: min.toString(), txs: hashes });
-      await this.d.audit?.record({ at: now.toISOString(), actor: "spak", event: "DESTINATION_VERIFIED", ref: row.id, data: { network: row.destinationNetwork, received: total.toString(), min: min.toString(), txs: hashes } });
+        { amountOutVerified: total.toString(), destinationVerifiedAt: now }, { amountOutVerified: total.toString(), minAmountOut: min.toString(), txs: hashes, ...(ignored.length ? { ignoredNonChainReferences: ignored } : {}) });
+      await this.d.audit?.record({ at: now.toISOString(), actor: "spak", event: "DESTINATION_VERIFIED", ref: row.id, data: { network: row.destinationNetwork, received: total.toString(), min: min.toString(), txs: hashes, ignored } });
       return { row: r ?? (await this.d.executions.get(row.id))!, ok: true };
     }
     const why = total > 0n
