@@ -46,6 +46,7 @@ export function classifyWalletError(e: unknown): WalletErrorInfo {
   if (c === "4100" || c === "4900" || /no account|returned no account|not connected|locked/i.test(m)) {
     return { kind: "NO_ACCOUNT", message: "Unlock your wallet and connect an account, then try again.", retry: true };
   }
+  if (c === "NO_SOLANA_ACCOUNT") return { kind: "NO_ACCOUNT", message: m, retry: true };
   if (c === "4200" || /not support|cannot sign messages/i.test(m)) {
     return { kind: "UNSUPPORTED", message: "This wallet cannot sign sign-in messages. Use another wallet.", retry: false };
   }

@@ -7,7 +7,16 @@ import { base64 } from "@scure/base";
 type StdWallet = ReturnType<ReturnType<typeof getWallets>["get"]>[number];
 export interface SolanaWalletInfo { id: string; name: string; icon?: string; wallet: StdWallet }
 
-type ConnectFeature = { "standard:connect": { connect(input?: { silent?: boolean }): Promise<{ accounts: readonly { address: string }[] }> } };
+type StdAccount = { address: string; chains?: readonly string[]; features?: readonly string[] };
+type ConnectFeature = { "standard:connect": { connect(input?: { silent?: boolean }): Promise<{ accounts: readonly StdAccount[] }> } };
+
+/**
+ * Multi-chain wallets (for example ones that also hold NEAR or EVM accounts) can list a non-Solana account first.
+ * Only an account on a Solana chain that can sign messages may be used; when an account declares no chains or
+ * features, the wallet-level check in usable() applies.
+ */
+export const isSolanaSigner = (a: StdAccount) =>
+  (!a.chains?.length || a.chains.some((c) => c.startsWith("solana:"))) && (!a.features?.length || a.features.includes(SolanaSignMessage));
 type DisconnectFeature = { "standard:disconnect"?: { disconnect(): Promise<void> } };
 
 const usable = (w: StdWallet) => w.chains.some((c) => c.startsWith("solana:")) && SolanaSignMessage in w.features && "standard:connect" in w.features;
@@ -28,8 +37,10 @@ export function watchSolanaWallets(onChange: (wallets: SolanaWalletInfo[]) => vo
 export async function connectSolana(w: SolanaWalletInfo, opts: { pickAccount?: boolean } = {}): Promise<{ address: string }> {
   if (opts.pickAccount) await (w.wallet.features as unknown as DisconnectFeature)["standard:disconnect"]?.disconnect().catch(() => {});
   const { accounts } = await (w.wallet.features as unknown as ConnectFeature)["standard:connect"].connect();
-  const acct = accounts[0] ?? w.wallet.accounts[0];
-  if (!acct) throw Object.assign(new Error("The wallet returned no account."), { code: "4100" });
+  const all = [...accounts, ...(w.wallet.accounts as readonly StdAccount[])];
+  if (!all.length) throw Object.assign(new Error("The wallet returned no account."), { code: "4100" });
+  const acct = all.find(isSolanaSigner);
+  if (!acct) throw Object.assign(new Error(`${w.name} has no Solana account that can sign. Add or select a Solana account in the wallet, then try again.`), { code: "NO_SOLANA_ACCOUNT" });
   return { address: acct.address };
 }
 
