@@ -46,6 +46,8 @@ export interface ExecutionDeps {
   agents?: AgentGate;
   /** Stage 10: Agent permissions. Without it, an Agent can never approve; the user approves every transfer. */
   grants?: GrantAuthority;
+  /** Provider quote-signing key. Set in the Tidepool testnet build: unsigned or mis-signed quotes are rejected. */
+  quotePublicKey?: string | null;
 }
 
 /** Stage 10: the Agent's permission, checked before and inside an Agent approval. Implemented by AgentGrantService. */
@@ -76,7 +78,7 @@ export class ExecutionService {
   constructor(private readonly d: ExecutionDeps) {
     this.clock = d.clock ?? (() => new Date());
     this.resolver = new AssetResolver(d.client, this.clock);
-    this.quotes = new QuoteService(d.client, d.records, this.clock);
+    this.quotes = new QuoteService(d.client, d.records, this.clock, d.quotePublicKey ?? null);
   }
 
   private async prepare(userId: string, planHash: string, wallets: VerifiedWallet[]) {

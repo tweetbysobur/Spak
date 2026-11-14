@@ -1,4 +1,5 @@
 "use client";
+import { listNetworks } from "@/spak-in/registries/networks";
 import { useEffect, useMemo, useState } from "react";
 import { api, startExecution, type ExecutionView, type IntentResult, type QuoteView } from "@/lib/client";
 import { Button, Card, Field, SectionTitle, Select, inputCls } from "./ui";
@@ -12,7 +13,7 @@ interface Asset { id: string; network: string; symbol: string }
 export function Manual({ ownAddress, onReady }: { ownAddress: (network: string) => string | undefined; onReady: (i: IntentResult, e: ExecutionView, q: QuoteView) => void }) {
   const [nets, setNets] = useState<Net[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
-  const [f, setF] = useState({ sourceNetwork: "base", sourceAsset: "", amount: "", destinationNetwork: "solana", destinationAsset: "", recipient: "", slippageBps: 100 });
+  const [f, setF] = useState({ sourceNetwork: listNetworks()[0].id, sourceAsset: "", amount: "", destinationNetwork: listNetworks()[1]?.id ?? listNetworks()[0].id, destinationAsset: "", recipient: "", slippageBps: 100 });
   const [busy, setBusy] = useState(false);
   const [problems, setProblems] = useState<string[]>([]);
   const [guardBlock, setGuardBlock] = useState<GuardMessage | null>(null);

@@ -63,7 +63,7 @@ export function Recipients({ view, run }: { view: GuardView; run: Run }) {
 }
 
 function AddRecipient({ run, close }: { run: Run; close: () => void }) {
-  const [network, setNetwork] = useState("base");
+  const [network, setNetwork] = useState(listNetworks()[0].id);
   const [address, setAddress] = useState("");
   const [label, setLabel] = useState("");
   const [busy, setBusy] = useState(false);

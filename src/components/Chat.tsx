@@ -1,4 +1,5 @@
 "use client";
+import { PROVIDER_LABEL } from "@/environment";
 import { useEffect, useRef, useState } from "react";
 import { getNetwork } from "@/spak-in/registries/networks";
 import { api, formatUnits, startExecution, type ExecutionView, type IntentResult, type QuoteView } from "@/lib/client";
@@ -54,7 +55,7 @@ export function Chat({ timezone, onReady, onInterpret, initial }: {
         const b = planBlock(r.guard)!;
         add({ from: "spak", text: b.title, detail: [...b.reasons, "Nothing was quoted or created. You can change this in SPak Guard."], guard: true });
       } else {
-        add({ from: "spak", text: `Understood in ${r.meta.processingMs}ms. Getting a NEAR Intents quote for ${net(r.source.network)} → ${net(r.destination.network)}.`, detail: r.assumptions });
+        add({ from: "spak", text: `Understood in ${r.meta.processingMs}ms. Getting a ${PROVIDER_LABEL} quote for ${net(r.source.network)} → ${net(r.destination.network)}.`, detail: r.assumptions });
         const { execution, quote: q } = await startExecution(r.plan.hash, viaAgent && agent ? agent.id : null);
         add({ from: "spak", text: `Quote ready: about ${formatUnits(q.destination.amountOut, q.destination.assetId)}. Review it below.` });
         onReady(r, execution, q);

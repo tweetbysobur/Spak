@@ -1,0 +1,88 @@
+{
+ "meta": {
+  "source": "https://www.usetidepool.tech/v0/tokens",
+  "fetchedAt": "2026-11-13T21:14:41.181Z",
+  "count": 11,
+  "environment": "tidepool-testnet",
+  "note": "Test tokens with no value."
+ },
+ "assets": [
+  {
+   "id": "arbitrum-sepolia:0x38d81431b9f76d9699af7517040d5221d9dea252",
+   "network": "arbitrum-sepolia",
+   "symbol": "USDC",
+   "decimals": 6,
+   "contract": "0x38d81431b9f76d9699af7517040d5221d9dea252"
+  },
+  {
+   "id": "arbitrum-sepolia:0xc15cf5600225302675604310094f134e88705e62",
+   "network": "arbitrum-sepolia",
+   "symbol": "USDT",
+   "decimals": 6,
+   "contract": "0xc15cf5600225302675604310094f134e88705e62"
+  },
+  {
+   "id": "arbitrum-sepolia:native",
+   "network": "arbitrum-sepolia",
+   "symbol": "ETH",
+   "decimals": 18,
+   "contract": null
+  },
+  {
+   "id": "base-sepolia:0x38d81431b9f76d9699af7517040d5221d9dea252",
+   "network": "base-sepolia",
+   "symbol": "USDC",
+   "decimals": 6,
+   "contract": "0x38d81431b9f76d9699af7517040d5221d9dea252"
+  },
+  {
+   "id": "base-sepolia:0xc15cf5600225302675604310094f134e88705e62",
+   "network": "base-sepolia",
+   "symbol": "USDT",
+   "decimals": 6,
+   "contract": "0xc15cf5600225302675604310094f134e88705e62"
+  },
+  {
+   "id": "base-sepolia:native",
+   "network": "base-sepolia",
+   "symbol": "ETH",
+   "decimals": 18,
+   "contract": null
+  },
+  {
+   "id": "bsc-testnet:0x38d81431b9f76d9699af7517040d5221d9dea252",
+   "network": "bsc-testnet",
+   "symbol": "USDC",
+   "decimals": 6,
+   "contract": "0x38d81431b9f76d9699af7517040d5221d9dea252"
+  },
+  {
+   "id": "bsc-testnet:0xc15cf5600225302675604310094f134e88705e62",
+   "network": "bsc-testnet",
+   "symbol": "USDT",
+   "decimals": 6,
+   "contract": "0xc15cf5600225302675604310094f134e88705e62"
+  },
+  {
+   "id": "ethereum-sepolia:0x2e6ad9e6d59bb4585ea0e6762c3b637dde29dad2",
+   "network": "ethereum-sepolia",
+   "symbol": "USDC",
+   "decimals": 6,
+   "contract": "0x2e6ad9e6d59bb4585ea0e6762c3b637dde29dad2"
+  },
+  {
+   "id": "ethereum-sepolia:0x650f12ba31777de8ded47287a8cc86be737646fe",
+   "network": "ethereum-sepolia",
+   "symbol": "USDT",
+   "decimals": 6,
+   "contract": "0x650f12ba31777de8ded47287a8cc86be737646fe"
+  },
+  {
+   "id": "ethereum-sepolia:native",
+   "network": "ethereum-sepolia",
+   "symbol": "ETH",
+   "decimals": 18,
+   "contract": null
+  }
+ ]
+}

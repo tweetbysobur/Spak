@@ -46,3 +46,6 @@ next-env.d.ts
 
 # real-wallet test profiles and unpacked extensions
 .rw/
+
+# Tidepool testnet build (separate from the mainnet build)
+/.next-testnet/

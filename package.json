@@ -13,7 +13,8 @@
     "bench": "tsx scripts/benchmark.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
-    "test:live": "LIVE=1 vitest run tests/live"
+    "test:live": "LIVE=1 vitest run tests/live",
+    "registry:sync:testnet": "tsx scripts/sync-tidepool-assets.ts"
   },
   "dependencies": {
     "@near-wallet-selector/core": "^10.1.4",

@@ -1,3 +1,4 @@
+import { IS_TESTNET } from "../../environment";
 import { createHash } from "node:crypto";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { base58, base64, hex } from "@scure/base";
@@ -43,7 +44,12 @@ export interface NearRpc {
   accessKey(accountId: string, publicKey: string): Promise<"FullAccess" | "FunctionCall" | null>;
 }
 
-export const DEFAULT_NEAR_RPC = ["https://rpc.mainnet.near.org", "https://free.rpc.fastnear.com"];
+export const MAINNET_NEAR_RPC = ["https://rpc.mainnet.near.org", "https://free.rpc.fastnear.com"];
+/** Testnet build: NEAR identities (wallet sign-in, Agent owner) are NEAR testnet accounts. */
+export const TESTNET_NEAR_RPC = ["https://rpc.testnet.near.org", "https://test.rpc.fastnear.com"];
+/** Testnet NEAR RPC hosts name testnet in the host (rpc.testnet.near.org) or are FastNEAR's test.rpc host. */
+export const isTestnetNearRpc = (u: string) => { try { const h = new URL(u).hostname; return /(^|\.)testnet(\.|$)/.test(h) || h === "test.rpc.fastnear.com"; } catch { return false; } };
+export const DEFAULT_NEAR_RPC = IS_TESTNET ? TESTNET_NEAR_RPC : MAINNET_NEAR_RPC;
 
 /**
  * NEAR JSON-RPC view_access_key. NEAR_RPC_URL may list several endpoints, comma separated.
@@ -51,6 +57,8 @@ export const DEFAULT_NEAR_RPC = ["https://rpc.mainnet.near.org", "https://free.r
  */
 export function nearRpc(urls: string | string[] = process.env.NEAR_RPC_URL ?? DEFAULT_NEAR_RPC, fetchImpl: typeof fetch = fetch): NearRpc {
   const list = (Array.isArray(urls) ? urls : urls.split(",")).map((u) => u.trim()).filter(Boolean);
+  // No cross-environment identity checks: a testnet build never verifies keys on mainnet NEAR, and the reverse.
+  if (list.some((u) => IS_TESTNET !== isTestnetNearRpc(u))) throw new AuthError("NEAR_RPC_UNAVAILABLE", `NEAR_RPC_URL does not match this ${IS_TESTNET ? "testnet" : "mainnet"} build.`);
   const one = singleNearRpc(fetchImpl);
   return {
     async accessKey(accountId, publicKey) {

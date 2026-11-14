@@ -1,11 +1,14 @@
-import mapData from "../integrations/near-intents/data/asset-map.json";
+import mainnetMap from "../integrations/near-intents/data/asset-map.json";
+import testnetMap from "../integrations/near-intents/data/tidepool-asset-map.json";
+import { IS_TESTNET } from "../environment";
 import { SPAK_TO_ONECLICK } from "../integrations/near-intents/networks";
 import type { OneClickClient, OneClickToken } from "../integrations/near-intents/client";
 import { getAsset, type AssetDefinition } from "../spak-in/registries/assets";
 import { getNetwork } from "../spak-in/registries/networks";
 import { ExecutionError } from "./errors";
 
-const ASSET_MAP = (mapData as { map: Record<string, string> }).map;
+/** SPak asset id to provider asset id, for this build's environment only. A testnet id has no mainnet entry and vice versa. */
+const ASSET_MAP = ((IS_TESTNET ? testnetMap : mainnetMap) as { map: Record<string, string> }).map;
 export const TOKEN_CACHE_MS = 5 * 60_000;
 
 export interface ResolvedAsset {

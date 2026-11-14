@@ -1,4 +1,5 @@
 "use client";
+import { PROVIDER_LABEL } from "@/environment";
 import { getNetwork } from "@/spak-in/registries/networks";
 import type { IntentResult } from "@/lib/client";
 import { Card, Mono, SectionTitle } from "@/components/ui";
@@ -12,7 +13,7 @@ const STATUS: Record<string, { label: string; role: string }> = {
   UNSUPPORTED: { label: "Not supported yet", role: "neutral" },
   INVALID: { label: "Cannot be used", role: "error" },
 };
-const ACTOR: Record<string, string> = { SPAK: "SPak", PROVIDER: "NEAR Intents", USER_WALLET: "Your wallet" };
+const ACTOR: Record<string, string> = { SPAK: "SPak", PROVIDER: PROVIDER_LABEL, USER_WALLET: "Your wallet" };
 
 function amountText(r: IntentResult) {
   const a = r.source.amount;

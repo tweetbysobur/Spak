@@ -1,4 +1,5 @@
 "use client";
+import { IS_TESTNET } from "@/environment";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Logo } from "@/components/Logo";
@@ -96,8 +97,8 @@ export function Shell({ session, view, onSelect, signedOut, title, notice, child
           {NAV.map((n) => <NavItem key={n.id} item={n} active={view === n.id} onSelect={onSelect} />)}
         </nav>
         <div className="mt-auto rounded-card border border-line p-3">
-          <p className="type-label text-fg">Every transfer needs you</p>
-          <p className="type-caption mt-1 text-fg-2">SPak prepares; you approve; your wallet signs. Executed through NEAR Intents.</p>
+          <p className="type-label text-fg">Your wallet signs every deposit</p>
+          <p className="type-caption mt-1 text-fg-2">SPak prepares; you approve, or your Agent within limits you signed; your wallet signs. {IS_TESTNET ? "Executed through the Tidepool testnet sandbox." : "Executed through NEAR Intents."}</p>
         </div>
       </aside>
 
@@ -111,6 +112,11 @@ export function Shell({ session, view, onSelect, signedOut, title, notice, child
             <ThemeToggle />
             <AccountMenu session={session} onSelect={onSelect} signedOut={signedOut} />
           </div>
+          {IS_TESTNET && (
+            <p data-testnet-banner className="type-caption border-t border-line px-4 py-2 text-fg-2 sm:px-8">
+              <span className="font-medium text-fg">Testnet.</span> Test tokens with no value, settled by Tidepool, a community-run sandbox not affiliated with NEAR or 1Click. Never send real funds.
+            </p>
+          )}
         </header>
 
         <main className="mx-auto w-full max-w-[72rem] flex-1 px-4 pb-28 pt-6 sm:px-8 lg:pb-12">

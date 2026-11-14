@@ -39,7 +39,7 @@ export function AgentPermissions({ agent }: { agent: AgentView }) {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [editing, setEditing] = useState(false);
   const [confirmRevoke, setConfirmRevoke] = useState(false);
-  const [f, setF] = useState({ max: "25", day: "50", count: "5", hours: "24", src: ["base"], dst: ["solana"], symbols: "USDC, SOL", self: true, addresses: "" });
+  const [f, setF] = useState({ max: "25", day: "50", count: "5", hours: "24", src: [NETS[0]?.id ?? ""], dst: [NETS[1]?.id ?? NETS[0]?.id ?? ""], symbols: "USDC, ETH", self: true, addresses: "" });
 
   const load = useCallback(async () => { try { setV(await api<View>(`/api/agents/${agent.id}/permissions`)); } catch (e) { setMsg({ ok: false, text: (e as Error).message }); } }, [agent.id]);
   useEffect(() => { load(); }, [load]);

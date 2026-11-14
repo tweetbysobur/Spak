@@ -2,7 +2,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { SpakIn, SpakInError, type SpakError } from "@/spak-in";
 import type { IntentResult } from "@/spak-in/schemas/result";
-import { oneClickFromEnv } from "@/integrations/near-intents";
+import { providerClient, providerConfig } from "@/integrations/near-intents";
 import { getDb, PgAuditLog, PgIntentLog, PgSessionStore } from "@/database";
 import { ExecutionError, ExecutionRecords, ExecutionService, IntentLogPlanStore } from "@/execution";
 import { DepositRecords, DepositService, httpChainRpc } from "@/deposits";
@@ -30,7 +30,10 @@ async function build() {
     onError: (e) => console.error("[spak-in] result log failed", e),
   });
   // SPak Execution: only plans SPak-in issued (read from the intent log) can execute.
-  const client = oneClickFromEnv();
+  // One environment per process: mainnet 1Click or the Tidepool testnet sandbox. Misconfiguration throws here, so the
+  // server refuses every request rather than run against the wrong network. The database must belong to the same one.
+  const provider = providerConfig();
+  const client = providerClient(provider);
   const executionRecords = new ExecutionRecords(db);
   const audit = new PgAuditLog(db);
   // SPak Guard: the user's stored policy, enforced at every step from plan to deposit.
@@ -39,7 +42,7 @@ async function build() {
   const agentGate = new DbAgentGate(db);
   // Stage 10: the Agent's signed permission. Checked before and inside an Agent approval, and again at deposit.
   const grants = new AgentGrantService({ db });
-  const execution = new ExecutionService({ client, records: executionRecords, plans: new IntentLogPlanStore(db), audit, guard, agents: agentGate, grants });
+  const execution = new ExecutionService({ client, records: executionRecords, plans: new IntentLogPlanStore(db), audit, guard, agents: agentGate, grants, quotePublicKey: provider.quotePublicKey });
   // Deposits extend the same execution engine: same records, same provider client, plus source-chain RPC.
   const rpc = httpChainRpc();
   const depositRecords = new DepositRecords(db);

@@ -3,6 +3,8 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
 import * as schema from "./schema";
 import type { Db } from "./repositories";
+import { NETWORK_ENV } from "../environment";
+import { assertDatabaseEnvironment, assertServerEnvironment } from "./environment";
 
 export const MIGRATIONS_FOLDER = "src/database/migrations";
 export const LOCAL_PGLITE_DIR = ".data/pglite";
@@ -16,7 +18,14 @@ let pending: Promise<Db> | undefined;
  */
 export function getDb(url = process.env.DATABASE_URL): Promise<Db> {
   pending ??= (async () => {
-    if (url) return drizzle(new Pool({ connectionString: url, max: 5 }), { schema }) as unknown as Db;
+    // Environment first, before any read or write: the server variables must match the build, and the database
+    // must belong to this environment (the first server on an empty database claims it).
+    assertServerEnvironment(NETWORK_ENV);
+    if (url) {
+      const db = drizzle(new Pool({ connectionString: url, max: 5 }), { schema }) as unknown as Db;
+      await assertDatabaseEnvironment(db, NETWORK_ENV);
+      return db;
+    }
     if (process.env.NODE_ENV === "production" && !process.env.SPAK_ALLOW_EMBEDDED_DB) {
       throw new Error("DATABASE_URL is required in production.");
     }
@@ -26,6 +35,7 @@ export function getDb(url = process.env.DATABASE_URL): Promise<Db> {
     // SPAK_PGLITE_DIR=memory:// gives a throwaway database (tests).
     const db = pgliteDrizzle(new PGlite(process.env.SPAK_PGLITE_DIR ?? LOCAL_PGLITE_DIR), { schema });
     await pgliteMigrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
+    await assertDatabaseEnvironment(db as unknown as Db, NETWORK_ENV);
     return db as unknown as Db;
   })();
   return pending;

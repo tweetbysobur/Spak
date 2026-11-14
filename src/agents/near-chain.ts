@@ -154,3 +154,20 @@ async function loadSdk() {
     },
   };
 }
+
+/**
+ * Read-only NEAR testnet access for Agent funding checks (Stage 9). Needs no key of any kind: view_account is a
+ * public read. Works without the parent-account configuration that account creation needs.
+ */
+export function nearTestnetReader(env: Record<string, string | undefined> = process.env, fetchImpl: typeof fetch = fetch): Pick<AgentNearChain, "viewAccount"> | null {
+  const rpcUrl = env.SPAK_AGENT_NEAR_RPC_URL ?? "https://rpc.testnet.near.org";
+  if (!/^https:\/\/[^/]*testnet[^/]*/.test(rpcUrl)) return null;
+  return {
+    async viewAccount(accountId) {
+      try {
+        const r = await rpc<{ amount: string; locked: string; storage_usage: number }>(rpcUrl, "query", { request_type: "view_account", finality: "final", account_id: accountId }, fetchImpl);
+        return { amount: r.amount, locked: r.locked, storageUsage: r.storage_usage };
+      } catch (e) { if ((e as { cause?: string }).cause === "UNKNOWN_ACCOUNT") return null; throw e instanceof NearUnavailable ? e : new NearUnavailable("NEAR returned an unexpected answer."); }
+    },
+  };
+}

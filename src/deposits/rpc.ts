@@ -3,7 +3,9 @@
  * Each network can list several endpoints (SPAK_RPC_<NETWORK>, comma separated); the next one is tried
  * only when one is unreachable or errors at the transport level. Server-side only.
  */
-export const DEFAULT_RPC: Readonly<Record<string, string[]>> = {
+import { IS_TESTNET } from "../environment";
+
+export const MAINNET_RPC: Readonly<Record<string, string[]>> = {
   ethereum: ["https://ethereum-rpc.publicnode.com"],
   base: ["https://mainnet.base.org", "https://base-rpc.publicnode.com"],
   arbitrum: ["https://arb1.arbitrum.io/rpc", "https://arbitrum-one-rpc.publicnode.com"],
@@ -15,6 +17,17 @@ export const DEFAULT_RPC: Readonly<Record<string, string[]>> = {
   solana: ["https://api.mainnet-beta.solana.com"],
   near: ["https://rpc.mainnet.near.org", "https://free.rpc.fastnear.com"],
 };
+
+/** Public testnet RPCs for the Tidepool build. Keys are testnet network ids, so a mainnet id never resolves here. */
+export const TESTNET_RPC: Readonly<Record<string, string[]>> = {
+  "base-sepolia": ["https://sepolia.base.org", "https://base-sepolia-rpc.publicnode.com"],
+  "arbitrum-sepolia": ["https://sepolia-rollup.arbitrum.io/rpc", "https://arbitrum-sepolia-rpc.publicnode.com"],
+  "ethereum-sepolia": ["https://ethereum-sepolia-rpc.publicnode.com"],
+  "bsc-testnet": ["https://bsc-testnet-rpc.publicnode.com"],
+};
+
+/** The RPC table for this build's environment. Never both. */
+export const DEFAULT_RPC: Readonly<Record<string, string[]>> = IS_TESTNET ? TESTNET_RPC : MAINNET_RPC;
 
 export class RpcUnavailable extends Error {
   constructor(public readonly network: string, message: string) { super(message); this.name = "RpcUnavailable"; }
@@ -29,7 +42,8 @@ export interface ChainRpc {
 }
 
 export function endpointsFor(network: string): string[] {
-  const env = process.env[`SPAK_RPC_${network.toUpperCase()}`];
+  // SPAK_RPC_BASE_SEPOLIA etc. in the testnet build; the network id itself is environment-specific.
+  const env = process.env[`SPAK_RPC_${network.toUpperCase().replaceAll("-", "_")}`];
   return env ? env.split(",").map((s) => s.trim()).filter(Boolean) : DEFAULT_RPC[network] ?? [];
 }
 

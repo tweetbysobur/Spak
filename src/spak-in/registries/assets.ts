@@ -1,4 +1,6 @@
-import data from "./data/assets.json";
+import mainnetData from "./data/assets.json";
+import testnetData from "./data/testnet-assets.json";
+import { IS_TESTNET } from "../../environment";
 import { getNetwork, NETWORKS } from "./networks";
 
 /** A concrete asset on one network. id = "<network>:<contract|native>". */
@@ -25,6 +27,8 @@ const SYMBOL_ALIASES: Readonly<Record<string, string>> = {
   apt: "APT", xlm: "XLM", zec: "ZEC", link: "LINK", uni: "UNI", aave: "AAVE", pepe: "PEPE", shib: "SHIB",
 };
 
+/** Exactly one registry per build: mainnet (from 1Click) or testnet (from Tidepool). Ids never overlap. */
+const data = IS_TESTNET ? testnetData : mainnetData;
 const assets = (data as { assets: AssetDefinition[] }).assets.filter((a) => getNetwork(a.network));
 export const ASSET_REGISTRY_META = (data as { meta: { source: string; fetchedAt: string; count: number } }).meta;
 

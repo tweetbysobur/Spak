@@ -9,11 +9,15 @@
  *   src/integrations/near-intents/data/asset-map.json   SPak asset id -> NEAR Intents assetId
  */
 import { writeFileSync, mkdirSync } from "node:fs";
-import { ONECLICK_TO_SPAK } from "../src/integrations/near-intents/networks";
+import { MAINNET_TO_ONECLICK } from "../src/integrations/near-intents/networks";
+
+/** Always the mainnet mapping, whatever environment the shell is in. The testnet registry has its own script. */
+const ONECLICK_TO_SPAK: Record<string, string> = Object.fromEntries(Object.entries(MAINNET_TO_ONECLICK).map(([k, v]) => [v, k]));
 
 interface OneClickToken { assetId: string; decimals: number; blockchain: string; symbol: string; contractAddress?: string }
 
 const URL_ = process.env.ONECLICK_API_URL ?? "https://1click.chaindefuser.com";
+if (/tidepool/i.test(URL_)) throw new Error("ONECLICK_API_URL points at Tidepool. Use npm run registry:sync:testnet for the testnet registry.");
 
 async function main() {
   const res = await fetch(`${URL_}/v0/tokens`);

@@ -1,0 +1,22 @@
+{
+ "meta": {
+  "source": "https://www.usetidepool.tech/v0/tokens",
+  "fetchedAt": "2026-11-13T21:14:41.181Z",
+  "count": 11,
+  "environment": "tidepool-testnet",
+  "note": "Test tokens with no value."
+ },
+ "map": {
+  "base-sepolia:0x38d81431b9f76d9699af7517040d5221d9dea252": "nep141:base-0x38d81431b9f76d9699af7517040d5221d9dea252.tp-omft.testnet",
+  "base-sepolia:0xc15cf5600225302675604310094f134e88705e62": "nep141:base-0xc15cf5600225302675604310094f134e88705e62.tp-omft.testnet",
+  "base-sepolia:native": "nep141:base.tp-omft.testnet",
+  "arbitrum-sepolia:0x38d81431b9f76d9699af7517040d5221d9dea252": "nep141:arb-0x38d81431b9f76d9699af7517040d5221d9dea252.tp-omft.testnet",
+  "arbitrum-sepolia:0xc15cf5600225302675604310094f134e88705e62": "nep141:arb-0xc15cf5600225302675604310094f134e88705e62.tp-omft.testnet",
+  "arbitrum-sepolia:native": "nep141:arb.tp-omft.testnet",
+  "ethereum-sepolia:0x2e6ad9e6d59bb4585ea0e6762c3b637dde29dad2": "nep141:eth-0x2e6ad9e6d59bb4585ea0e6762c3b637dde29dad2.tp-omft.testnet",
+  "ethereum-sepolia:0x650f12ba31777de8ded47287a8cc86be737646fe": "nep141:eth-0x650f12ba31777de8ded47287a8cc86be737646fe.tp-omft.testnet",
+  "ethereum-sepolia:native": "nep141:eth.tp-omft.testnet",
+  "bsc-testnet:0x38d81431b9f76d9699af7517040d5221d9dea252": "nep141:bsc-0x38d81431b9f76d9699af7517040d5221d9dea252.tp-omft.testnet",
+  "bsc-testnet:0xc15cf5600225302675604310094f134e88705e62": "nep141:bsc-0xc15cf5600225302675604310094f134e88705e62.tp-omft.testnet"
+ }
+}

@@ -8,6 +8,8 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // The Tidepool testnet build goes to its own folder, so it can never be served as the mainnet build by mistake.
+  distDir: process.env.NEXT_PUBLIC_SPAK_NETWORK_ENV === "tidepool-testnet" ? ".next-testnet" : ".next",
   // Native/WASM database drivers run as plain Node modules, not bundled.
   serverExternalPackages: ["@electric-sql/pglite", "pg"],
   // The Product and How it works pages were folded into the homepage. Old links keep working.

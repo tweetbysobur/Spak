@@ -889,3 +889,16 @@ export const agentGrantChallenges = pgTable("spak_agent_grant_challenges", {
   usedAt: timestamp("used_at", { withTimezone: true }),
   outcome: text("outcome"),
 }, (t) => [uniqueIndex("spak_agent_grant_challenges_nonce_uq").on(t.nonce), index("spak_agent_grant_challenges_agent_idx").on(t.agentId, t.issuedAt)]);
+
+/* ------------------------------------------------------------ Environment marker ------------------------------------------------------------ */
+
+/**
+ * Which network environment this database belongs to. One row, written by the first server that starts on it. A
+ * server for the other environment refuses to start: a Tidepool testnet build can never write into a mainnet
+ * database, and a mainnet build never reads testnet records as real.
+ */
+export const environmentMarker = pgTable("spak_environment", {
+  id: integer("id").primaryKey(),
+  networkEnv: text("network_env").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+});

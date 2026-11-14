@@ -1,3 +1,4 @@
+import { PROVIDER_LABEL } from "../environment";
 import { randomBytes } from "node:crypto";
 import { OneClickError, type OneClickClient, type OneClickQuoteRequest, type OneClickQuoteResponse } from "../integrations/near-intents/client";
 import { fromBaseUnits, toBaseUnits } from "../spak-in/lib/decimal";
@@ -5,6 +6,7 @@ import type { ResolvedAsset } from "./asset-resolver";
 import { ExecutionError } from "./errors";
 import type { ValidatedPlan } from "./plan-validator";
 import { checkQuote } from "./quote-validator";
+import { verifyQuoteSignature } from "../integrations/near-intents/signature";
 import type { ExecutionRecords, QuoteRow } from "./records";
 
 /** How long SPak honours an indicative (dry) quote for approval. Prices move; re-quote after this. */
@@ -16,15 +18,18 @@ export interface QuoteFee { kind: "PROVIDER_APP_FEE" | "DESTINATION_NETWORK" | "
 
 export const newId = (prefix: string) => `${prefix}_${randomBytes(12).toString("hex")}`;
 
+/** Who quoted: named honestly per environment. The testnet sandbox is not NEAR Intents' production 1Click. */
+const PROVIDER = PROVIDER_LABEL;
+
 export function providerError(e: unknown): ExecutionError {
   if (e instanceof ExecutionError) return e;
   if (e instanceof OneClickError) {
     switch (e.kind) {
-      case "BAD_REQUEST": return new ExecutionError("QUOTE_REJECTED", `NEAR Intents could not quote this: ${e.message}`);
-      case "UNAUTHORIZED": return new ExecutionError("PROVIDER_ERROR", "NEAR Intents rejected SPak's credentials. This is a server configuration problem.");
-      case "RATE_LIMITED": return new ExecutionError("PROVIDER_UNAVAILABLE", "NEAR Intents is rate limiting requests. Try again shortly.");
+      case "BAD_REQUEST": return new ExecutionError("QUOTE_REJECTED", `${PROVIDER} could not quote this: ${e.message}`);
+      case "UNAUTHORIZED": return new ExecutionError("PROVIDER_ERROR", `${PROVIDER} rejected SPak's credentials. This is a server configuration problem.`);
+      case "RATE_LIMITED": return new ExecutionError("PROVIDER_UNAVAILABLE", `${PROVIDER} is rate limiting requests. Try again shortly.`);
       case "INVALID_RESPONSE": return new ExecutionError("PROVIDER_ERROR", e.message);
-      default: return new ExecutionError("PROVIDER_UNAVAILABLE", "NEAR Intents is unavailable. Try again shortly.");
+      default: return new ExecutionError("PROVIDER_UNAVAILABLE", `${PROVIDER} is unavailable. Try again shortly.`);
     }
   }
   return new ExecutionError("PROVIDER_ERROR", (e as Error)?.message ?? "Provider error.");
@@ -32,7 +37,8 @@ export function providerError(e: unknown): ExecutionError {
 
 /** Quote Service: build the 1Click request from a validated plan, call the provider, validate and persist. */
 export class QuoteService {
-  constructor(private readonly client: OneClickClient, private readonly records: ExecutionRecords, private readonly clock: () => Date = () => new Date()) {}
+  /** quotePublicKey: when set (always in the Tidepool testnet build), a quote whose signature does not verify is rejected. */
+  constructor(private readonly client: OneClickClient, private readonly records: ExecutionRecords, private readonly clock: () => Date = () => new Date(), private readonly quotePublicKey: string | null = null) {}
 
   buildRequest(v: ValidatedPlan, src: ResolvedAsset, dst: ResolvedAsset, dry: boolean): OneClickQuoteRequest {
     let amount: string;
@@ -58,6 +64,7 @@ export class QuoteService {
     const now = this.clock();
 
     const check = checkQuote(req, res, { sourceNetwork: src.network, now });
+    if (this.quotePublicKey && !verifyQuoteSignature(res, this.quotePublicKey)) check.problems.push("the quote signature does not verify against the provider's published key");
     if (!dry && req.depositMode === "MEMO" && !res.quote.depositMemo) check.problems.push("memo deposit mode but no memo returned");
     const min = v.plan.constraints.minOutput;
     if (min) {

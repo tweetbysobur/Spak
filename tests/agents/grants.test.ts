@@ -187,6 +187,31 @@ describe("the Agent approves inside its permission and Guard; anything else need
   });
 });
 
+describe("concurrency (real row locks when run with SPAK_TEST_PG_URL)", () => {
+  it("ten concurrent Agent approvals under a 3-transfer permission: exactly 3 succeed, each with one Guard reservation", async () => {
+    await grant({ maxTransactions: 3, dailyLimitUsd: "1000", maxTransactionUsd: "60" });
+    const xs = [];
+    for (let i = 0; i < 10; i++) xs.push(await start(20 + i));
+    const out = await Promise.all(xs.map((x) => code(agentApprove(x))));
+    expect(out.filter((o) => o === "OK")).toHaveLength(3);
+    expect(out.every((o) => o === "OK" || o === "AGENT_APPROVAL_REQUIRED")).toBe(true);
+    expect((await h.grants.view(u.userId, agentId)).usage?.transactions).toBe(3);
+    const live = await h.db.select().from(approvals).where(eq(approvals.approvedBy, "AGENT_GRANT"));
+    expect(live.filter((a) => !a.invalidatedAt)).toHaveLength(3);
+  });
+  it("revoking while Agent approvals are in flight: nothing approved after the revoke commits can reach a deposit", async () => {
+    await grant({ maxTransactions: 10, dailyLimitUsd: "1000" });
+    const xs = [];
+    for (let i = 0; i < 5; i++) xs.push(await start(20 + i));
+    const [results] = await Promise.all([Promise.all(xs.map((x) => code(agentApprove(x)))), h.grants.revoke(u.userId, agentId)]);
+    for (const [i, x] of xs.entries()) {
+      if (results[i] === "OK") expect(await code(deposit(x.id))).toBe("AGENT_GRANT_CHANGED");
+      else expect(results[i]).toBe("AGENT_APPROVAL_REQUIRED");
+    }
+    expect((await h.grants.view(u.userId, agentId)).mode).toBe("MANUAL");
+  });
+});
+
 describe("changes take effect at once; stale Agent approvals authorize nothing", () => {
   it("pause stops new Agent approvals and stops the deposit of one already approved; resume restores the same permission", async () => {
     await grant();
