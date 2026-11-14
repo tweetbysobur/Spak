@@ -1,40 +1,55 @@
 /**
  * Real end-to-end lifecycle on the isolated Tidepool testnet environment. Test tokens only; never mainnet.
  *
- *   SPAK_E2E_BASE=http://localhost:3200 SPAK_E2E_KEYS=/path/outside/repo/keys.json npx tsx scripts/tidepool-lifecycle.ts [--negative-only]
+ *   NODE_USE_ENV_PROXY=1 SPAK_E2E_BASE=http://localhost:3200 SPAK_E2E_EXPECTED_ADDRESS=0x… [SPAK_E2E_STOP_BEFORE_SIGN=1] npx tsx scripts/tidepool-lifecycle.ts
  *
  * It drives a running SPak testnet server through its HTTP API exactly as the browser does (session cookie,
  * same-origin). The disposable keys play the USER's wallets: the EVM key signs sign-in and the deposit, the NEAR
  * implicit key proves Agent ownership and signs the Agent permission. The server never sees a private key and signs
- * nothing. Keys are created on first run in SPAK_E2E_KEYS (mode 0600, outside the repository); only addresses print.
+ * nothing. The wallet key is read from Doppler (read-only token injected by the proxy) into memory only; only addresses print.
  *
  * Every result is labelled REAL (from the live testnet or Tidepool) or BLOCKED (with the exact reason). Nothing is
  * simulated here. Evidence is written to SPAK_E2E_OUT (JSON).
  */
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { createPublicClient, createWalletClient, formatEther, http, parseEther, type Hex } from "viem";
-import { privateKeyToAccount, generatePrivateKey } from "viem/accounts";
+import { privateKeyToAccount } from "viem/accounts";
 import { arbitrumSepolia, baseSepolia } from "viem/chains";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { base58, base64, hex } from "@scure/base";
 import { nep413Hash } from "../src/auth/verify/near";
 
 const BASE = process.env.SPAK_E2E_BASE ?? "http://localhost:3200";
-const KEYS = process.env.SPAK_E2E_KEYS;
 const OUT = process.env.SPAK_E2E_OUT ?? "tidepool-lifecycle-evidence.json";
 const AMOUNT_ETH = process.env.SPAK_E2E_AMOUNT_ETH ?? "0.002";
-const NEG_ONLY = process.argv.includes("--negative-only");
-if (!KEYS) throw new Error("Set SPAK_E2E_KEYS to a file path outside the repository.");
-if (KEYS.startsWith(process.cwd())) throw new Error("SPAK_E2E_KEYS must be outside the repository.");
+const STOP_BEFORE_SIGN = process.env.SPAK_E2E_STOP_BEFORE_SIGN === "1";
+const NEG_ONLY = process.argv.includes("--negative-only") || STOP_BEFORE_SIGN;
+const EXPECTED = process.env.SPAK_E2E_EXPECTED_ADDRESS;
 
-// ------------------------------------------------------------------------------------------------ disposable keys
-type Keys = { evm: Hex; near: string; createdAt: string };
-const keys: Keys = existsSync(KEYS) ? JSON.parse(readFileSync(KEYS, "utf8")) : { evm: generatePrivateKey(), near: hex.encode(ed25519.utils.randomSecretKey()), createdAt: new Date().toISOString() };
-if (!existsSync(KEYS)) writeFileSync(KEYS, JSON.stringify(keys), { mode: 0o600 });
-const evm = privateKeyToAccount(keys.evm);
-const nearSk = hex.decode(keys.near), nearPk = ed25519.getPublicKey(nearSk);
-const nearId = hex.encode(nearPk), nearPub = `ed25519:${base58.encode(nearPk)}`;
+// ------------------------------------------------------------------------------------------------ keys
+// The wallet key (the USER's wallet role) is read from Doppler at run time, through the network proxy that injects
+// the read-only service token. It is held in memory only: never printed, logged or written to disk. The Agent owner
+// NEAR key is a fresh in-memory key per run (identity only; it never holds or moves funds).
+type Keys = { evm: Hex; near: string };
+async function loadKeys(): Promise<Keys> {
+  const r = await fetch("https://api.doppler.com/v3/configs/config/secret?project=spak-testnet-wallet&config=dev&name=SPAK_TESTNET_WALLET_PRIVATE_KEY");
+  if (r.status !== 200) throw new Error(`Doppler returned ${r.status}; wallet key unavailable`);
+  const raw = ((await r.json()) as { value?: { raw?: string } }).value?.raw?.trim();
+  if (!raw || !/^0x[0-9a-fA-F]{64}$/.test(raw)) throw new Error("Doppler secret is not a 32-byte hex key");
+  return { evm: raw as Hex, near: hex.encode(ed25519.utils.randomSecretKey()) };
+}
+let evm!: ReturnType<typeof privateKeyToAccount>;
+let nearSk!: Uint8Array, nearId!: string, nearPub!: string;
+async function initKeys() {
+  const keys = await loadKeys();
+  evm = privateKeyToAccount(keys.evm);
+  if (EXPECTED && evm.address !== EXPECTED) throw new Error(`wallet key derives ${evm.address}, expected ${EXPECTED}`);
+  nearSk = hex.decode(keys.near);
+  const nearPk = ed25519.getPublicKey(nearSk);
+  nearId = hex.encode(nearPk); nearPub = `ed25519:${base58.encode(nearPk)}`;
+  ev.wallet = evm.address; ev.agentOwner = nearId;
+}
 const signNep413 = (c: { message: string; nonce: string; recipient: string }) => base64.encode(ed25519.sign(nep413Hash(c.message, base64.decode(c.nonce), c.recipient), nearSk));
 
 const base = createPublicClient({ chain: baseSepolia, transport: http(process.env.SPAK_RPC_BASE_SEPOLIA ?? "https://sepolia.base.org") });
@@ -43,7 +58,7 @@ const arb = createPublicClient({ chain: arbitrumSepolia, transport: http(process
 // ------------------------------------------------------------------------------------------------ evidence
 type Step = { n: number; step: string; status: "REAL" | "BLOCKED" | "FAILED"; detail: string; data?: unknown };
 const steps: Step[] = [];
-const ev: Record<string, unknown> = { environment: "tidepool-testnet", base: BASE, wallet: evm.address, agentOwner: nearId, startedAt: new Date().toISOString(), steps };
+const ev: Record<string, unknown> = { environment: "tidepool-testnet", base: BASE, startedAt: new Date().toISOString(), steps };
 const log = (n: number, step: string, status: Step["status"], detail: string, data?: unknown) => {
   steps.push({ n, step, status, detail, ...(data !== undefined ? { data } : {}) });
   console.log(`${String(n).padStart(2)} ${status.padEnd(7)} ${step}: ${detail}`);
@@ -65,6 +80,7 @@ const must = <T>(r: { status: number; body: T }, what: string): T => { if (r.sta
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {
+  await initKeys();
   console.log(`Disposable user wallet (EVM): ${evm.address}`);
   console.log(`Disposable Agent owner (NEAR testnet implicit): ${nearId}`);
 
@@ -77,7 +93,13 @@ async function main() {
   log(2, "Wallet ownership verification", "REAL", "EIP-4361 signature verified by the server");
 
   // 3. Agent identity: NEP-413 proof from the owner key, verified by the server.
-  const agent = (await api<{ agent: { id: string } | null }>("/api/agents")).body.agent ?? must(await api<{ agent: { id: string } }>("/api/agents", { displayName: "Testnet Agent" }), "create agent").agent;
+  // An Agent owned by an earlier run's NEAR key is revoked (a session can revoke) and replaced; ownership cannot move.
+  let agent = (await api<{ agent: { id: string; ownership: { accountId: string | null } } | null }>("/api/agents")).body.agent;
+  if (agent && agent.ownership.accountId && agent.ownership.accountId !== nearId) {
+    must(await api(`/api/agents/${agent.id}/revoke`, { confirm: "REVOKE" }), "revoke previous agent");
+    agent = null;
+  }
+  agent ??= must(await api<{ agent: { id: string; ownership: { accountId: string | null } } }>("/api/agents", { displayName: "Testnet Agent" }), "create agent").agent;
   const ac = must(await api<{ challengeId: string; method: string; message: string; nonce: string; recipient: string }>(`/api/agents/${agent.id}/challenge`, { accountId: nearId }), "agent challenge");
   must(await api(`/api/agents/${agent.id}/verify`, { challengeId: ac.challengeId, method: ac.method, accountId: nearId, publicKey: nearPub, signature: signNep413(ac) }), "agent verify");
   log(3, "Agent identity verification", "REAL", `Agent ${agent.id} owned by ${nearId} (NEP-413, implicit account)`);
@@ -133,7 +155,8 @@ async function main() {
     return;
   }
   const tx = dp.body.transaction;
-  log(12, "Deposit instruction", "REAL", `${tx.kind} on chain ${tx.chainId}: send ${tx.request.value} wei to ${tx.request.to}; deposit ${dp.body.deposit.id}`, { transaction: tx });
+  log(12, "Deposit instruction", "REAL", `${tx.kind} on chain ${tx.chainId}: send ${tx.request.value} wei to ${tx.request.to}; deposit ${dp.body.deposit.id}; deadline ${exe.depositDeadline ?? firm.deposit?.deadline}`, { transaction: tx, deposit: dp.body.deposit, balanceCheck: dp.body.balance, firmDeposit: firm.deposit, firmExpiresAt: firm.expiresAt });
+  if (STOP_BEFORE_SIGN) { log(13, "User-signed testnet deposit", "BLOCKED", "stopped before signing for review (SPAK_E2E_STOP_BEFORE_SIGN=1)"); return; }
   if (NEG_ONLY) return;
 
   // 13. The user's wallet (disposable key) signs and sends the exact prepared transaction.
