@@ -62,9 +62,10 @@ export const PILLARS: Pillar[] = [
       "Reads swaps, bridges, transfers and payments written in plain words.",
       "Stops and asks when an instruction is ambiguous or incomplete.",
       "History of your transfers with live tracking for each one.",
+      "Your balances on 10 networks, valued with independent prices, and plain answers to balance questions.",
+      "Checks your balance before quoting, and compares live routes for each holding.",
     ],
     planned: [
-      "Portfolio balances and cross-chain insights. SPak understands these questions today but cannot answer them yet.",
       "Rebalancing. It is understood and planned, and it does not run.",
     ],
   },

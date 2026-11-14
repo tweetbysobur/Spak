@@ -31,18 +31,6 @@ function Module({ id, children }: { id: string; children?: ReactNode }) {
   );
 }
 
-export function Portfolio() {
-  return (
-    <Module id="intelligence">
-      <Card>
-        <SectionTitle>Portfolio</SectionTitle>
-        <p className="type-body text-fg-2">Balances and cross-chain portfolio views need a balance reader and a price feed, which are not built yet. SPak will not show estimated or sample balances in their place.</p>
-        <p className="type-body-sm mt-3 text-fg-2">Today SPak reads your balance only for the exact asset of a deposit, when you prepare it.</p>
-      </Card>
-    </Module>
-  );
-}
-
 /** SPak Guard: the user's real settings from the server. */
 export function Guard() {
   return <GuardPage />;

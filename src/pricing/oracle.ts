@@ -7,6 +7,8 @@ export class PriceUnavailable extends Error { constructor(m: string) { super(m);
 export interface PriceReader {
   chainlink(feed: ChainlinkFeed): Promise<PriceReading>;
   coingecko(id: string): Promise<PriceReading>;
+  /** Optional batch read (one request); ids without a usable price are left out. */
+  coingeckoMany?(ids: string[]): Promise<Map<string, PriceReading>>;
 }
 
 const hex = (s: string, i: number) => BigInt(`0x${s.slice(2 + 64 * i, 2 + 64 * (i + 1))}`);
@@ -43,6 +45,24 @@ export function httpPriceReader(env: Record<string, string | undefined> = proces
       if (answeredIn < roundId) throw new PriceUnavailable(`Feed ${f.description} round is incomplete.`);
       return { source: "CHAINLINK", ref: f.address, answer, decimals: f.decimals, updatedAt, stable: f.stable, roundId: roundId.toString() };
     },
+    async coingeckoMany(ids) {
+      const out = new Map<string, PriceReading>();
+      for (let i = 0; i < ids.length; i += 100) {
+        const chunk = ids.slice(i, i + 100);
+        let b: Record<string, { usd?: number; last_updated_at?: number }> | null = null;
+        try {
+          const r = await fetchImpl(`https://api.coingecko.com/api/v3/simple/price?ids=${chunk.map(encodeURIComponent).join(",")}&vs_currencies=usd&include_last_updated_at=true&precision=8`, { signal: AbortSignal.timeout(10_000) });
+          b = r.ok ? await r.json() : null;
+        } catch { b = null; }
+        for (const id of chunk) {
+          const v = b?.[id];
+          if (!v || typeof v.usd !== "number" || !Number.isFinite(v.usd) || typeof v.last_updated_at !== "number") continue;
+          const [i2, f = ""] = v.usd.toFixed(8).split(".");
+          out.set(id, { source: "COINGECKO", ref: id, answer: BigInt(i2 + f.padEnd(8, "0").slice(0, 8)), decimals: 8, updatedAt: v.last_updated_at, stable: false });
+        }
+      }
+      return out;
+    },
     async coingecko(id) {
       let b: Record<string, { usd?: number; last_updated_at?: number }> | null = null;
       try {
@@ -72,11 +92,24 @@ export class PriceService {
     return r;
   }
 
+  /** Fill the cache for many CoinGecko ids with one request, when the reader supports it. Failures are ignored. */
+  async prefetchCoingecko(ids: string[]): Promise<void> {
+    const now = this.clock().getTime();
+    const want = [...new Set(ids)].filter((id) => { const c = this.cache.get(`cg:${id}`); return !c || now - c.at >= PRICE_POLICY.cacheMs; });
+    if (!want.length || !this.reader?.coingeckoMany) return;
+    try { for (const [id, r] of await this.reader.coingeckoMany(want)) this.cache.set(`cg:${id}`, { at: now, r }); } catch { /* each value() call falls back to its own read */ }
+  }
+
   /** Value an amount of an asset. Never throws: failures come back as UNAVAILABLE, with the reason. */
-  async value(a: { symbol: string; decimals: number; amountUnits: string; providerUsd: string | null }): Promise<Valuation> {
+  /**
+   * `coingeckoId` (optional, used by SPak Intelligence for display) names the CoinGecko asset when SPak has no mapping
+   * for the symbol. It never overrides a mapping, and a CoinGecko price still counts only when the provider's figure
+   * agrees with it. Guard, grants and Execution do not pass it.
+   */
+  async value(a: { symbol: string; decimals: number; amountUnits: string; providerUsd: string | null; coingeckoId?: string | null }): Promise<Valuation> {
     const sym = a.symbol.toUpperCase();
     const feed = SYMBOL_TO_CHAINLINK[sym] ? CHAINLINK_FEEDS[SYMBOL_TO_CHAINLINK[sym]] : null;
-    const cg = SYMBOL_TO_COINGECKO[sym] ?? null;
+    const cg = SYMBOL_TO_COINGECKO[sym] ?? (a.coingeckoId && /^[a-z0-9-]{1,80}$/.test(a.coingeckoId) ? a.coingeckoId : null);
     let reading: PriceReading | null = null, maxAge: number = PRICE_POLICY.coingeckoMaxAgeSec, err: string | null = null;
     if (!this.reader) err = "No price source is configured on this server.";
     else if (feed) { try { reading = await this.read(`cl:${feed.key}`, () => this.reader!.chainlink(feed)); maxAge = feed.maxAgeSec; } catch (e) { err = (e as Error).message; } }

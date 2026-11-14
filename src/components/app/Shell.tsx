@@ -16,7 +16,7 @@ export const NAV: { id: View; label: string; icon: IconName; planned?: boolean }
   { id: "overview", label: "Overview", icon: "home" },
   { id: "execute", label: "Execute", icon: "execute" },
   { id: "activity", label: "Activity", icon: "activity" },
-  { id: "portfolio", label: "Portfolio", icon: "portfolio", planned: true },
+  { id: "portfolio", label: "Intelligence", icon: "portfolio" },
   { id: "guard", label: "SPak Guard", icon: "guard" },
   { id: "agent", label: "Agent", icon: "agent" },
   { id: "settings", label: "Settings", icon: "settings" },

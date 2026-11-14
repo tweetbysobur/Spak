@@ -12,10 +12,11 @@ import { Notice } from "@/components/status";
 import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { NAV, Shell, type View } from "@/components/app/Shell";
+import { Intelligence } from "@/components/intelligence/Intelligence";
 import { Overview } from "@/components/app/Overview";
 import { Interpretation } from "@/components/app/Interpretation";
 import { Activity } from "@/components/app/Activity";
-import { Agent, Guard, Portfolio, Settings } from "@/components/app/Sections";
+import { Agent, Guard, Settings } from "@/components/app/Sections";
 import { api, type ExecutionView, type IntentResult, type QuoteView } from "@/lib/client";
 import { takeNearRedirectResult } from "@/wallets/near";
 import { notificationFor } from "@/components/tracking/model";
@@ -163,7 +164,7 @@ export default function AppPage() {
             </div>
           )}
           {view === "activity" && <Activity onOpen={open} />}
-          {view === "portfolio" && <Portfolio />}
+          {view === "portfolio" && <Intelligence onExecute={(t) => { setHandoff(t); setMode("chat"); setInterp(undefined); setView("execute"); }} />}
           {view === "guard" && <Guard />}
           {view === "agent" && <Agent session={session} refresh={refresh} signedOut={signedOut} />}
           {view === "settings" && <Settings session={session} refresh={refresh} signedOut={signedOut} />}

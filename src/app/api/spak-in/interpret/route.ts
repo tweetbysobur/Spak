@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { rateLimit } from "@/server/auth";
+import { authService, rateLimit } from "@/server/auth";
+import type { IntelligenceContext } from "@/intelligence/service";
 import { guardedInterpret, handle, spak, spakContext } from "@/server/spak";
 
 /**
@@ -21,6 +22,19 @@ export async function POST(req: Request) {
       mode: body?.mode === "AGENT" && ctx.agentLinked ? "AGENT" : "MANUAL",
       policy: g.policy, runtime: g.runtime,
     }));
-    return NextResponse.json(result);
+    // SPak Intelligence adds portfolio facts after the deterministic interpretation; it never changes the plan.
+    let intelligence: IntelligenceContext | null = null;
+    const relevant = result.intentType === "PORTFOLIO_QUERY" || ["BRIDGE", "CROSS_CHAIN_SWAP", "CROSS_CHAIN_TRANSFER", "SWAP", "PAYMENT"].includes(result.intentType);
+    if (relevant) {
+      try {
+        const wallets = await (await authService()).listWallets(ctx.userId);
+        const intel = (await spak()).intelligence;
+        const snap = await Promise.race([intel.snapshot(ctx.userId, wallets), new Promise<null>((r) => setTimeout(() => r(null), 12_000))]);
+        intelligence = snap ? intel.context(result, snap.snapshot, snap.cached) : { kind: "UNAVAILABLE", text: "Your balances are still loading. Ask again in a moment." };
+      } catch {
+        intelligence = { kind: "UNAVAILABLE", text: "SPak could not read your balances just now. Nothing about this request depends on them yet." };
+      }
+    }
+    return NextResponse.json({ ...result, intelligence });
   });
 }

@@ -7,6 +7,8 @@ import { logEvent } from "@/ops/log";
 import { getDb, PgAuditLog, PgIntentLog, PgSessionStore } from "@/database";
 import { ExecutionError, ExecutionRecords, ExecutionService, IntentLogPlanStore } from "@/execution";
 import { DepositRecords, DepositService, httpChainRpc } from "@/deposits";
+import { IntelligenceService } from "@/intelligence/service";
+import { PortfolioReader } from "@/intelligence/portfolio";
 import { DestinationVerifier, ExecutionMonitor, TrackingRecords, TrackingService } from "@/tracking";
 import { FailureRecords, FailureService, RefundVerifier, ReviewService } from "@/failures";
 import { AuthError } from "@/auth/types";
@@ -44,7 +46,9 @@ async function build() {
   const agentGate = new DbAgentGate(db);
   // Stage 10: the Agent's signed permission. Checked before and inside an Agent approval, and again at deposit.
   const grants = new AgentGrantService({ db });
-  const execution = new ExecutionService({ client, records: executionRecords, plans: new IntentLogPlanStore(db), audit, guard, agents: agentGate, grants, quotePublicKey: provider.quotePublicKey, prices: new PriceService(httpPriceReader()) });
+  // One independent price service for valuation everywhere (Execution, Guard limits, Intelligence).
+  const prices = new PriceService(httpPriceReader());
+  const execution = new ExecutionService({ client, records: executionRecords, plans: new IntentLogPlanStore(db), audit, guard, agents: agentGate, grants, quotePublicKey: provider.quotePublicKey, prices });
   // Deposits extend the same execution engine: same records, same provider client, plus source-chain RPC.
   const rpc = httpChainRpc();
   const depositRecords = new DepositRecords(db);
@@ -62,7 +66,9 @@ async function build() {
     log: (msg, data) => console.warn(`[spak-monitor] ${msg}`, JSON.stringify(data ?? {})),
   });
   const trackingService = new TrackingService({ executions: executionRecords, execution, tracking, depositRecords, destination, failures });
-  return { engine, execution, deposits, monitor, tracking: trackingService, failures, reviews, guard, grants };
+  // SPak Intelligence: read-only portfolio and route facts for SPak-in results and the Intelligence screen.
+  const intelligence = new IntelligenceService({ reader: new PortfolioReader(rpc), prices, client, quotePublicKey: provider.quotePublicKey });
+  return { engine, execution, deposits, monitor, tracking: trackingService, failures, reviews, guard, grants, intelligence };
 }
 
 const g = globalThis as unknown as { __spak?: ReturnType<typeof build> };

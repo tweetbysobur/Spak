@@ -8,7 +8,7 @@ import { guardMessage, planBlock } from "@/lib/guard";
 
 interface Msg { from: "you" | "spak"; text: string; detail?: string[]; options?: string[]; guard?: boolean }
 
-const EXAMPLES = ["Swap 100 USDC on Base to ETH on Arbitrum", "Swap 50 USDC on Base to SOL on Solana", "Bridge 0.5 ETH from Ethereum to NEAR"];
+const EXAMPLES = ["How much USDC do I have?", "Move 20 USDC from Base to NEAR", "Swap 50 USDC on Base to SOL on Solana"];
 const net = (id: string | null) => (id ? getNetwork(id)?.name ?? id : "?");
 
 export function Chat({ timezone, onReady, onInterpret, initial }: {
@@ -44,7 +44,16 @@ export function Chat({ timezone, onReady, onInterpret, initial }: {
       const r = await api<IntentResult>("/api/spak-in/interpret", { text: input, sessionId: sessionId.current, timezone });
       onInterpret?.(r);
       const errs = [...r.errors.map((e) => e.message), ...(r.policy?.violations.map((v) => v.message) ?? [])];
-      if (r.status === "NEEDS_CLARIFICATION") {
+      const intel = r.intelligence ?? null;
+      const asOf = (iso: string) => `Balances as of ${new Date(iso).toLocaleTimeString()}.`;
+      if (intel?.kind === "PORTFOLIO_ANSWER") {
+        add({ from: "spak", text: intel.text, detail: [...intel.lines.slice(0, 12), ...(intel.incomplete ? [intel.incomplete] : []), asOf(intel.readAt)] });
+      } else if (intel?.kind === "SOURCE_OPTIONS" && (r.status === "NEEDS_CLARIFICATION" || !r.plan?.executable)) {
+        const picks = intel.options.filter((o) => o.instruction).map((o) => o.instruction!);
+        add({ from: "spak", text: r.status === "NEEDS_CLARIFICATION" ? "I need a bit more before I can do this." : intel.text,
+          detail: [...errs, ...r.clarifications.map((c) => c.question), ...(r.status === "NEEDS_CLARIFICATION" ? [intel.text] : []), ...intel.options.map((o) => o.text), asOf(intel.readAt)],
+          options: (picks.length ? picks : r.clarifications.find((c) => c.options?.length)?.options ?? []).slice(0, 6) });
+      } else if (r.status === "NEEDS_CLARIFICATION") {
         add({ from: "spak", text: "I need a bit more before I can do this.", detail: [...errs, ...r.clarifications.map((c) => c.question)], options: r.clarifications.find((c) => c.options?.length)?.options?.slice(0, 6) });
       } else if (r.status !== "VALIDATED") {
         add({ from: "spak", text: r.status === "POLICY_REJECTED" ? "Your Guard settings block this." : r.status === "UNSUPPORTED" ? "SPak cannot do this yet." : "This instruction has a problem.", detail: errs });
@@ -55,6 +64,11 @@ export function Chat({ timezone, onReady, onInterpret, initial }: {
         const b = planBlock(r.guard)!;
         add({ from: "spak", text: b.title, detail: [...b.reasons, "Nothing was quoted or created. You can change this in SPak Guard."], guard: true });
       } else {
+        // Balance facts are shown before the quote. A shortfall is a warning, not a stop: the user may fund the wallet
+        // after seeing the quote, and preparing the deposit refuses an insufficient balance in any case.
+        if (intel?.kind === "FEASIBILITY" && intel.status === "INSUFFICIENT") {
+          add({ from: "spak", text: `Not enough ${intel.symbol} on ${net(intel.network)} yet.`, detail: [...intel.notes, `Balances as of ${new Date(intel.readAt).toLocaleTimeString()}.`, "You can still see the quote. The deposit cannot be prepared until the wallet holds enough."] });
+        } else if (intel?.kind === "FEASIBILITY" && intel.notes.length) add({ from: "spak", text: intel.status === "UNKNOWN" ? "SPak could not check your balance for this." : "Balance checked.", detail: intel.notes });
         add({ from: "spak", text: `Understood in ${r.meta.processingMs}ms. Getting a ${PROVIDER_LABEL} quote for ${net(r.source.network)} → ${net(r.destination.network)}.`, detail: r.assumptions });
         const { execution, quote: q } = await startExecution(r.plan.hash, viaAgent && agent ? agent.id : null);
         add({ from: "spak", text: `Quote ready: about ${formatUnits(q.destination.amountOut, q.destination.assetId)}. Review it below.` });
