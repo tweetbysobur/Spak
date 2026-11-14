@@ -11,7 +11,6 @@ import { Button, Card, Spinner, Tabs, Toast } from "@/components/ui";
 import { Notice } from "@/components/status";
 import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { Icon } from "@/components/icons";
 import { NAV, Shell, type View } from "@/components/app/Shell";
 import { Overview } from "@/components/app/Overview";
 import { Interpretation } from "@/components/app/Interpretation";
@@ -102,16 +101,29 @@ export default function AppPage() {
     return (
       <div className="flex min-h-dvh flex-col">
         <header className="border-b border-line"><div className="mx-auto flex h-16 max-w-[72rem] items-center gap-3 px-4 sm:px-8"><Link href="/" aria-label="SPak home"><Logo className="h-7" /></Link><span className="flex-1" /><ThemeToggle /></div></header>
-        <main className="mx-auto grid w-full max-w-[72rem] flex-1 items-start gap-10 px-4 py-10 sm:px-8 lg:grid-cols-[1fr_1.1fr] lg:py-16">
-          <div>
-            <h1 className="type-app-title text-fg">Connect a wallet to start.</h1>
-            <p className="type-body mt-3 text-fg-2">You sign a one-time message to prove you own the wallet. It is not a transaction and costs nothing. SPak never asks for a seed phrase or private key.</p>
-            <ul className="mt-6 flex flex-col gap-3">
-              {["EVM wallets: MetaMask and others", "Solana wallets: Phantom and others", "NEAR wallets: Meteor"].map((t) => <li key={t} className="type-body-sm flex gap-2 text-fg"><Icon name="success" size={16} className="mt-0.5 text-primary" />{t}</li>)}
-            </ul>
-            <p className="type-caption mt-6 text-fg-2">This is Manual Access: you approve every transfer and your wallet signs it. SPak Agent onboarding comes later, from the Agent page.</p>
+        <main className="mx-auto grid w-full max-w-[72rem] flex-1 content-start gap-x-16 gap-y-10 px-4 py-10 sm:px-8 lg:grid-cols-[1fr_minmax(0,28rem)] lg:py-20">
+          <div className="lg:col-start-1 lg:row-start-1">
+            <h1 className="type-app-title max-w-[22ch] text-fg">Your wallet is your account.</h1>
+            <p className="type-body mt-4 max-w-[46ch] text-fg-2">Sign one message to prove the wallet is yours. It is not a transaction and costs no gas. SPak never asks for a seed phrase or private key.</p>
           </div>
-          <div>{failed}{session === undefined ? <Card><Spinner label="Loading your session" /></Card> : <WalletPicker purpose="SIGN_IN" onDone={refresh} />}</div>
+          <div className="lg:col-start-2 lg:row-span-2 lg:row-start-1">{failed}{session === undefined ? <Card><Spinner label="Loading your session" /></Card> : <WalletPicker purpose="SIGN_IN" onDone={refresh} />}</div>
+          <section aria-labelledby="next-steps" className="lg:col-start-1 lg:row-start-2">
+            <h2 id="next-steps" className="type-label text-fg-2">After you sign in</h2>
+            <ol className="mt-4 border-l border-line">
+              {[
+                ["Describe a transfer", "In plain words, for example: Swap 25 USDC on Base to USDC on NEAR."],
+                ["Review the firm quote", "Exact amount, minimum you receive, fees and deposit address, before anything moves."],
+                ["Sign the deposit yourself", "Your wallet signs. SPak holds no keys and cannot move your funds."],
+                ["See it delivered", "SPak tracks the route through NEAR Intents and checks delivery on the destination chain."],
+              ].map(([t, d]) => (
+                <li key={t} className="relative pb-5 pl-6 last:pb-0">
+                  <span aria-hidden className="absolute -left-[5px] top-1.5 h-[9px] w-[9px] rounded-full border-2 border-primary bg-bg" />
+                  <p className="type-body text-fg">{t}</p>
+                  <p className="type-body-sm mt-0.5 text-fg-2">{d}</p>
+                </li>
+              ))}
+            </ol>
+          </section>
         </main>
       </div>
     );
