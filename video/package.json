@@ -1,0 +1,26 @@
+{
+  "name": "spak-video",
+  "private": true,
+  "description": "SPak product demo film: real browser captures composed with Remotion. Not part of the app build.",
+  "scripts": {
+    "capture": "node capture/capture.cjs",
+    "voice": "node audio/voice.mjs",
+    "score": "node audio/score.mjs",
+    "studio": "remotion studio src/index.ts",
+    "render": "remotion render src/index.ts SpakDemo out/spak-product-demo.mp4 --browser-executable=/opt/pw-browsers/chromium-1243/chrome-linux64/chrome"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource/sora": "^5.3.0",
+    "@remotion/cli": "^4.0.543",
+    "@remotion/media-utils": "^4.0.543",
+    "@remotion/renderer": "^4.0.543",
+    "@types/react": "^18.3.31",
+    "kokoro-js": "^1.2.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remotion": "^4.0.543",
+    "typescript": "^5.9.3"
+  }
+}

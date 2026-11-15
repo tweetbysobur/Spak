@@ -1,0 +1,34 @@
+{
+ "s1": {
+  "path": "public/audio/vo-s1.wav",
+  "seconds": 10.875
+ },
+ "s2": {
+  "path": "public/audio/vo-s2.wav",
+  "seconds": 5.325
+ },
+ "s3": {
+  "path": "public/audio/vo-s3.wav",
+  "seconds": 17.55
+ },
+ "s4a": {
+  "path": "public/audio/vo-s4a.wav",
+  "seconds": 7.725
+ },
+ "s4b": {
+  "path": "public/audio/vo-s4b.wav",
+  "seconds": 8.65
+ },
+ "s4c": {
+  "path": "public/audio/vo-s4c.wav",
+  "seconds": 11.175
+ },
+ "s5": {
+  "path": "public/audio/vo-s5.wav",
+  "seconds": 16.225
+ },
+ "s6": {
+  "path": "public/audio/vo-s6.wav",
+  "seconds": 5.825
+ }
+}

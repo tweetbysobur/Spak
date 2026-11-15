@@ -1,0 +1,43 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
+/** Follow-up captures (same rules as capture.cjs): review card framed at the top; Intelligence route comparison. */
+const { chromium } = require('playwright');
+const { privateKeyToAccount, generatePrivateKey } = require(require.resolve('viem/accounts', { paths: ['/home/user/spak'] }));
+const fs = require('fs');
+const [,, APP, OUT, PORTFOLIO, ROUTES] = process.argv;
+const PROVIDER = fs.readFileSync(__dirname + '/capture.cjs', 'utf8').match(/const PROVIDER = \(address\) => (`[\s\S]*?`);/)[1];
+(async () => {
+  const browser = await chromium.launch();
+  const account = privateKeyToAccount(generatePrivateKey());
+  const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 2 });
+  await ctx.exposeFunction('__spakSign', async (hex) => account.signMessage({ message: { raw: hex } }));
+  await ctx.addInitScript(eval(`(address) => ${PROVIDER}`)(account.address));
+  await ctx.route('**/api/intelligence/portfolio*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: fs.readFileSync(PORTFOLIO) }));
+  await ctx.route('**/api/intelligence/routes', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: fs.readFileSync(ROUTES) }));
+  const page = await ctx.newPage();
+  const go = (label) => page.locator('nav[aria-label=App] button:visible', { hasText: label }).first().click();
+  await page.goto(`${APP}/app`, { waitUntil: 'networkidle' });
+  await page.getByRole('button', { name: /Demo Wallet \(simulated\)/ }).click();
+  await page.getByRole('dialog').waitFor({ timeout: 20000 }); await page.keyboard.press('Escape');
+  await go('Execute');
+  await page.getByLabel('Instruction').fill('Move 25 USDC from Base to Arbitrum');
+  await page.getByRole('button', { name: 'Send' }).click();
+  const head = page.getByText('Check the details, then confirm');
+  await head.waitFor({ timeout: 60000 });
+  await page.waitForTimeout(1200);
+  await head.evaluate((el) => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 130));
+  await page.waitForTimeout(500); await page.screenshot({ path: `${OUT}/app-08-review.png` });
+  await page.evaluate(() => window.scrollBy(0, 640)); await page.waitForTimeout(400); await page.screenshot({ path: `${OUT}/app-09-review-details.png` });
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await go('Intelligence');
+  await page.getByText('Total priced value').waitFor({ timeout: 30000 });
+  const btn = page.locator('main button:visible', { hasText: /^Routes$/ }).first();
+  await btn.scrollIntoViewIfNeeded(); await btn.click();
+  const amt = page.getByLabel(/Amount of/); if (!(await amt.inputValue())) await amt.fill('0.003');
+  await page.getByRole('button', { name: 'Compare routes' }).click();
+  await page.getByText(/Receive about/).first().waitFor({ timeout: 15000 });
+  await page.getByText(/Receive about/).first().evaluate((el) => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 420));
+  await page.waitForTimeout(500); await page.screenshot({ path: `${OUT}/app-20-intelligence-routes.png` });
+  await go('Overview'); await page.evaluate(() => localStorage.setItem('spak-theme', 'dark')); await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(1200); await page.screenshot({ path: `${OUT}/app-21-overview-dark.png` });
+  await browser.close(); console.log('extra done');
+})().catch((e) => { console.error('CAPTURE FAILED:', e.message); process.exit(1); });

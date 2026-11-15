@@ -1,0 +1,13 @@
+{
+  "voice": "am_michael",
+  "lines": [
+    { "id": "s1", "text": "DeFi is connected. But moving assets across chains is still hard. Different networks, bridges, fees and wallets, and no clear proof your funds arrived." },
+    { "id": "s2", "text": "Meet SPak. Intelligent execution across chains, built on NEAR." },
+    { "id": "s3", "text": "You say what you want. SPak-in turns it into an exact plan. SPak Intelligence checks what you hold. SPak Guard enforces your limits. And SPak Execution routes it through NEAR Intents, then verifies delivery on the destination chain." },
+    { "id": "s4a", "text": "This is the real app. Type an intent. SPak reads it in milliseconds, with fixed rules, not guesswork." },
+    { "id": "s4b", "text": "It checks your balance, fetches a signed NEAR Intents quote, and shows exactly what you send, what you receive, and every fee." },
+    { "id": "s4c", "text": "One confirm, and your wallet signs. SPak never holds your keys. Then it tracks every step, and only calls it complete when the destination chain proves it." },
+    { "id": "s5", "text": "SPak Intelligence reads your balances across ten networks, values them with independent prices, and compares live routes for any holding. Next: portfolio-aware execution, conditional actions, and developer APIs." },
+    { "id": "s6", "text": "Your intent. Cross-chain execution. One intelligent interface. SPak." }
+  ]
+}
