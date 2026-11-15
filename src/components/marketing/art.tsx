@@ -161,9 +161,9 @@ export function WhatIsComposition({ className = "" }: { className?: string }) {
           <Image src="/brand/images/spak-hero-landscape.jpg" alt="" fill sizes="(min-width: 1024px) 720px, 130vw" quality={80} className="object-cover" />
         </div>
       </div>
-      {/* The same landscape in the lower ribbon, cropped to the valley: the upper ribbon shows the peak, the lower one the forest below it, so the forms read as one scene. */}
+      {/* The same landscape in the lower ribbon, mirrored: the cliff on the photo's right anchors the upper ribbon's right end, the hill on its left anchors the lower ribbon's left end, and the leaf sits in the valley between. Same 2:1 photo ratio kept, anchored bottom left. */}
       <div className="what-lower absolute" aria-hidden="true" style={{ left: `${(lb.x / W) * 100}%`, top: `${(lb.y / H) * 100}%`, width: `${(lb.w / W) * 100}%`, height: `${(lb.h / H) * 100}%`, clipPath: "url(#what-lower)" }}>
-        <div className="what-photo absolute" style={{ left: "-20%", top: "-62%", width: "150%", height: "170%" }}>
+        <div className="what-photo absolute" style={{ left: "0%", top: "-110%", width: "190%", height: "210%" }}>
           <Image src="/brand/images/spak-hero-landscape.jpg" alt="" fill sizes="(min-width: 1024px) 720px, 130vw" quality={80} className="object-cover" />
         </div>
       </div>
