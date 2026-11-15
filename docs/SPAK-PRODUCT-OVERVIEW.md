@@ -21,6 +21,7 @@ Live means in the code, tested and running in production at usespak.vercel.app. 
 | NEAR recipient registration fix | Live | 1Click registers the recipient and charges the quoted withdrawFee |
 | Delivery verification | Live | 45 of 90 USDC routes automatic; others flagged for manual review up front |
 | Refund tracking | Live | |
+| One-time payments | Built | Pay another address on the same or another network; payment review, Activity filter and a downloadable receipt after verified delivery. Not yet deployed |
 | SPak Guard | Live | Limits, allowed networks, assets, recipients |
 | SPak Intelligence | Live | Read-only balances and prices on 10 networks |
 | Guided tour | Live | First-run tour, replayable from the account menu |

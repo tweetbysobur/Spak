@@ -424,6 +424,13 @@ export class ExecutionService {
     return r;
   }
 
+  /** The approval behind a transfer, for its receipt: when, and whether the user or the Agent (under which permission version) approved. */
+  async approvalFor(id: string, userId: string) {
+    const row = await this.mustGet(id, userId);
+    const a = await this.d.records.activeApproval(row.id);
+    return a ? { approvedAt: a.approvedAt.toISOString(), approvedBy: (a.approvedBy === "AGENT_GRANT" ? "AGENT_GRANT" : "USER") as "USER" | "AGENT_GRANT", grantVersion: a.grantVersion ?? null } : null;
+  }
+
   async details(id: string, userId: string) {
     const row = await this.mustGet(id, userId);
     const [allQuotes, events] = await Promise.all([this.d.records.quotesFor(row.id), this.d.records.events(row.id)]);

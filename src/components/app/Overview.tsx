@@ -33,12 +33,13 @@ function Stat({ label, value, sub }: { label: string; value: string; sub: string
   );
 }
 
+const short = (a: string) => (a.length > 16 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a);
 export function TxRow({ x, onOpen }: { x: ExecutionView; onOpen: (x: ExecutionView) => void }) {
   return (
     <button onClick={() => onOpen(x)} className="grid w-full grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 px-5 py-4 text-left hover:bg-surface sm:grid-cols-[1.2fr_1fr_auto] dark:hover:bg-elevated">
       <span className="min-w-0">
         <Amount value={formatUnits(x.source.amountIn, x.source.assetId)} />
-        <span className="type-caption block text-fg-2">{x.destination.amountOutVerified ? `received ${formatUnits(x.destination.amountOutVerified, x.destination.assetId)}` : `to ${getAsset(x.destination.assetId)?.symbol ?? "asset"} on ${net(x.destination.network)}`}</span>
+        <span className="type-caption block text-fg-2">{x.recipient.kind === "EXTERNAL" ? <>Paid to {short(x.recipient.address)} · </> : null}{x.destination.amountOutVerified ? `received ${formatUnits(x.destination.amountOutVerified, x.destination.assetId)}` : `to ${getAsset(x.destination.assetId)?.symbol ?? "asset"} on ${net(x.destination.network)}`}</span>
       </span>
       <span className="type-body-sm hidden text-fg-2 sm:block">{net(x.source.network)} → {net(x.destination.network)}<span className="type-caption block">{new Date(x.createdAt).toLocaleString()}</span></span>
       <StatusBadge state={x.state} />

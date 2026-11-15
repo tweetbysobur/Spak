@@ -125,23 +125,33 @@ export function Review({ intent, execution, quote: initial, onApproved, onCancel
   const approveBy = new Date(Date.parse(quote.createdAt) + FIRM_APPROVAL_WINDOW_MS);
   const quoteRole = firm ? "pending" : "info";
   const sendLabel = `${formatUnits(quote.source.amountIn, src)} ${srcSym}`;
+  // A payment: the instruction was to pay someone else. The flow is the same; only the wording and emphasis differ.
+  const isPayment = intent.intentType === "PAYMENT" && execution.recipient.kind === "EXTERNAL";
   return (
     <div ref={card} className="scroll-mt-20">
     <Card>
       <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-        <p className="type-label text-fg-2">Review and send</p>
+        <p className="type-label text-fg-2">{isPayment ? "Review and pay" : "Review and send"}</p>
         <span className="type-status inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1"
           style={{ color: `var(--spak-status-${quoteRole}-foreground)`, background: `var(--spak-status-${quoteRole}-background)`, borderColor: `var(--spak-status-${quoteRole}-border)` }}>
           <Icon name={quoteRole} size={14} />{firm ? "Firm quote" : "Indicative quote"}
         </span>
       </div>
-      <h2 className="type-app-heading text-fg">Check the details, then confirm</h2>
+      <h2 className="type-app-heading text-fg">{isPayment ? "Check the payment, then confirm" : "Check the details, then confirm"}</h2>
       <p className="type-body-sm mt-1 mb-5 text-fg-2">
         {nearSource ? "Confirm locks the quote and records your approval. You then send the deposit from your NEAR wallet."
           : "Confirm locks the firm quote and opens your wallet. Nothing moves until you sign there. If the firm minimum comes in lower than shown, SPak stops and asks again."}
       </p>
 
       <Panel className="mb-5">
+        {isPayment && <>
+          <div className="flex flex-col gap-1" data-payment-recipient>
+            <span className="type-label text-fg-2">Paying</span>
+            <Mono value={execution.recipient.address} full />
+            <span className="type-caption text-fg-2">on {net(quote.destination.network)}. Check every character: a payment cannot be reversed once delivered.</span>
+          </div>
+          <div className="my-3 border-t border-line" />
+        </>}
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <span className="type-label text-fg-2">You send</span>
           <span className="text-right"><Amount value={formatUnits(quote.source.amountIn, src)} size="amount-display" />
@@ -149,7 +159,7 @@ export function Review({ intent, execution, quote: initial, onApproved, onCancel
         </div>
         <div className="my-3 border-t border-line" />
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <span className="type-label text-fg-2">Minimum you receive</span>
+          <span className="type-label text-fg-2">{isPayment ? "Minimum the recipient receives" : "Minimum you receive"}</span>
           <span className="text-right"><Amount value={formatUnits(quote.destination.minAmountOut, dst)} size="amount-total" />
             <span className="type-caption block text-fg-2">on {net(quote.destination.network)}</span></span>
         </div>
@@ -169,7 +179,7 @@ export function Review({ intent, execution, quote: initial, onApproved, onCancel
       ))}
       <Row k="Source network fee" v={`Paid in ${net(quote.source.network)} gas by your wallet; shown in the wallet before you sign`} />
       <Row k="Total cost" strong v={<><Amount value={formatUnits(quote.source.amountIn, src)} size="amount-total" /><span className="type-caption block text-fg-2">+ source network fee (protocol and destination fees come out of the output)</span></>} />
-      <Row k="Recipient" v={<Mono value={execution.recipient.address} full />} />
+      {!isPayment && <Row k="Recipient" v={<Mono value={execution.recipient.address} full />} />}
       <Row k="Refund address" v={<Mono value={execution.refundAddress} full />} />
       {firm && quote.deposit && <Row k="Deposit address" v={<Mono value={quote.deposit.address} full />} />}
       {firm && quote.deposit?.memo && <Row k="Deposit memo (required)" v={<Mono value={quote.deposit.memo} full />} />}
@@ -221,7 +231,7 @@ export function Review({ intent, execution, quote: initial, onApproved, onCancel
         <Button variant="ghost" onClick={async () => { await api(`/api/executions/${execution.id}/cancel`, {}).catch(() => {}); onCancel(); }}>Cancel</Button>
         {dupe && <Button variant="secondary" onClick={() => confirm(true)} disabled={busy}>Yes, send it again</Button>}
         {stale ? <Button onClick={requote} disabled={busy}>Get a new quote</Button>
-          : <Button onClick={() => confirm(false)} disabled={busy} className="sm:min-w-56">{busy ? "Working" : nearSource ? `Confirm ${sendLabel}` : `Confirm and send ${sendLabel}`}</Button>}
+          : <Button onClick={() => confirm(false)} disabled={busy} className="sm:min-w-56">{busy ? "Working" : nearSource ? `Confirm ${sendLabel}` : isPayment ? `Confirm and pay ${sendLabel}` : `Confirm and send ${sendLabel}`}</Button>}
       </div>
     </Card>
     </div>

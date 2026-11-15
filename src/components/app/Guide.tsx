@@ -46,10 +46,22 @@ const TOPICS: Topic[] = [
     open: { view: "execute", label: "Start a transfer" },
   },
   {
+    id: "pay", title: "Pay someone", summary: "Send a one-time payment to another person's address, on the same or another network.",
+    steps: [
+      "In Execute, write the payment, for example “Pay 50 USDC from Base to 0x… on Arbitrum”, or use the Manual form and fill in Recipient.",
+      "Name the recipient's network. If you leave it out for a NEAR or Solana address, SPak asks and offers the one network that fits. An EVM address with no network is paid on the network your funds are on, and SPak says so.",
+      "The review shows who you are paying, what you send and the minimum the recipient receives. Check the address character by character.",
+      "Press Confirm and pay. Your wallet signs the deposit.",
+      "Once SPak sees the payment arrive on the recipient's chain, the transfer page shows a payment receipt you can download.",
+    ],
+    checks: ["The address is checked against the destination network before any quote.", "SPak Guard can limit payments to approved recipients only.", "The same payment twice within a few minutes is held until you confirm it again.", "A payout to any other address, or below the minimum, never counts as delivered."],
+    open: { view: "execute", label: "Make a payment" },
+  },
+  {
     id: "tracking", title: "Tracking and Activity", summary: "Follow every transfer until delivery is proven.",
     steps: [
       "After your deposit, the transfer page shows each step and refreshes on its own.",
-      "Activity lists every transfer with its live status. Filter by in progress, completed or needs attention.",
+      "Activity lists every transfer and payment with its live status. Filter by type, network or status.",
       "A transfer shows Completed only after SPak reads the destination chain and finds the payout.",
     ],
     checks: ["Some routes cannot be verified automatically. SPak marks them for manual review before you confirm."],

@@ -36,6 +36,7 @@ const { GET: getDep } = await import("@/app/api/deposits/[id]/route");
 const { POST: submitDep } = await import("@/app/api/deposits/[id]/submit/route");
 const { POST: verifyDep } = await import("@/app/api/deposits/[id]/verify/route");
 const { POST: rejectDep } = await import("@/app/api/deposits/[id]/reject/route");
+const { GET: receipt } = await import("@/app/api/executions/[id]/receipt/route");
 const { evmWallet } = await import("../auth/keys");
 
 const ORIGIN = "http://localhost:3000";
@@ -110,5 +111,17 @@ describe("deposit API", () => {
     const ok = (await j(await prepareDep(req(`/api/executions/${ex.id}/deposits`, { cookie: alice.cookie, body: {} }), p(ex.id)))).body;
     const r = await j(await rejectDep(req(`/api/deposits/${ok.deposit.id}/reject`, { cookie: alice.cookie, body: { reason: "User rejected the request" } }), p(ok.deposit.id)));
     expect(r.body.state).toBe("REJECTED");
+  });
+});
+
+describe("receipt API", () => {
+  it("needs a session, is owner-only, and is not issued before SPak verifies delivery on the destination chain", async () => {
+    const ex = await approvedExec(alice, "Pay 6 USDC from Base to 0x1111111111111111111111111111111111111111 on Arbitrum", `rcpt-${Math.random()}`);
+    const path = `/api/executions/${ex.id}/receipt`;
+    expect((await receipt(req(path, { method: "GET" }), p(ex.id))).status).toBe(401);
+    expect((await receipt(req(path, { method: "GET", cookie: bob.cookie }), p(ex.id))).status).toBe(404);
+    const r = await j(await receipt(req(path, { method: "GET", cookie: alice.cookie }), p(ex.id)));
+    expect(r.status).toBe(409);
+    expect(r.body.error.code).toBe("RECEIPT_NOT_AVAILABLE");
   });
 });

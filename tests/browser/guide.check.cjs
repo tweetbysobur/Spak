@@ -23,7 +23,7 @@ const PROVIDER = (address) => `(() => {
   const announce = () => window.dispatchEvent(new CustomEvent('eip6963:announceProvider', { detail: Object.freeze({ info, provider }) }));
   window.addEventListener('eip6963:requestProvider', announce); announce();
 })();`;
-const TOPICS = ['Getting started', 'Make a transfer', 'Review and confirm', 'Tracking and Activity', 'Failures and refunds', 'Intelligence', 'SPak Guard', 'SPak Agent', 'Wallets and networks'];
+const TOPICS = ['Getting started', 'Make a transfer', 'Review and confirm', 'Pay someone', 'Tracking and Activity', 'Failures and refunds', 'Intelligence', 'SPak Guard', 'SPak Agent', 'Wallets and networks'];
 
 (async () => {
   const browser = await chromium.launch();

@@ -52,6 +52,7 @@ export const EXECUTION_ERRORS = {
   AGENT_MISMATCH: 409,
   AGENT_APPROVAL_REQUIRED: 403,
   AGENT_GRANT_CHANGED: 409,
+  RECEIPT_NOT_AVAILABLE: 409,
 } as const;
 export type ExecutionErrorCode = keyof typeof EXECUTION_ERRORS;
 

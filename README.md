@@ -234,6 +234,7 @@ Testnet setup: [docs/SPAK-TESTNET-SETUP.md](docs/SPAK-TESTNET-SETUP.md).
 - [SPak-in](docs/SPAK-IN.md)
 - [SPak Intelligence](docs/SPAK-INTELLIGENCE.md)
 - [SPak Guard](docs/SPAK-GUARD.md)
+- [SPak Payments](docs/SPAK-PAYMENTS.md)
 - [SPak Execution](docs/SPAK-EXECUTION.md)
 - [Supported networks](docs/SPAK-SUPPORTED-NETWORKS.md)
 - [Security](docs/SPAK-SECURITY.md)

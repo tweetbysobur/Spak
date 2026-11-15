@@ -20,16 +20,23 @@ export function Activity({ onOpen }: { onOpen: (x: ExecutionView) => void }) {
   const { items, error } = useHistory(100);
   const [network, setNetwork] = useState("all");
   const [group, setGroup] = useState("all");
+  const [kind, setKind] = useState<"all" | "EXTERNAL" | "SELF">("all");
   const networks = useMemo(() => [...new Set((items ?? []).flatMap((x) => [x.source.network, x.destination.network]))], [items]);
   const shown = (items ?? []).filter((x) => {
     const g = GROUPS.find((y) => y.id === group)!;
-    return (network === "all" || x.source.network === network || x.destination.network === network) && (!g.states || g.states.includes(x.state));
+    return (kind === "all" || x.recipient.kind === kind) && (network === "all" || x.source.network === network || x.destination.network === network) && (!g.states || g.states.includes(x.state));
   });
 
   return (
     <Card className="p-0 sm:p-0">
       <div className="flex flex-col gap-3 px-5 pt-5 sm:flex-row sm:items-end sm:px-6 sm:pt-6">
-        <p className="type-body-sm flex-1 text-fg-2">Every transfer you started, newest first. Open one to see its full tracking and receipt.</p>
+        <p className="type-body-sm flex-1 text-fg-2">Every transfer and payment you started, newest first. Open one to see its full tracking and receipt.</p>
+        <label className="flex flex-col gap-1"><span className="type-caption text-fg-2">Type</span>
+          <Select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} aria-label="Filter by type">
+            <option value="all">All types</option>
+            <option value="EXTERNAL">Payments to others</option>
+            <option value="SELF">Transfers to your wallets</option>
+          </Select></label>
         <label className="flex flex-col gap-1"><span className="type-caption text-fg-2">Network</span>
           <Select value={network} onChange={(e) => setNetwork(e.target.value)} aria-label="Filter by network">
             <option value="all">All networks</option>

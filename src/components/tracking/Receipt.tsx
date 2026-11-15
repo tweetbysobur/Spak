@@ -1,4 +1,6 @@
 "use client";
+import { useState } from "react";
+import { api } from "@/lib/client";
 import { getNetwork } from "@/spak-in/registries/networks";
 import { formatUnits, type ExecutionView } from "@/lib/client";
 import type { TrackingView } from "@/tracking/service";
@@ -28,15 +30,27 @@ export function Receipt({ x, t }: { x: ExecutionView; t: TrackingView }) {
   const fees = ((firm?.fees ?? []) as Fee[]).filter((f) => f.kind !== "REFUND");
   const verified = t.destinationTxs.filter((d) => d.outcome === "CONFIRMED");
   const dash = <span className="text-fg-2">–</span>;
+  const isPayment = x.recipient.kind === "EXTERNAL";
+  const [dl, setDl] = useState<string | null>(null);
+  /** The server issues the receipt only after its own destination check; this saves exactly what it returns. */
+  async function download() {
+    setDl(null);
+    try {
+      const r = await api<unknown>(`/api/executions/${x.id}/receipt`);
+      const url = URL.createObjectURL(new Blob([JSON.stringify(r, null, 2)], { type: "application/json" }));
+      const a = document.createElement("a"); a.href = url; a.download = `spak-${isPayment ? "payment" : "transfer"}-receipt-${x.id}.json`; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) { setDl((e as Error).message); }
+  }
   return (
     <section aria-labelledby="receipt-title" className="rounded-panel border border-line bg-elevated p-5 sm:p-6 dark:bg-surface">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 id="receipt-title" className="type-app-heading text-fg">Receipt</h3>
+        <h3 id="receipt-title" className="type-app-heading text-fg">{isPayment ? "Payment receipt" : "Receipt"}</h3>
         <p className="type-caption text-fg-2">{t.destination.verifiedAt ? new Date(t.destination.verifiedAt).toLocaleString() : ""}</p>
       </div>
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         <div><p className="type-label text-fg-2">You sent</p><div className="mt-1"><Amount value={formatUnits(x.source.amountIn, x.source.assetId)} size="amount-display" /></div><p className="type-caption text-fg-2">on {net(x.source.network)}</p></div>
-        <div><p className="type-label text-fg-2">Recipient received</p><div className="mt-1">{t.destination.verifiedAmountOut ? <Amount value={formatUnits(t.destination.verifiedAmountOut, t.destination.assetId)} size="amount-display" /> : dash}</div><p className="type-caption text-fg-2">on {net(x.destination.network)}</p></div>
+        <div><p className="type-label text-fg-2">{isPayment ? "Recipient received" : "You received"}</p><div className="mt-1">{t.destination.verifiedAmountOut ? <Amount value={formatUnits(t.destination.verifiedAmountOut, t.destination.assetId)} size="amount-display" /> : dash}</div><p className="type-caption text-fg-2">on {net(x.destination.network)}</p></div>
       </div>
       <dl className="mt-5">
         <Line k="Recipient"><Mono value={x.recipient.address} full /></Line>
@@ -47,6 +61,11 @@ export function Receipt({ x, t }: { x: ExecutionView; t: TrackingView }) {
         <Line k="Verification"><span className="type-body-sm inline-flex items-center gap-2"><span aria-hidden className="h-2 w-2 rounded-full bg-[var(--spak-status-success-icon)]" />Verified on chain by SPak</span></Line>
         <Line k="Execution reference"><Mono value={x.id} full /></Line>
       </dl>
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <button onClick={download} className="type-button-sm min-h-10 rounded-control border border-line-strong px-4 text-fg hover:bg-secondary">Download receipt</button>
+        <span className="type-caption text-fg-2">Anyone can check it: open the source and destination transactions on the explorer.</span>
+      </div>
+      {dl && <p role="alert" className="type-body-sm mt-2 text-[var(--spak-status-error-foreground)]">{dl}</p>}
     </section>
   );
 }
