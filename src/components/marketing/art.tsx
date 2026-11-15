@@ -139,12 +139,17 @@ export function WhatIsComposition({ className = "" }: { className?: string }) {
   const dx = SPREAD * 0.62, dy = SPREAD * 0.78; // along the 51.8 degree diagonal
   // Upper form box in symbol units (x 9.35 to 113.6, y 0 to 52.45), moved up and right.
   const ub = { x: 9.35 + dx + pad, y: -dy + pad, w: 104.25, h: 52.45 };
+  // Lower form box in symbol units (x 0 to 109.03, y 51 to 100), moved down and left.
+  const lb = { x: pad - dx, y: 51 + dy + pad, w: 109.03, h: 49 };
   return (
-    <div className={`what-art relative ${className}`} style={{ aspectRatio: `${W} / ${H}` }} role="img" aria-label="Abstract SPak forms: a ribbon showing a misty mountain landscape, a green leaf and a sage ribbon.">
+    <div className={`what-art relative ${className}`} style={{ aspectRatio: `${W} / ${H}` }} role="img" aria-label="Abstract SPak forms: two ribbons showing a misty mountain landscape, and a green leaf.">
       <svg viewBox={`0 0 ${W} ${H}`} className="absolute inset-0 h-full w-full" aria-hidden="true" focusable="false">
         <defs>
           <clipPath id="what-upper" clipPathUnits="objectBoundingBox">
             <path d={f.upper} transform={`scale(${1 / ub.w} ${1 / ub.h}) translate(-9.35 0)`} />
+          </clipPath>
+          <clipPath id="what-lower" clipPathUnits="objectBoundingBox">
+            <path d={f.lower} transform={`scale(${1 / lb.w} ${1 / lb.h}) translate(0 -51)`} />
           </clipPath>
         </defs>
         <g className="what-leaf"><path d={f.leaf} transform={`translate(${pad} ${pad})`} fill="var(--spak-primary)" /></g>
@@ -153,6 +158,12 @@ export function WhatIsComposition({ className = "" }: { className?: string }) {
       <div className="what-upper absolute" aria-hidden="true" style={{ left: `${(ub.x / W) * 100}%`, top: `${(ub.y / H) * 100}%`, width: `${(ub.w / W) * 100}%`, height: `${(ub.h / H) * 100}%`, clipPath: "url(#what-upper)" }}>
         {/* Scaled 1.6x (uniformly, the box keeps the photo ratio) and offset so the rock face fills the top band and the mist runs down the arm. */}
         <div className="what-photo absolute" style={{ left: "-54.7%", top: "-37%", width: "160%", height: "160%" }}>
+          <Image src="/brand/images/spak-hero-landscape.jpg" alt="" fill sizes="(min-width: 1024px) 720px, 130vw" quality={80} className="object-cover" />
+        </div>
+      </div>
+      {/* The same landscape in the lower ribbon, cropped to the valley: the upper ribbon shows the peak, the lower one the forest below it, so the forms read as one scene. */}
+      <div className="what-lower absolute" aria-hidden="true" style={{ left: `${(lb.x / W) * 100}%`, top: `${(lb.y / H) * 100}%`, width: `${(lb.w / W) * 100}%`, height: `${(lb.h / H) * 100}%`, clipPath: "url(#what-lower)" }}>
+        <div className="what-photo absolute" style={{ left: "-20%", top: "-62%", width: "150%", height: "170%" }}>
           <Image src="/brand/images/spak-hero-landscape.jpg" alt="" fill sizes="(min-width: 1024px) 720px, 130vw" quality={80} className="object-cover" />
         </div>
       </div>
