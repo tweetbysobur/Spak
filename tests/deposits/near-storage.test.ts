@@ -68,7 +68,7 @@ describe("NEAR deposit verification with storage registration", () => {
   });
 });
 
-describe("NEAR destination: the recipient must hold storage on the token contract (service, MOCKED provider and chain)", () => {
+describe("NEAR destination: storage registration is handled by 1Click (service, MOCKED provider and chain)", () => {
   async function approved(h: Awaited<ReturnType<typeof harness>>) {
     const u = await h.newUser();
     const r = await u.plan("Bridge 5 USDC from Base to NEAR");
@@ -85,11 +85,10 @@ describe("NEAR destination: the recipient must hold storage on the token contrac
     expect(ex.destinationNetwork).toBe("near");
     expect((await h.deposits.prepare({ userId: u.userId, executionId: ex.id, wallets })).transaction.family).toBe("evm");
   });
-  it("unregistered recipient: refused before any deposit instruction, with the fix named", async () => {
+  it("unregistered recipient: deposit instructions are still issued (1Click registers it and charges the quoted withdrawFee)", async () => {
     const h = await harness();
     const { u, ex, wallets } = await approved(h);
     h.chain.nearUnregistered.add(`${USDC}|${ex.recipient}`);
-    await expect(h.deposits.prepare({ userId: u.userId, executionId: ex.id, wallets })).rejects.toMatchObject({ code: "RECIPIENT_NOT_REGISTERED" });
-    expect(await h.depositRecords.inStates(ex.id, ["WALLET_CONFIRMATION_REQUESTED"])).toHaveLength(0);
+    expect((await h.deposits.prepare({ userId: u.userId, executionId: ex.id, wallets })).transaction.family).toBe("evm");
   });
 });

@@ -153,7 +153,7 @@ export function WhatIsComposition({ className = "" }: { className?: string }) {
       <div className="what-upper absolute" aria-hidden="true" style={{ left: `${(ub.x / W) * 100}%`, top: `${(ub.y / H) * 100}%`, width: `${(ub.w / W) * 100}%`, height: `${(ub.h / H) * 100}%`, clipPath: "url(#what-upper)" }}>
         {/* Scaled 1.6x (uniformly, the box keeps the photo ratio) and offset so the rock face fills the top band and the mist runs down the arm. */}
         <div className="what-photo absolute" style={{ left: "-54.7%", top: "-37%", width: "160%", height: "160%" }}>
-          <Image src="/brand/images/spak-hero-landscape.png" alt="" fill sizes="(min-width: 1024px) 720px, 130vw" quality={80} className="object-cover" />
+          <Image src="/brand/images/spak-hero-landscape.jpg" alt="" fill sizes="(min-width: 1024px) 720px, 130vw" quality={80} className="object-cover" />
         </div>
       </div>
     </div>

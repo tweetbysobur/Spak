@@ -1,9 +1,14 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getNetwork } from "@/spak-in/registries/networks";
 import { getAsset } from "@/spak-in/registries/assets";
 import { api, formatUnits, type ExecutionView, type IntentResult, type Prepared, type QuoteView } from "@/lib/client";
 import { classifyWalletError } from "@/wallets/errors";
+import { watchEvmWallets, type EvmWalletInfo } from "@/wallets/evm";
+import { watchSolanaWallets, type SolanaWalletInfo } from "@/wallets/solana";
+import { checkEvmWallet, checkSolanaWallet, requestEvmNetwork, sendEvmDeposit, sendSolanaDeposit } from "@/wallets/deposit";
+import type { DepositTransaction } from "@/deposits/builder";
+import type { DepositView } from "@/deposits/service";
 import { Amount, Button, Card, ErrorText, Mono, Panel, Row } from "./ui";
 import { Notice } from "./status";
 import { Icon } from "./icons";
@@ -13,45 +18,103 @@ const usd = (v: string | null | undefined) => (v ? ` (~$${Number(v).toFixed(2)})
 const FIRM_APPROVAL_WINDOW_MS = 10 * 60_000;
 type Fee = { kind: string; bps?: number; amount?: string; assetId?: string; note: string };
 
+type Stage = "firm" | "approve" | "prepare" | "wallet" | "submit";
+const STAGES: { id: Stage; label: string }[] = [
+  { id: "firm", label: "Lock the firm quote" }, { id: "approve", label: "Record your approval" },
+  { id: "prepare", label: "Prepare the deposit" }, { id: "wallet", label: "Sign in your wallet" }, { id: "submit", label: "Send it to SPak to track" },
+];
+
 /**
- * Steps 1 and 2: review the indicative estimate, get the firm quote, and approve exactly that firm quote.
- * The server re-checks every approval; nothing here is trusted on its own.
+ * Review and send in one action. One button locks the firm quote, records the approval, prepares the deposit and
+ * opens the wallet that owns the refund address; the wallet signature is the user's authorization. Every step is
+ * re-checked by the server. It stops and asks again if the firm minimum is below the minimum shown, and hands over to
+ * the transfer page (manual wallet choice) whenever a step cannot finish on its own.
  */
 export function Review({ intent, execution, quote: initial, onApproved, onCancel }: {
-  intent: IntentResult; execution: ExecutionView; quote: QuoteView; onApproved: (e: ExecutionView) => void; onCancel: () => void;
+  intent: IntentResult; execution: ExecutionView; quote: QuoteView; onApproved: (e: ExecutionView, message?: string) => void; onCancel: () => void;
 }) {
   const [quote, setQuote] = useState(initial);
-  const [indicative, setIndicative] = useState<QuoteView | null>(initial.kind === "INDICATIVE" ? initial : null);
+  const [shownMin, setShownMin] = useState(initial.destination.minAmountOut);
   const [busy, setBusy] = useState(false);
+  const [stage, setStage] = useState<Stage | null>(null);
   const [error, setError] = useState<string>();
-  const [ack, setAck] = useState(false);
   const [dupe, setDupe] = useState(false);
   const [stale, setStale] = useState(false);
+  const [worse, setWorse] = useState(false);
+  const [evm, setEvm] = useState<EvmWalletInfo[]>([]);
+  const [sol, setSol] = useState<SolanaWalletInfo[]>([]);
+  const card = useRef<HTMLDivElement>(null);
   const firm = quote.kind === "FIRM";
+  const nearSource = quote.route.deposit === "MANUAL_HASH";
 
-  const run = async (fn: () => Promise<void>) => {
+  useEffect(() => { const a = watchEvmWallets(setEvm), b = watchSolanaWallets(setSol); card.current?.scrollIntoView({ behavior: "smooth", block: "start" }); return () => { a(); b(); }; }, []);
+
+  const requote = async () => {
     setBusy(true); setError(undefined);
-    try { await fn(); } catch (e) {
+    try { const r = await api<Prepared>(`/api/executions/${execution.id}/quote`, {}); setQuote(r.quote); setShownMin(r.quote.destination.minAmountOut); setStale(false); setWorse(false); }
+    catch (e) { setError(classifyWalletError(e).message); } finally { setBusy(false); }
+  };
+
+  /** The wallet in this browser that controls the refund address, on the right network (asks to switch if needed). */
+  async function walletFor(tx: DepositTransaction, sender: string) {
+    if (tx.family === "evm") {
+      for (const w of evm) {
+        let c = await checkEvmWallet(w, tx).catch(() => null);
+        if (!c?.accountOk) continue;
+        if (!c.networkOk) { await requestEvmNetwork(w, tx.chainId); c = await checkEvmWallet(w, tx); if (!c.networkOk) continue; }
+        return { send: () => sendEvmDeposit(w, tx) };
+      }
+    }
+    if (tx.family === "solana") {
+      for (const w of sol) { const c = checkSolanaWallet(w, tx, sender); if (c.accountOk && c.chainOk && c.canSend) return { send: () => sendSolanaDeposit(w, tx, sender) }; }
+    }
+    return null;
+  }
+
+  async function confirm(allowDuplicate = false) {
+    setBusy(true); setError(undefined); setDupe(false);
+    let approved: ExecutionView | null = null;
+    try {
+      // 1. Firm quote. If its minimum is below what the user saw, stop and show the new terms.
+      let q = quote;
+      if (!firm) {
+        setStage("firm");
+        q = (await api<Prepared>(`/api/executions/${execution.id}/firm-quote`, { quoteId: quote.id })).quote;
+        setQuote(q);
+        if (q.destination.minAmountOut && shownMin && BigInt(q.destination.minAmountOut) < BigInt(shownMin)) { setWorse(true); setShownMin(q.destination.minAmountOut); setStage(null); return; }
+      }
+      // 2. Approval of exactly this firm quote.
+      setStage("approve");
+      approved = (await api<{ execution: ExecutionView }>(`/api/executions/${execution.id}/approve`, {
+        quoteId: q.id, approval: { planHash: execution.plan.planHash, planRevision: execution.plan.revision, approvedAt: new Date().toISOString(), allowDuplicate },
+      })).execution;
+      if (nearSource) { onApproved(approved, "Approved. Send the NEAR deposit shown below from your NEAR wallet."); return; }
+      // 3. Deposit instructions, built by the server from the firm quote.
+      setStage("prepare");
+      const p = await api<{ deposit: DepositView; transaction: DepositTransaction }>(`/api/executions/${execution.id}/deposits`, {});
+      // 4. The user's wallet signs and sends. This is the authorization; nothing moves without it.
+      const w = await walletFor(p.transaction, p.deposit.sender);
+      if (!w) { onApproved(approved, "Approved. Choose the wallet that holds the funds to send the deposit."); return; }
+      setStage("wallet");
+      let txHash: string;
+      try { txHash = await w.send(); }
+      catch (e) {
+        if (classifyWalletError(e).kind === "CANCELLED") await api(`/api/deposits/${p.deposit.id}/reject`, { reason: "Rejected in the wallet" }).catch(() => {});
+        onApproved(approved, `${classifyWalletError(e).message} Nothing was sent. You can send the deposit from the transfer page.`);
+        return;
+      }
+      // 5. SPak verifies the deposit on chain and tracks the transfer from here.
+      setStage("submit");
+      await api<DepositView>(`/api/deposits/${p.deposit.id}/submit`, { txHash });
+      onApproved(approved, "Deposit sent. SPak is confirming it on chain and tracking the transfer.");
+    } catch (e) {
       const k = classifyWalletError(e);
       if ((e as { code?: string }).code === "DUPLICATE_SUSPECTED") setDupe(true);
       if (k.kind === "QUOTE_EXPIRED") setStale(true);
+      if (approved) { onApproved(approved, `${k.message} The transfer is approved; continue on the transfer page.`); return; }
       setError(k.message);
-    } finally { setBusy(false); }
-  };
-  const getFirm = () => run(async () => {
-    const r = await api<Prepared>(`/api/executions/${execution.id}/firm-quote`, { quoteId: quote.id });
-    setQuote(r.quote); setAck(false);
-  });
-  const requote = () => run(async () => {
-    const r = await api<Prepared>(`/api/executions/${execution.id}/quote`, {});
-    setQuote(r.quote); setIndicative(r.quote); setStale(false); setAck(false);
-  });
-  const approve = (allowDuplicate = false) => run(async () => {
-    const r = await api<{ execution: ExecutionView }>(`/api/executions/${execution.id}/approve`, {
-      quoteId: quote.id, approval: { planHash: execution.plan.planHash, planRevision: execution.plan.revision, approvedAt: new Date().toISOString(), allowDuplicate },
-    });
-    onApproved(r.execution);
-  });
+    } finally { setBusy(false); setStage(null); }
+  }
 
   const src = quote.source.assetId, dst = quote.destination.assetId;
   const srcSym = getAsset(src)?.symbol ?? src, dstSym = getAsset(dst)?.symbol ?? dst;
@@ -61,19 +124,21 @@ export function Review({ intent, execution, quote: initial, onApproved, onCancel
   const costPct = inUsd > 0 && outUsd >= 0 && Number.isFinite(inUsd) && Number.isFinite(outUsd) ? Math.max(0, (1 - outUsd / inUsd) * 100) : null;
   const approveBy = new Date(Date.parse(quote.createdAt) + FIRM_APPROVAL_WINDOW_MS);
   const quoteRole = firm ? "pending" : "info";
+  const sendLabel = `${formatUnits(quote.source.amountIn, src)} ${srcSym}`;
   return (
+    <div ref={card} className="scroll-mt-20">
     <Card>
       <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-        <p className="type-label text-fg-2">{firm ? "Step 2 of 7" : "Step 1 of 7"}</p>
+        <p className="type-label text-fg-2">Review and send</p>
         <span className="type-status inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1"
           style={{ color: `var(--spak-status-${quoteRole}-foreground)`, background: `var(--spak-status-${quoteRole}-background)`, borderColor: `var(--spak-status-${quoteRole}-border)` }}>
           <Icon name={quoteRole} size={14} />{firm ? "Firm quote" : "Indicative quote"}
         </span>
       </div>
-      <h2 className="type-app-heading text-fg">{firm ? "Approve the firm quote" : "Review the estimate"}</h2>
+      <h2 className="type-app-heading text-fg">Check the details, then confirm</h2>
       <p className="type-body-sm mt-1 mb-5 text-fg-2">
-        {firm ? "These are the provider's committed terms for this deposit address. The expected output is not guaranteed; the minimum is the worst case after slippage."
-          : "An estimate to check the route. You will see and approve the firm quote before anything can be sent."}
+        {nearSource ? "Confirm locks the quote and records your approval. You then send the deposit from your NEAR wallet."
+          : "Confirm locks the firm quote and opens your wallet. Nothing moves until you sign there. If the firm minimum comes in lower than shown, SPak stops and asks again."}
       </p>
 
       <Panel className="mb-5">
@@ -111,17 +176,29 @@ export function Review({ intent, execution, quote: initial, onApproved, onCancel
       {firm && quote.deposit?.deadline && <Row k="Deposit deadline" v={new Date(quote.deposit.deadline).toLocaleString()} />}
       <Row k={firm ? "Approve before" : "Estimate valid until"} v={(firm ? approveBy : new Date(quote.expiresAt)).toLocaleTimeString()} />
       {quote.timeEstimateSec !== null && <Row k="Estimated time" v={`~${quote.timeEstimateSec}s after the deposit confirms`} />}
-      <Row k="Execution reference" v={<Mono value={execution.id} full />} />
-      <Row k="Quote reference" v={<Mono value={quote.id} full />} />
-      {firm && indicative?.destination.amountOut && quote.destination.amountOut && (
-        <p className="type-body-sm mt-3 text-fg-2">Firm expected output vs the estimate: <span className="type-amount-fee text-fg">{formatUnits(quote.destination.amountOut, dst)}</span> vs <span className="type-amount-fee text-fg">{formatUnits(indicative.destination.amountOut, dst)}</span>.</p>
+      <details className="mt-2">
+        <summary className="type-body-sm min-h-10 cursor-pointer py-2 text-fg-2">References</summary>
+        <Row k="Execution reference" v={<Mono value={execution.id} full />} />
+        <Row k="Quote reference" v={<Mono value={quote.id} full />} />
+      </details>
+      {worse && (
+        <Notice role="warning" title="The firm quote is lower than the estimate" className="mt-4">
+          The firm minimum you receive is now {formatUnits(quote.destination.minAmountOut, dst)} {dstSym}. Confirm again to accept it, or cancel.
+        </Notice>
       )}
-
-      {firm && (
-        <label className="type-body-sm mt-5 flex items-start gap-3 rounded-card border border-line-strong bg-surface p-4 text-fg dark:bg-elevated">
-          <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--spak-primary)]" />
-          <span>I approve exactly this transaction: send <b className="type-amount">{formatUnits(quote.source.amountIn, src)}</b> to the deposit address above, delivering at least <b className="type-amount">{formatUnits(quote.destination.minAmountOut, dst)}</b> to the recipient. My wallet will still ask me to sign the deposit.</span>
-        </label>
+      {stage && (
+        <ol className="mt-5 flex flex-col gap-2" aria-live="polite" aria-label="Progress">
+          {STAGES.filter((x) => !(nearSource && ["prepare", "wallet", "submit"].includes(x.id))).map((x) => {
+            const at = STAGES.findIndex((y) => y.id === stage), me = STAGES.findIndex((y) => y.id === x.id);
+            const state = me < at ? "done" : me === at ? "now" : "next";
+            return (
+              <li key={x.id} className={`type-body-sm flex items-center gap-2 ${state === "next" ? "text-fg-2" : "text-fg"}`}>
+                <span aria-hidden className={`h-2.5 w-2.5 rounded-full ${state === "done" ? "bg-primary" : state === "now" ? "border-2 border-primary motion-safe:animate-pulse" : "border border-line-strong"}`} />
+                {x.label}{state === "now" && x.id === "wallet" ? ": check your wallet" : ""}
+              </li>
+            );
+          })}
+        </ol>
       )}
       {quote.route.delivery === "MANUAL_REVIEW" && (
         <Notice role="warning" title="SPak cannot confirm delivery on this route automatically" className="mt-4">
@@ -142,11 +219,11 @@ export function Review({ intent, execution, quote: initial, onApproved, onCancel
       {error && <ErrorText>{error}</ErrorText>}
       <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap">
         <Button variant="ghost" onClick={async () => { await api(`/api/executions/${execution.id}/cancel`, {}).catch(() => {}); onCancel(); }}>Cancel</Button>
-        {dupe && <Button variant="secondary" onClick={() => approve(true)} disabled={busy}>Yes, do it again</Button>}
+        {dupe && <Button variant="secondary" onClick={() => confirm(true)} disabled={busy}>Yes, send it again</Button>}
         {stale ? <Button onClick={requote} disabled={busy}>Get a new quote</Button>
-          : firm ? <Button onClick={() => approve(false)} disabled={!ack || busy}>{busy ? "Approving" : "Approve"}</Button>
-          : <Button onClick={getFirm} disabled={busy}>{busy ? "Getting firm quote" : "Get firm quote"}</Button>}
+          : <Button onClick={() => confirm(false)} disabled={busy} className="sm:min-w-56">{busy ? "Working" : nearSource ? `Confirm ${sendLabel}` : `Confirm and send ${sendLabel}`}</Button>}
       </div>
     </Card>
+    </div>
   );
 }

@@ -58,7 +58,7 @@ async function shot(page, name) { await page.screenshot({ path: `${OUT}/${name}.
 
   // 2. Sign in with the simulated wallet (real challenge, real server-side signature verification)
   await page.getByRole('button', { name: /Test Wallet \(simulated\)/ }).click();
-  await page.locator('nav[aria-label=App]').first().waitFor({ timeout: 20000 });
+  await page.locator('nav[aria-label=App]').first().waitFor({ timeout: 20000 }); await page.getByRole('dialog', { name: 'Welcome to SPak' }).waitFor({ timeout: 5000 }).then(() => page.keyboard.press('Escape')).catch(() => {}); // first-run tour
   await go(page, 'Execute');
   await page.getByLabel('Instruction').waitFor({ timeout: 20000 });
   ok('signed in: navigation shown', true);
@@ -67,23 +67,20 @@ async function shot(page, name) { await page.screenshot({ path: `${OUT}/${name}.
   // 3. Intent -> real NEAR Intents indicative quote -> review
   await page.getByLabel('Instruction').fill('Swap 50 USDC on Base to SOL on Solana to 9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM');
   await page.getByRole('button', { name: 'Send' }).click();
-  try { await page.getByText('Review the estimate').waitFor({ timeout: 45000 }); } catch (e) { await shot(page, 'fail-chat'); console.log(await page.locator('main').innerText()); throw e; }
+  try { await page.getByText('Check the details, then confirm').waitFor({ timeout: 45000 }); } catch (e) { await shot(page, 'fail-chat'); console.log(await page.locator('main').innerText()); throw e; }
   ok('indicative quote review rendered', true);
   const tnum = await page.locator('.type-amount-display').first().evaluate((e) => getComputedStyle(e).fontVariantNumeric);
   ok('amounts use tabular numerals', tnum.includes('tabular-nums'), tnum);
   await shot(page, '03-review-indicative-light');
 
-  // 4. Firm quote (real deposit address; nothing sent) -> approval
-  await page.getByRole('button', { name: 'Get firm quote' }).click();
-  await page.getByText('Approve the firm quote').waitFor({ timeout: 45000 });
-  const approveDisabled = await page.getByRole('button', { name: 'Approve', exact: true }).isDisabled();
-  ok('Approve stays disabled until the user ticks the approval', approveDisabled);
-  const fullAddr = await page.getByText('Deposit address', { exact: true }).locator('xpath=..').locator('.type-address').first().innerText();
-  ok('deposit address shown in full on approval', /^0x[0-9a-fA-F]{40}/.test(fullAddr.trim()), fullAddr.trim().slice(0, 14) + '…');
-  await shot(page, '04-review-firm-light');
-  await page.getByRole('checkbox').check();
-  await page.getByRole('button', { name: 'Approve', exact: true }).click();
-  await page.getByText('Step 3 of 7: send the deposit').waitFor({ timeout: 30000 });
+  // 4. One click: firm quote (real deposit address) -> approval -> deposit preparation. The test wallet holds nothing,
+  //    so the server refuses to prepare the deposit and SPak stops before any wallet prompt, on the transfer page.
+  ok('one primary action names the exact amount', await page.getByRole('button', { name: 'Confirm and send 50 USDC' }).isVisible());
+  ok('no separate firm-quote or approval-checkbox step', (await page.getByRole('button', { name: 'Get firm quote' }).count()) === 0 && (await page.getByRole('checkbox').count()) === 0);
+  await page.getByRole('button', { name: 'Confirm and send 50 USDC' }).click();
+  await page.getByText('Step 3 of 7: send the deposit').waitFor({ timeout: 60000 });
+  const fullAddr = await page.getByText('To deposit address', { exact: true }).locator('xpath=..').locator('.type-address').first().innerText();
+  ok('deposit address shown in full after confirming', /^0x[0-9a-fA-F]{40}/.test(fullAddr.trim()), fullAddr.trim().slice(0, 14) + '…');
   ok('approval leads to deposit instructions (no funds moved)', true);
   const badge = await page.locator('[data-status-role]').first().getAttribute('data-status-role');
   ok('awaiting deposit uses the pending role', badge === 'pending', badge);

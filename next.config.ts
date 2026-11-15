@@ -12,6 +12,8 @@ const nextConfig: NextConfig = {
   distDir: process.env.NEXT_PUBLIC_SPAK_NETWORK_ENV === "tidepool-testnet" ? ".next-testnet" : ".next",
   // Native/WASM database drivers run as plain Node modules, not bundled.
   serverExternalPackages: ["@electric-sql/pglite", "pg"],
+  // AVIF first (smaller), WebP fallback. Optimized images are cached for 31 days instead of being revalidated on every visit.
+  images: { formats: ["image/avif", "image/webp"], minimumCacheTTL: 2678400 },
   // The Product and How it works pages were folded into the homepage. Old links keep working.
   async redirects() {
     return [

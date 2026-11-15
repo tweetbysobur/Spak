@@ -96,9 +96,8 @@ export function Overview({ session, onSelect, onExecute, onOpen }: {
             </>}
           </Card>
           <Card>
-            <SectionTitle>Balances</SectionTitle>
-            <p className="type-body-sm text-fg-2">Balance reading across networks is not built yet. SPak checks your balance for the exact asset when it prepares a deposit.</p>
-            <p className="type-caption mt-2 inline-block rounded-full border border-dashed border-line-strong px-2 text-fg-2">Planned</p>
+            <SectionTitle aside={<Button variant="ghost" size="sm" onClick={() => onSelect("portfolio")}>Open</Button>}>Balances</SectionTitle>
+            <p className="type-body-sm text-fg-2">Your balances on 10 networks, valued with independent prices, are in Intelligence.</p>
           </Card>
           <Card>
             <div className="flex items-start gap-3">

@@ -60,7 +60,7 @@ const nep413 = (message, nonce, recipient) => createHash('sha256').update(Buffer
 
   await page.goto(APP, { waitUntil: 'networkidle' });
   await page.getByRole('button', { name: /Test Wallet \(simulated\)/ }).click();
-  await page.locator('nav[aria-label=App]').first().waitFor({ timeout: 20000 });
+  await page.locator('nav[aria-label=App]').first().waitFor({ timeout: 20000 }); await page.getByRole('dialog', { name: 'Welcome to SPak' }).waitFor({ timeout: 5000 }).then(() => page.keyboard.press('Escape')).catch(() => {}); // first-run tour
   await go(page, 'Agent');
   await page.getByLabel('Create Agent identity').waitFor({ timeout: 15000 });
   ok('no Agent yet: creation offered, needs no NEAR account', /needs no NEAR account/.test(await page.locator('main').innerText()));

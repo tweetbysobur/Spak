@@ -1,3 +1,4 @@
+import { PROVIDER_LABEL } from "@/environment";
 import { statusRole, type StatusRole } from "@/design/css";
 import { Icon } from "./icons";
 
@@ -12,7 +13,7 @@ export const DEPOSIT_LABEL: Record<string, string> = {
   CONFIRMED: "Deposit confirmed on chain", REJECTED: "Deposit rejected", FAILED: "Deposit transaction failed", EXPIRED: "Deposit expired",
 };
 export const REFUND_LABEL: Record<string, string> = {
-  PENDING_PROVIDER: "Waiting for NEAR Intents to send the refund", INITIATED: "Refund started by NEAR Intents", TX_DETECTED: "Refund transaction found",
+  PENDING_PROVIDER: `Waiting for ${PROVIDER_LABEL} to send the refund`, INITIATED: `Refund started by ${PROVIDER_LABEL}`, TX_DETECTED: "Refund transaction found",
   VERIFICATION_PENDING: "Verifying the refund on chain", ASSOCIATION_PENDING: "Transfer found, not linked to this refund yet (under review)",
   PARTIAL: "Part of the reported refund verified", COMPLETED: "Refund fully verified and linked to this transfer", FAILED: "Refund could not be verified",
   DELAYED: "Refund delayed", UNKNOWN: "Refund status unknown",

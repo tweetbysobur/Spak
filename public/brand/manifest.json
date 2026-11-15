@@ -293,6 +293,16 @@
       "approved": true
     },
     {
+      "path": "public/brand/images/spak-hero-landscape.jpg",
+      "kind": "image",
+      "format": "jpg",
+      "dimensions": "1774x887",
+      "bytes": 230944,
+      "sha256": "85fc1e6adbeb6b19124c73a18903c6d727f35b7c0671642ce38cafa1efb2bbe1",
+      "purpose": "JPEG export (quality 90) of spak-hero-landscape.png, served on the homepage hero for faster loading.",
+      "approved": true
+    },
+    {
       "path": "public/brand/images/spak-hero-landscape-mobile.jpg",
       "kind": "image",
       "format": "jpg",

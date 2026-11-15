@@ -35,18 +35,18 @@ const PROVIDER = (address) => `(() => {
   page.on('response', (r) => { if (r.status() >= 500) errors.push(`${r.status()} ${r.url()}`); });
   await page.goto(`${BASE}/app`, { waitUntil: 'networkidle' });
   await page.getByRole('button', { name: /Test Wallet \(simulated\)/ }).click();
-  await page.locator('nav[aria-label=App]').first().waitFor({ timeout: 20000 });
+  await page.locator('nav[aria-label=App]').first().waitFor({ timeout: 20000 }); await page.getByRole('dialog', { name: 'Welcome to SPak' }).waitFor({ timeout: 5000 }).then(() => page.keyboard.press('Escape')).catch(() => {}); // first-run tour
   const banner = page.locator('[data-testnet-banner]');
   ok('testnet banner on every app screen', await banner.isVisible() && /Test tokens with no value/.test(await banner.innerText()) && /not affiliated with NEAR or 1Click/.test(await banner.innerText()));
   await page.locator('nav[aria-label=App] button:visible', { hasText: 'Execute' }).first().click();
   await page.locator('#spak-intent').fill('Swap 0.002 ETH on Base to USDC on Arbitrum');
   await page.getByRole('button', { name: 'Send' }).click();
-  await page.getByRole('button', { name: 'Get firm quote' }).waitFor({ timeout: 45000 });
+  await page.getByRole('button', { name: /^Confirm and send / }).waitFor({ timeout: 45000 });
   const review = await page.locator('main').innerText();
   ok('review names the testnet chains and a real Tidepool quote', /Base Sepolia/.test(review) && /Arbitrum Sepolia/.test(review) && /USDC/.test(review));
   await page.screenshot({ path: `${OUT}/testnet-01-review.png`, fullPage: true });
-  await page.getByRole('button', { name: 'Get firm quote' }).click();
-  const firm = await page.getByText('Deposit address', { exact: true }).waitFor({ timeout: 60000 }).then(() => true).catch(() => false);
+  await page.getByRole('button', { name: /^Confirm and send / }).click();
+  const firm = await page.getByText('To deposit address', { exact: true }).waitFor({ timeout: 60000 }).then(() => true).catch(() => false);
   ok('firm quote with a Base Sepolia deposit address', firm);
   ok('provider named as the testnet sandbox, never as NEAR Intents', /Tidepool \(testnet sandbox\)/.test(await page.locator('main').innerText()) && !/NEAR Intents/.test(await page.locator('main').innerText()));
   await page.setViewportSize({ width: 390, height: 844 });

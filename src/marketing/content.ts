@@ -56,7 +56,7 @@ export const PILLARS: Pillar[] = [
     ],
   },
   {
-    id: "intelligence", name: "SPak Intelligence", status: "Partly live",
+    id: "intelligence", name: "SPak Intelligence", status: "Live",
     summary: "The part that understands what you ask. It follows fixed rules and does not use a language model, so the same sentence always gives the same plan.",
     live: [
       "Reads swaps, bridges, transfers and payments written in plain words.",
@@ -70,7 +70,7 @@ export const PILLARS: Pillar[] = [
     ],
   },
   {
-    id: "guard", name: "SPak Guard", status: "Partly live",
+    id: "guard", name: "SPak Guard", status: "Live",
     summary: "The controls between an instruction and your funds.",
     live: [
       "Every transfer needs your approval of a firm quote. The approval is bound to that exact plan.",

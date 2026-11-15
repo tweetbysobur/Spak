@@ -114,7 +114,7 @@ describe("marketing site: honesty and brand rules in the source", () => {
 
   it("hero background is the owner-supplied landscape, listed in the brand inventory, shown with a real image element", () => {
     const hero = HOME.slice(HOME.indexOf("<section"), HOME.indexOf("</section>"));
-    expect(HOME).toContain('const HERO_IMAGE = "/brand/images/spak-hero-landscape.png"');
+    expect(HOME).toContain('const HERO_IMAGE = "/brand/images/spak-hero-landscape.jpg"');
     expect(HOME).toContain('const HERO_IMAGE_MOBILE = "/brand/images/spak-hero-landscape-mobile.jpg"');
     expect(HOME).toContain('const MOBILE_MEDIA = "(max-width: 639px)"');
     // One <picture>: a portrait source for phones, the landscape for everything else, both optimized by Next.js.
@@ -123,7 +123,7 @@ describe("marketing site: honesty and brand rules in the source", () => {
     expect(hero).toContain("sm:object-[30%_50%] md:object-[50%_50%] lg:object-center");
     expect(hero).toContain("sm:min-h-[clamp(34rem,50vw,50rem)]");
     const inventory = JSON.parse(read("public/brand/manifest.json")) as { assets: { path: string; approved: boolean; dimensions: string }[] };
-    for (const f of ["spak-hero-landscape.png", "spak-hero-landscape-mobile.jpg"]) {
+    for (const f of ["spak-hero-landscape.png", "spak-hero-landscape.jpg", "spak-hero-landscape-mobile.jpg"]) {
       expect(existsSync(join(ROOT, "public/brand/images", f)), f).toBe(true);
       expect(inventory.assets.find((a) => a.path === `public/brand/images/${f}`)?.approved, f).toBe(true);
     }
@@ -154,7 +154,7 @@ describe("marketing site: honesty and brand rules in the source", () => {
     expect(sec).toMatch(/href="#how-it-works"[^>]*>\s*See how it works/);
     expect(sec).toContain("<WhatIsComposition");
     const art = read("src/components/marketing/art.tsx");
-    expect(art).toContain('src="/brand/images/spak-hero-landscape.png"');
+    expect(art).toContain('src="/brand/images/spak-hero-landscape.jpg"');
     expect(art).toContain('clipPath: "url(#what-upper)"');
     expect(art).toContain('readFileSync(join(process.cwd(), "public/brand/logo/spak-symbol.svg")');
   });

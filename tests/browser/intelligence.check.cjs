@@ -41,7 +41,7 @@ const PROVIDER = (address) => `(() => {
     const errs = []; page.on('pageerror', (e) => errs.push(e.message));
     await page.goto(`${BASE}/app`);
     await page.getByRole('button', { name: /Test Wallet \(simulated\)/ }).click();
-    await page.locator('nav[aria-label=App]:visible').first().waitFor({ timeout: 20000 });
+    await page.locator('nav[aria-label=App]:visible').first().waitFor({ timeout: 20000 }); await page.getByRole('dialog', { name: 'Welcome to SPak' }).waitFor({ timeout: 5000 }).then(() => page.keyboard.press('Escape')).catch(() => {}); // first-run tour
     const navItem = page.locator('nav[aria-label=App] button:visible', { hasText: 'Intelligence' });
     if (await navItem.count()) await navItem.first().click();
     else { await page.locator('button[aria-haspopup=menu]:visible').first().click(); await page.getByRole('menuitem', { name: 'Intelligence' }).click(); } // phone: account menu
@@ -65,7 +65,7 @@ const PROVIDER = (address) => `(() => {
     await page.getByRole('button', { name: 'Send' }).click();
     try { await page.getByText('Not enough USDC on Base yet.').waitFor({ timeout: 60000 }); } catch (e) { console.log('CHAT:', (await page.locator('[aria-live=polite]').first().innerText()).replace(/\s+/g, ' ').slice(0, 600)); throw e; }
     ok('REAL: an unfunded transfer is flagged with the real balance before the quote', await page.getByText('You have 0 USDC on Base in this wallet; this transfer needs 20.').isVisible());
-    await page.getByText('Review the estimate').waitFor({ timeout: 60000 });
+    await page.getByText('Check the details, then confirm').waitFor({ timeout: 60000 });
     ok('REAL: the quote still loads, so the user can fund the wallet after seeing it', true);
     await page.screenshot({ path: `${OUT}/intel-real-insufficient.png`, fullPage: true });
     ok('REAL: no page errors', errs.length === 0, errs.join(' | '));

@@ -52,7 +52,7 @@ const post = (page, url, body) => page.evaluate(async ({ url, body }) => { const
   page.on('response', (r) => { if (r.status() >= 500) errors.push(`${r.status()} ${r.url()}`); });
   await page.goto(APP, { waitUntil: 'networkidle' });
   await page.getByRole('button', { name: /Test Wallet \(simulated\)/ }).click();
-  await page.locator('nav[aria-label=App]').first().waitFor({ timeout: 20000 });
+  await page.locator('nav[aria-label=App]').first().waitFor({ timeout: 20000 }); await page.getByRole('dialog', { name: 'Welcome to SPak' }).waitFor({ timeout: 5000 }).then(() => page.keyboard.press('Escape')).catch(() => {}); // first-run tour
 
   // Agent with a verified owner (implicit NEAR account: verified without RPC).
   const a = (await post(page, '/api/agents', { displayName: 'Permissions check' })).body.agent;
@@ -99,12 +99,10 @@ const post = (page, url, body) => page.evaluate(async ({ url, body }) => { const
   await via.locator('input').check();
   await page.locator('#spak-intent').fill('Swap 5 USDC on Base to USDC on Arbitrum');
   await page.getByRole('button', { name: 'Send' }).click();
-  const firmBtn = page.getByRole('button', { name: 'Get firm quote' });
+  const firmBtn = page.getByRole('button', { name: /^Confirm and send / });
   try {
     await firmBtn.waitFor({ timeout: 45000 });
-    await firmBtn.click();
     // This release: the user approves every transfer in their own wallet. Agent approval is not offered on Review.
-    await page.getByRole('button', { name: 'Approve', exact: true }).waitFor({ timeout: 45000 });
     ok('firm quote offers only the user\'s own Approve (no Agent approval in this release)', (await page.locator('[data-agent-approve]').count()) === 0 && (await page.getByText('Let my Agent approve').count()) === 0);
     await page.screenshot({ path: `${OUT}/permissions-03-review.png`, fullPage: true });
     await page.screenshot({ path: `${OUT}/permissions-04-after-agent.png`, fullPage: true });

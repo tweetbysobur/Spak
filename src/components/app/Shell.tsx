@@ -1,4 +1,6 @@
 "use client";
+import { PROVIDER_LABEL } from "@/environment";
+import { startTour } from "./Tour";
 import { IS_TESTNET } from "@/environment";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
@@ -28,7 +30,7 @@ const FAMILY: Record<string, string> = { evm: "EVM", solana: "Solana", near: "NE
 
 function NavItem({ item, active, onSelect, compact = false }: { item: (typeof NAV)[number]; active: boolean; onSelect: (v: View) => void; compact?: boolean }) {
   return (
-    <button onClick={() => onSelect(item.id)} aria-current={active ? "page" : undefined}
+    <button onClick={() => onSelect(item.id)} aria-current={active ? "page" : undefined} data-tour={item.id}
       className={compact
         ? `type-caption flex min-h-14 flex-1 flex-col items-center justify-center gap-1 ${active ? "text-primary" : "text-fg-2"}`
         : `type-nav flex min-h-11 w-full items-center gap-3 rounded-control px-3 text-left transition-colors ${active ? "bg-secondary text-fg dark:bg-elevated" : "text-fg-2 hover:bg-secondary hover:text-fg dark:hover:bg-elevated"}`}>
@@ -53,7 +55,7 @@ function AccountMenu({ session, onSelect, signedOut }: { session: Session; onSel
   const go = (v: View) => { setOpen(false); onSelect(v); };
   return (
     <div ref={ref} className="relative">
-      <button onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-haspopup="menu" title={w?.address}
+      <button onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-haspopup="menu" title={w?.address} data-tour="account"
         className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line-strong px-3 text-fg hover:bg-secondary dark:hover:bg-elevated">
         <span aria-hidden className="h-2 w-2 rounded-full bg-[var(--spak-status-success-icon)]" />
         <span className="type-label hidden text-fg-2 sm:inline">{w ? FAMILY[w.family] : ""}</span>
@@ -72,6 +74,9 @@ function AccountMenu({ session, onSelect, signedOut }: { session: Session; onSel
               <Icon name={n.icon} size={16} className="text-fg-2" />{n.label}
             </button>
           ))}
+          <button role="menuitem" onClick={() => { setOpen(false); startTour(); }} className="type-body-sm flex min-h-10 w-full items-center gap-3 rounded-control px-3 text-fg hover:bg-secondary dark:hover:bg-elevated">
+            <Icon name="info" size={16} className="text-fg-2" />Take the tour
+          </button>
           <button role="menuitem" onClick={() => go("settings")} className="type-body-sm flex min-h-10 w-full items-center gap-3 rounded-control px-3 text-fg hover:bg-secondary dark:hover:bg-elevated">
             <Icon name="wallet" size={16} className="text-fg-2" />Manage wallets
           </button>
@@ -98,7 +103,7 @@ export function Shell({ session, view, onSelect, signedOut, title, notice, child
         </nav>
         <div className="mt-auto rounded-card border border-line p-3">
           <p className="type-label text-fg">Your wallet signs every deposit</p>
-          <p className="type-caption mt-1 text-fg-2">SPak prepares; you approve, or your Agent within limits you signed; your wallet signs. {IS_TESTNET ? "Executed through the Tidepool testnet sandbox." : "Executed through NEAR Intents."}</p>
+          <p className="type-caption mt-1 text-fg-2">SPak prepares; you approve, or your Agent within limits you signed; your wallet signs. {IS_TESTNET ? "Executed through the Tidepool testnet sandbox." : `Executed through ${PROVIDER_LABEL}.`}</p>
         </div>
       </aside>
 

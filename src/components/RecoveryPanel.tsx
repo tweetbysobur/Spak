@@ -1,4 +1,5 @@
 "use client";
+import { PROVIDER_LABEL } from "@/environment";
 import { useState } from "react";
 import type { TrackingView } from "@/tracking/service";
 import { api, formatUnits } from "@/lib/client";
@@ -51,12 +52,12 @@ export function RecoveryPanel({ executionId, view, onChange }: { executionId: st
         {r && <Row k="Refund status" v={<StatusBadge kind="refund" state={r.state} label={REFUND_LABEL[r.state] ?? r.state} />} />}
         {r?.depositedAmount && <Row k="Deposit received" v={amt(r.depositedAmount)} />}
         {view.refund?.transactions.length ? <Row k="Refund transactions" v={<span className="type-amount">{view.refund.transactions.length}</span>} /> : null}
-        <Row k="1. Refund reported by NEAR Intents (not proof)" v={r?.expectedAmount ? amt(r.expectedAmount) : <span className="text-fg-2">Not reported</span>} />
+        <Row k={`1. Refund reported by ${PROVIDER_LABEL} (not proof)`} v={r?.expectedAmount ? amt(r.expectedAmount) : <span className="text-fg-2">Not reported</span>} />
         <Row k="2. Transfers to your refund address seen on chain" v={r?.verifiedAmount && r.verifiedAmount !== "0" ? amt(r.verifiedAmount) : <span className="text-fg-2">None yet</span>} />
         <Row k="3. Refund verified and linked to this transfer" v={r?.associatedAmount && r.associatedAmount !== "0" ? <><Amount value={formatUnits(r.associatedAmount, asset)} size="amount-total" />{r.partial && <span className="type-caption block text-fg-2">less than the deposit</span>}</> : <span className="text-fg-2">Not yet</span>} />
         {r?.outstandingAmount && r.outstandingAmount !== "0" && <Row k="Outstanding (reported, not yet verified and linked)" v={amt(r.outstandingAmount)} />}
         {r?.quotedRefundFee && <Row k="Refund fee in the quote (not subtracted by SPak)" v={<Amount value={formatUnits(r.quotedRefundFee, asset)} size="amount-fee" />} />}
-        {r?.evidenceCapability && <Row k="Automatic refund verification" v={r.evidenceCapability === "CONFIRMED" ? "Available" : "Unavailable: NEAR Intents does not identify refund transactions"} />}
+        {r?.evidenceCapability && <Row k="Automatic refund verification" v={r.evidenceCapability === "CONFIRMED" ? "Available" : `Unavailable: ${PROVIDER_LABEL} does not identify refund transactions`} />}
         {r?.reconciliation && <Row k="Post-refund check" v={r.reconciliation === "DISCREPANCY" ? "Provider data changed after the refund; under review" : `Consistent${r.reconciliationCheckedAt ? ` (checked ${new Date(r.reconciliationCheckedAt).toLocaleString()})` : ""}`} />}
         {view.review && <Row k="Manual review" v={<StatusBadge kind="execution" state="AWAITING_APPROVAL" label={`${view.review.status === "OPEN" ? "Review opened" : "Review in progress"} ${new Date(view.review.openedAt).toLocaleString()}`} />} />}
         <Row k="Last updated" v={new Date(view.updatedAt).toLocaleString()} />
@@ -65,9 +66,9 @@ export function RecoveryPanel({ executionId, view, onChange }: { executionId: st
       {r?.state === "PARTIAL" && note("Part of the reported refund is verified. The rest has not been seen on chain yet. Refunds can arrive in more than one transaction.", "warning")}
       {(view.refund?.transactions.length ?? 0) > 1 && note("This refund has several transactions. Each is checked on its own; only verified, linked ones are added up.")}
       {r?.evidenceCapability && r.evidenceCapability !== "CONFIRMED" && r.providerListedAmount && r.providerListedAmount !== "0" &&
-        note(<>NEAR Intents lists <span className="type-amount-fee text-fg">{formatUnits(r.providerListedAmount, asset)}</span> in transactions for this transfer, but does not say they are the refund. SPak keeps the refund open until that is confirmed and a person has checked it.</>, "warning")}
+        note(<>{PROVIDER_LABEL} lists <span className="type-amount-fee text-fg">{formatUnits(r.providerListedAmount, asset)}</span> in transactions for this transfer, but does not say they are the refund. SPak keeps the refund open until that is confirmed and a person has checked it.</>, "warning")}
       {r?.evidenceCapability && r.evidenceCapability !== "CONFIRMED" && r.state !== "COMPLETED" &&
-        note("NEAR Intents reports refund amounts but not which transaction carried the refund. SPak checks every transfer on chain but cannot prove one is your refund, so a person reviews it. Nothing is marked returned until then.")}
+        note(`${PROVIDER_LABEL} reports refund amounts but not which transaction carried the refund. SPak checks every transfer on chain but cannot prove one is your refund, so a person reviews it. Nothing is marked returned until then.`)}
       {view.refund?.transactions.some((t) => t.timing === "LATE_TRANSACTION") && note("A refund transaction arrived later than usual. Late refunds still count once verified and linked; this is not a failure.")}
 
       {view.refund?.transactions.map((t) => {
@@ -75,7 +76,7 @@ export function RecoveryPanel({ executionId, view, onChange }: { executionId: st
         return (
           <div key={t.txHash} className="mt-3 rounded-card border border-line bg-elevated p-3 dark:bg-bg">
             <div className="flex flex-wrap items-start justify-between gap-2">
-              <span className="type-label text-fg">{t.submitted ? "Submitted transaction (a candidate, not a confirmed refund)" : "Transaction listed by NEAR Intents"}</span>
+              <span className="type-label text-fg">{t.submitted ? "Submitted transaction (a candidate, not a confirmed refund)" : `Transaction listed by ${PROVIDER_LABEL}`}</span>
               <Mono value={t.txHash} href={t.explorerUrl} />
             </div>
             <p className="type-body-sm mt-1 text-fg-2">Timing: {TIMING[t.timing] ?? t.timing}</p>
@@ -88,12 +89,12 @@ export function RecoveryPanel({ executionId, view, onChange }: { executionId: st
 
       <p className="type-label mt-4 text-fg">What to do</p>
       <ul className="type-body-sm mt-1 list-disc pl-5 text-fg">{f.actions.filter((a) => a !== "NONE").map((a) => <li key={a}>{ACTION[a] ?? a}</li>)}</ul>
-      {f.actions.includes("SUBMIT_REFUND_TX") && <p className="type-body-sm mt-3 text-fg-2">Submitting a hash does not confirm your refund. SPak checks it on chain and counts it only if NEAR Intents links it to this transfer.</p>}
+      {f.actions.includes("SUBMIT_REFUND_TX") && <p className="type-body-sm mt-3 text-fg-2">Submitting a hash does not confirm your refund. SPak checks it on chain and counts it only if {PROVIDER_LABEL} links it to this transfer.</p>}
       {f.actions.includes("SUBMIT_REFUND_TX") && (
         <div className="mt-2 flex flex-col gap-2 sm:flex-row">
           <label className="sr-only" htmlFor={`refund-${executionId}`}>Refund transaction hash</label>
           <input id={`refund-${executionId}`} className={`${inputCls} type-address flex-1`} placeholder="Refund transaction hash" value={hash} onChange={(e) => setHash(e.target.value)} />
-          <Button variant="secondary" title="Submitting a hash does not confirm the refund. SPak checks it and needs NEAR Intents to link it to this transfer." disabled={busy || hash.trim().length < 10} onClick={() => act(() => api(`/api/executions/${executionId}/refund/transactions`, { txHash: hash.trim() }))}>Submit</Button>
+          <Button variant="secondary" title={`Submitting a hash does not confirm the refund. SPak checks it and needs ${PROVIDER_LABEL} to link it to this transfer.`} disabled={busy || hash.trim().length < 10} onClick={() => act(() => api(`/api/executions/${executionId}/refund/transactions`, { txHash: hash.trim() }))}>Submit</Button>
         </div>
       )}
       {(f.actions.includes("CHECK_AGAIN") || f.actions.includes("VERIFY_REFUND")) && r && (

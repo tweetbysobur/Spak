@@ -7,7 +7,8 @@ import { BuiltOnNear, CtaLink } from "@/components/marketing/site";
 import { JOURNEY, PILLARS, SITE, TRUST } from "@/marketing/content";
 
 /** Homepage hero background, supplied by the brand owner (public/brand/images, listed in the brand asset inventory). */
-const HERO_IMAGE = "/brand/images/spak-hero-landscape.png";
+/** JPEG export (quality 90) of the brand owner's PNG master, so the image optimizer starts from 0.4 MB instead of 2 MB. */
+const HERO_IMAGE = "/brand/images/spak-hero-landscape.jpg";
 /** Portrait version for phones, built from the same landscape by scripts/brand/build_hero_mobile.py. */
 const HERO_IMAGE_MOBILE = "/brand/images/spak-hero-landscape-mobile.jpg";
 /** Phones get the portrait image; tablets and desktops keep the landscape. Matches Tailwind's sm breakpoint. */

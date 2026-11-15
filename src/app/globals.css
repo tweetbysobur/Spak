@@ -71,3 +71,6 @@ body {
 @keyframes spak-spin { to { transform: rotate(360deg); } }
 .spak-spin { animation: spak-spin 1s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .spak-spin { animation: none; } * { transition-duration: 0ms !important; } }
+
+/* Guided tour card entrance; only applied under motion-safe. */
+@keyframes tourIn { from { opacity: 0; } to { opacity: 1; } }

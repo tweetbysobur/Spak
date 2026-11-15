@@ -21,7 +21,7 @@ export const PHASE_ROLE: Record<Phase, string> = {
 };
 
 export const PHASE_TITLE: Record<Phase, string> = {
-  AWAITING_APPROVAL: "Waiting for your approval", AWAITING_DEPOSIT: "Waiting for your deposit", DEPOSIT_DETECTED: "Deposit detected", PROCESSING: "NEAR Intents is processing",
+  AWAITING_APPROVAL: "Waiting for your approval", AWAITING_DEPOSIT: "Waiting for your deposit", DEPOSIT_DETECTED: "Deposit detected", PROCESSING: `${PROVIDER_LABEL} is processing`,
   VERIFYING: "Verifying delivery", COMPLETED: "Delivered and verified", FAILED: "Transfer failed",
   UNKNOWN: "Outcome not confirmed yet", REFUND_PENDING: "Refund in progress", REFUND_REVIEW: "Refund under review",
   REFUNDED: "Refunded", EXPIRED: "Expired", CANCELLED: "Cancelled",
@@ -61,12 +61,12 @@ export function phaseSummary(phase: Phase, dest: string): string {
     case "AWAITING_APPROVAL": return "Not approved yet. Nothing has moved: review and approve the firm quote to continue.";
     case "AWAITING_DEPOSIT": return "Approved. Nothing has moved yet: send the deposit from your wallet to start the transfer.";
     case "DEPOSIT_DETECTED": return "Your deposit transaction was submitted. SPak is confirming it on the source chain.";
-    case "PROCESSING": return "NEAR Intents has your deposit and is executing the cross-chain transfer. Delivery is not confirmed yet.";
-    case "VERIFYING": return `NEAR Intents reports a delivery. SPak is checking it on ${dest} before calling it complete.`;
+    case "PROCESSING": return `${PROVIDER_LABEL} has your deposit and is executing the cross-chain transfer. Delivery is not confirmed yet.`;
+    case "VERIFYING": return `${PROVIDER_LABEL} reports a delivery. SPak is checking it on ${dest} before calling it complete.`;
     case "COMPLETED": return `SPak verified on ${dest} that the recipient received at least the amount you approved.`;
     case "FAILED": return "The transfer did not complete. See below for what happened and where your funds are.";
     case "UNKNOWN": return "SPak could not confirm the outcome yet. This is not a failure. Do not send the deposit again.";
-    case "REFUND_PENDING": return "The transfer did not complete. NEAR Intents returns funds automatically; SPak is waiting to verify the refund on chain.";
+    case "REFUND_PENDING": return `The transfer did not complete. ${PROVIDER_LABEL} returns funds automatically; SPak is waiting to verify the refund on chain.`;
     case "REFUND_REVIEW": return "A refund could not be verified automatically, so a person is reviewing it. It is not marked refunded until verified.";
     case "REFUNDED": return "The transfer did not complete. SPak verified on chain that the refund reached your refund address.";
     case "EXPIRED": return "The deposit deadline passed with no confirmed deposit. Nothing moved.";
@@ -90,7 +90,7 @@ export function stagesOf(x: ExecutionView, t: TrackingView | null): Stage[] {
     : st("DESTINATION_VERIFICATION") === "current" || st("COMPLETED") === "current" ? "current"
     : st("DESTINATION_VERIFICATION") === "halted" || st("COMPLETED") === "halted" ? "halted" : "pending";
   return [
-    { id: "QUOTE", title: "Quote created", detail: "NEAR Intents quoted the route, fees and minimum output.", status: "done", at: quoteAt, refs: [] },
+    { id: "QUOTE", title: "Quote created", detail: `${PROVIDER_LABEL} quoted the route, fees and minimum output.`, status: "done", at: quoteAt, refs: [] },
     // Approval is known from the execution itself, so it shows before the tracking view has loaded.
     { id: "APPROVED", title: "You approved", detail: "You approved this exact firm quote.", status: step("APPROVED") ? st("APPROVED") : x.approvedAt ? "done" : "pending", at: step("APPROVED")?.at ?? x.approvedAt, refs: [] },
     { id: "DEPOSIT_SUBMITTED", title: "Deposit sent", detail: "Your wallet signed and sent the deposit.", status: st("DEPOSIT_SUBMITTED"), at: step("DEPOSIT_SUBMITTED")?.at ?? null,
@@ -107,8 +107,8 @@ export function stagesOf(x: ExecutionView, t: TrackingView | null): Stage[] {
 /** Where the funds are, in words, from the server's failure classification. Null when the server does not say. */
 export function fundsText(t: TrackingView | null): string | null {
   switch (t?.failure?.funds) {
-    case "WALLET": return "Still in your wallet. No deposit reached NEAR Intents.";
-    case "IN_TRANSIT": return "In transit with NEAR Intents. Failed transfers are refunded to your refund address.";
+    case "WALLET": return `Still in your wallet. No deposit reached ${PROVIDER_LABEL}.`;
+    case "IN_TRANSIT": return `In transit with ${PROVIDER_LABEL}. Failed transfers are refunded to your refund address.`;
     case "DESTINATION": return "Delivered to the recipient.";
     case "REFUND_ADDRESS": return "Returned to your refund address (verified).";
     case "UNKNOWN": return "Not confirmed. A manual review decides where they are.";
@@ -119,7 +119,7 @@ export function fundsText(t: TrackingView | null): string | null {
 /** Notification text for a state change, or null when the change is not worth a notification. */
 export function notificationFor(from: string, to: string): string | null {
   if (from === to) return null;
-  if (to === "PROCESSING") return "Deposit confirmed. NEAR Intents is executing your transfer.";
+  if (to === "PROCESSING") return `Deposit confirmed. ${PROVIDER_LABEL} is executing your transfer.`;
   if (to === "VERIFYING_DESTINATION") return "Delivery reported. SPak is verifying it on chain.";
   if (to === "COMPLETED") return "Delivery verified. Your transfer is complete.";
   if (to === "FAILED") return "A transfer failed. Open it to see where your funds are.";

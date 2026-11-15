@@ -1,4 +1,5 @@
 "use client";
+import { PROVIDER_LABEL } from "@/environment";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TrackingView } from "@/tracking/service";
 import { getNetwork } from "@/spak-in/registries/networks";
@@ -151,7 +152,7 @@ export function Tracker({ initial, onNotify }: { initial: ExecutionView; onNotif
           <Row k="Received (verified on chain)" v={dst?.verifiedAmountOut ? <Amount value={formatUnits(dst.verifiedAmountOut, dst.assetId)} size="amount-total" /> : <span className="text-fg-2">Not verified yet</span>} />
           <Row k="Recipient" v={<Mono value={x.recipient.address} full />} />
           {x.refundAddress && <Row k="Refund address" v={<Mono value={x.refundAddress} full />} />}
-          {t?.providerStatus && <Row k="NEAR Intents status" v={<span className="type-identifier">{t.providerStatus}</span>} />}
+          {t?.providerStatus && <Row k={`${PROVIDER_LABEL} status`} v={<span className="type-identifier">{t.providerStatus}</span>} />}
           <Row k="Execution reference" v={<Mono value={x.id} full />} />
         </div>
       </details>

@@ -80,7 +80,7 @@ async function settle(page) {
       };
     });
     const wantLogo = '/marketing/partners/near-logo-rev.svg'; // the landscape is dark in both themes
-    const wantFile = size === 'phone' ? 'spak-hero-landscape-mobile.jpg' : 'spak-hero-landscape.png';
+    const wantFile = size === 'phone' ? 'spak-hero-landscape-mobile.jpg' : 'spak-hero-landscape.jpg';
     ok(`hero ${size} ${theme}: ${wantFile} covers the hero (${h.heroH}px tall), undistorted, light text, and is the only hero image downloaded`,
       h.bgOk && h.bgFile === wantFile && h.heroFiles === wantFile && h.bgRatio === (size === 'phone' ? '0.67' : '2.00') && h.textColor === 'rgb(247, 246, 240)', `${h.bgFile} ${h.bgRatio} [${h.heroFiles}] ${h.textColor}`);
     ok(`hero ${size} ${theme}: badge, headline, paragraph, buttons in order; centred; inside the screen`,

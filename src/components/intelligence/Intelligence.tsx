@@ -1,4 +1,5 @@
 "use client";
+import { PROVIDER_LABEL } from "@/environment";
 import { useCallback, useEffect, useState } from "react";
 import { api, type IntentResult } from "@/lib/client";
 import { getNetwork } from "@/spak-in/registries/networks";
@@ -195,7 +196,7 @@ function Routes({ holding, onExecute }: { holding: Snapshot["holdings"][number];
           <input className={`${inputCls} w-40`} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={holding.native ? "Leave some for fees" : undefined} /></label>
         <Button type="submit" size="sm" disabled={busy || !amount}>{busy ? "Quoting" : "Compare routes"}</Button>
       </form>
-      <p className="type-caption mt-2 text-fg-2">Live NEAR Intents quotes, signature checked. No deposit address is created and nothing moves.</p>
+      <p className="type-caption mt-2 text-fg-2">Live {PROVIDER_LABEL} quotes, signature checked. No deposit address is created and nothing moves.</p>
       {error && <ErrorText>{error}</ErrorText>}
       {routes && (
         <ul className="mt-3 flex flex-col divide-y divide-line">

@@ -54,7 +54,7 @@ const section = (pg, id) => pg.locator(`[data-guard-section="${id}"]`);
 
   await page.goto(APP, { waitUntil: 'networkidle' });
   await page.getByRole('button', { name: /Test Wallet \(simulated\)/ }).click();
-  await page.locator('nav[aria-label=App]').first().waitFor({ timeout: 20000 });
+  await page.locator('nav[aria-label=App]').first().waitFor({ timeout: 20000 }); await page.getByRole('dialog', { name: 'Welcome to SPak' }).waitFor({ timeout: 5000 }).then(() => page.keyboard.press('Escape')).catch(() => {}); // first-run tour
 
   // Overview: real Guard status from the server.
   await page.locator('[data-guard-summary="ACTIVE"]').waitFor({ timeout: 15000 });
@@ -179,7 +179,7 @@ const section = (pg, id) => pg.locator(`[data-guard-section="${id}"]`);
   await page.getByRole('tab', { name: 'Instruction' }).click();
   await page.getByLabel('Instruction').fill(`Swap 50 USDC on Base to SOL on Solana to ${SOL_RECIPIENT}`);
   await page.getByRole('button', { name: 'Send' }).click();
-  await page.getByText('Review the estimate').waitFor({ timeout: 45000 });
+  await page.getByText('Check the details, then confirm').waitFor({ timeout: 45000 });
   ok('allowed transfer still reaches the review step', execCreates.length === 1);
   await go(page, 'Activity');
   await page.locator('ul li button').first().click();

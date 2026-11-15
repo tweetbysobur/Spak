@@ -13,6 +13,8 @@ import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { NAV, Shell, type View } from "@/components/app/Shell";
 import { Intelligence } from "@/components/intelligence/Intelligence";
+import { Tour } from "@/components/app/Tour";
+import { PROVIDER_LABEL } from "@/environment";
 import { Overview } from "@/components/app/Overview";
 import { Interpretation } from "@/components/app/Interpretation";
 import { Activity } from "@/components/app/Activity";
@@ -115,7 +117,7 @@ export default function AppPage() {
                 ["Describe a transfer", "In plain words, for example: Swap 25 USDC on Base to USDC on NEAR."],
                 ["Review the firm quote", "Exact amount, minimum you receive, fees and deposit address, before anything moves."],
                 ["Sign the deposit yourself", "Your wallet signs. SPak holds no keys and cannot move your funds."],
-                ["See it delivered", "SPak tracks the route through NEAR Intents and checks delivery on the destination chain."],
+                ["See it delivered", `SPak tracks the route through ${PROVIDER_LABEL} and checks delivery on the destination chain.`],
               ].map(([t, d]) => (
                 <li key={t} className="relative pb-5 pl-6 last:pb-0">
                   <span aria-hidden className="absolute -left-[5px] top-1.5 h-[9px] w-[9px] rounded-full border-2 border-primary bg-bg" />
@@ -133,6 +135,7 @@ export default function AppPage() {
   const title = active ? "Transfer" : NAV.find((n) => n.id === view)!.label;
   return (
     <Shell session={session} view={view} onSelect={setView} signedOut={signedOut} title={title} notice={failed}>
+      <Tour userId={session.userId} onSelect={setView} />
       {active ? (
         <div className="mx-auto flex max-w-[48rem] flex-col gap-4">
           <div><Button variant="ghost" size="sm" onClick={() => setActive(undefined)}>← Back</Button></div>
@@ -149,6 +152,11 @@ export default function AppPage() {
                   {mode === "chat"
                     ? <Chat key={handoff ?? "chat"} timezone={timezone} onReady={onReady} onInterpret={setInterp} initial={handoff} />
                     : <Manual ownAddress={ownAddress} onReady={onReady} />}
+                  {/* The review sits right under the conversation that produced it, on every screen size. */}
+                  {pending && (
+                    <Review intent={pending.intent} execution={pending.execution} quote={pending.quote} onCancel={() => setPending(undefined)}
+                      onApproved={(x, message) => { setPending(undefined); setActive(x); setToast(message ?? "Approved. Send the deposit from your wallet to continue."); }} />
+                  )}
                 </div>
                 {interp ? <Interpretation r={interp} /> : (
                   <Card className="border-dashed">
@@ -157,10 +165,6 @@ export default function AppPage() {
                   </Card>
                 )}
               </div>
-              {pending && (
-                <Review intent={pending.intent} execution={pending.execution} quote={pending.quote} onCancel={() => setPending(undefined)}
-                  onApproved={(x) => { setPending(undefined); setActive(x); setToast("Approved. Send the deposit from your wallet to continue."); }} />
-              )}
             </div>
           )}
           {view === "activity" && <Activity onOpen={open} />}
