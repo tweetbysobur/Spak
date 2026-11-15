@@ -7,10 +7,10 @@
 - SPak Guard
 - Delivery verification on 45 USDC routes, manual review flagged on the rest
 - SPak Intelligence portfolio across 10 networks
+- One-click confirm and first-run guided tour
 
 ## In progress
 
-- One-click confirm and guided tour (built, awaiting deploy)
 - First verified mainnet settlement through a controlled transfer
 - Portfolio-aware intents beyond balance checks
 - SPak Agent identity (cannot move funds)

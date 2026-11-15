@@ -60,12 +60,12 @@ One interface where you state what you want to happen to your assets, and SPak h
 |---|---|---|
 | SPak-in | Reads a plain-language instruction into a typed plan. Deterministic rules, no language model | Live |
 | Signed quotes | Fetches NEAR Intents 1Click quotes and verifies the quote signature | Live |
-| One-click confirm | Firm quote, token approval and deposit in one confirm, signed by your wallet | Live, not yet in production |
+| One-click confirm | Firm quote, token approval and deposit in one confirm, signed by your wallet | Live |
 | Delivery verification | Confirms delivery on the destination chain for 45 of 90 USDC routes. The rest are flagged for manual review before you start | Live |
 | SPak Guard | Per-transfer and daily limits, allowed networks, assets and recipients | Live |
 | SPak Intelligence | Read-only balances on 10 networks with independent prices, portfolio questions and route comparison | Live |
 | Refund tracking | Tracks failed transfers until the refund is verified | Live |
-| Guided tour | First-run tour of every screen | Live, not yet in production |
+| Guided tour | First-run tour of every screen | Live |
 | SPak Agent | A NEAR identity for an Agent. Agents cannot move funds in this release | Partial |
 | Mainnet settlement | No verified SPak mainnet settlement yet. A first controlled transfer is being prepared | In progress |
 
@@ -177,8 +177,7 @@ Details: [docs/SPAK-SECURITY.md](docs/SPAK-SECURITY.md).
 
 | Area | Status |
 |---|---|
-| Website, sign-in, SPak-in, quotes, Guard, Intelligence, tracking | Live in production |
-| One-click confirm, guided tour, NEAR recipient fix | Built and tested, awaiting deploy |
+| Website, sign-in, SPak-in, quotes, one-click confirm, Guard, Intelligence, tracking, guided tour | Live in production |
 | SPak Agent identity | Partial: cannot move funds |
 | Verified mainnet settlement | Not yet |
 

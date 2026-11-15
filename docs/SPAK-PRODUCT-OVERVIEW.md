@@ -8,7 +8,7 @@ You hold assets on more than one chain and want to move them without choosing br
 
 ## Classification
 
-Live means in the code, tested and running in production at usespak.vercel.app. Built means tested in the repository but not deployed yet. Partial means part of the feature exists. Upcoming means planned and not built.
+Live means in the code, tested and running in production at usespak.vercel.app. Partial means part of the feature exists. Upcoming means planned and not built.
 
 | Feature | Status | Notes |
 |---|---|---|
@@ -17,13 +17,13 @@ Live means in the code, tested and running in production at usespak.vercel.app. 
 | SPak-in instruction parser | Live | Deterministic, no language model |
 | Signed NEAR Intents quotes | Live | Quote signature checked |
 | Review screen | Live | Amounts, minimum received, fees, recipient |
-| One-click confirm | Built | Firm quote, approval and deposit in one confirm |
-| NEAR recipient registration fix | Built | 1Click registers the recipient and charges the quoted withdrawFee |
+| One-click confirm | Live | Firm quote, approval and deposit in one confirm |
+| NEAR recipient registration fix | Live | 1Click registers the recipient and charges the quoted withdrawFee |
 | Delivery verification | Live | 45 of 90 USDC routes automatic; others flagged for manual review up front |
 | Refund tracking | Live | |
 | SPak Guard | Live | Limits, allowed networks, assets, recipients |
 | SPak Intelligence | Live | Read-only balances and prices on 10 networks |
-| Guided tour | Built | First-run tour, replayable from the account menu |
+| Guided tour | Live | First-run tour, replayable from the account menu |
 | SPak Agent identity | Partial | Agents cannot move funds |
 | Verified mainnet settlement | In progress | No verified SPak mainnet settlement yet |
 | Conditional and scheduled execution | Upcoming | Parsed by SPak-in, not executed |
