@@ -20,6 +20,7 @@ const eslintConfig = [
       "build/**",
       "next-env.d.ts",
       "tests/real-wallets/**",
+      "video/**",
       ".rw/**",
     ],
   },
