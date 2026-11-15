@@ -11,7 +11,7 @@ import { short } from "@/components/WalletsPanel";
 import type { Session } from "@/components/session";
 import { api } from "@/lib/client";
 
-export type View = "overview" | "execute" | "activity" | "portfolio" | "guard" | "agent" | "settings";
+export type View = "overview" | "execute" | "activity" | "portfolio" | "guard" | "agent" | "settings" | "guide";
 
 /** Navigation. `planned` items open honest pages that say what is and is not live. */
 export const NAV: { id: View; label: string; icon: IconName; planned?: boolean }[] = [
@@ -22,6 +22,7 @@ export const NAV: { id: View; label: string; icon: IconName; planned?: boolean }
   { id: "guard", label: "SPak Guard", icon: "guard" },
   { id: "agent", label: "Agent", icon: "agent" },
   { id: "settings", label: "Settings", icon: "settings" },
+  { id: "guide", label: "Guide", icon: "info" },
 ];
 /** Phones show the four most used destinations in the bottom bar; the rest are in the account menu. */
 const MOBILE: View[] = ["overview", "execute", "activity", "settings"];

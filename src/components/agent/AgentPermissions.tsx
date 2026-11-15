@@ -11,7 +11,7 @@ import type { GrantView } from "@/agents/grants";
 
 interface View {
   mode: "MANUAL" | "PREAUTHORIZED"; grant: GrantView | null; usage: { transactions: number; dayUsd: string } | null; history: GrantView[];
-  approvals: { executionId: string; grantVersion: number | null; approvedAt: string; invalidatedAt: string | null }[];
+  approvals: { executionId: string; grantVersion: number | null; approvedAt: string; invalidatedAt: string | null; state: string; sourceNetwork: string; destinationNetwork: string; sourceAssetId: string }[];
 }
 interface Challenge { challengeId: string; message: string; nonce: string; recipient: string; accountId: string }
 
@@ -39,7 +39,7 @@ export function AgentPermissions({ agent }: { agent: AgentView }) {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [editing, setEditing] = useState(false);
   const [confirmRevoke, setConfirmRevoke] = useState(false);
-  const [f, setF] = useState({ max: "25", day: "50", count: "5", hours: "24", src: [NETS[0]?.id ?? ""], dst: [NETS[1]?.id ?? NETS[0]?.id ?? ""], symbols: "USDC, ETH", self: true, addresses: "" });
+  const [f, setF] = useState({ max: "25", day: "50", count: "5", hours: "24", gap: "0", src: [NETS[0]?.id ?? ""], dst: [NETS[1]?.id ?? NETS[0]?.id ?? ""], symbols: "USDC, ETH", self: true, addresses: "" });
 
   const load = useCallback(async () => { try { setV(await api<View>(`/api/agents/${agent.id}/permissions`)); } catch (e) { setMsg({ ok: false, text: (e as Error).message }); } }, [agent.id]);
   useEffect(() => { load(); }, [load]);
@@ -58,7 +58,7 @@ export function AgentPermissions({ agent }: { agent: AgentView }) {
       const w = (await discoverNearWallets()).find((x) => x.available);
       if (!w) throw new Error("No NEAR wallet is available in this browser.");
       const c = await api<Challenge>(`/api/agents/${agent.id}/permissions/prepare`, {
-        maxTransactionUsd: f.max.trim(), dailyLimitUsd: f.day.trim(), maxTransactions: Number(f.count), durationHours: Number(f.hours),
+        maxTransactionUsd: f.max.trim(), dailyLimitUsd: f.day.trim(), maxTransactions: Number(f.count), durationHours: Number(f.hours), ...(Number(f.gap) > 0 ? { minIntervalMinutes: Number(f.gap) } : {}),
         sourceNetworks: f.src, destinationNetworks: f.dst, assets, recipients: { self: f.self, addresses: parsedAddresses },
       });
       const s = await signNear(w.id, { message: c.message, nonceB64: c.nonce, recipient: c.recipient, challengeId: c.challengeId });
@@ -89,6 +89,7 @@ export function AgentPermissions({ agent }: { agent: AgentView }) {
           <div><dt className="type-label text-fg-2">Permission</dt><dd className="mt-0.5"><Dot role={STATUS[g.status].role}>{STATUS[g.status].text}</Dot><p className="type-caption text-fg-2">Version {g.version}, until {new Date(g.expiresAt).toLocaleString()}</p></dd></div>
           <div><dt className="type-label text-fg-2">Used</dt><dd className="type-body-sm mt-0.5 text-fg"><span className="type-amount">{v.usage?.transactions ?? 0}</span> of {g.scope.maxTransactions} transfers, <span className="type-amount">${v.usage?.dayUsd ?? "0"}</span> of ${g.scope.dailyLimitUsd} in 24 hours</dd></div>
           <div><dt className="type-label text-fg-2">Per transfer</dt><dd className="type-amount mt-0.5 text-fg">up to ${g.scope.maxTransactionUsd}</dd></div>
+          <div><dt className="type-label text-fg-2">Spacing</dt><dd className="type-body-sm mt-0.5 text-fg">{g.scope.minIntervalMinutes ? `At least ${g.scope.minIntervalMinutes} minutes between transfers` : "No spacing rule"}</dd></div>
           <div><dt className="type-label text-fg-2">Routes</dt><dd className="type-body-sm mt-0.5 text-fg">{g.scope.sourceNetworks.map(name).join(", ")} to {g.scope.destinationNetworks.map(name).join(", ")}</dd></div>
           <div className="sm:col-span-2"><dt className="type-label text-fg-2">Tokens</dt><dd className="type-body-sm mt-0.5 text-fg">{g.scope.assets.map(token).join(", ")}</dd></div>
           <div className="sm:col-span-2"><dt className="type-label text-fg-2">Recipients</dt><dd className="type-body-sm mt-0.5 text-fg [overflow-wrap:anywhere]">{[g.scope.recipients.self ? "Your own wallets" : null, ...g.scope.recipients.addresses.map((a) => `${a.address} on ${name(a.network)}`)].filter(Boolean).join(", ")}</dd></div>
@@ -110,6 +111,7 @@ export function AgentPermissions({ agent }: { agent: AgentView }) {
             <Field label="Per 24 hours (USD)"><input className={`${inputCls} type-amount`} inputMode="decimal" name="dayUsd" value={f.day} onChange={(e) => setF({ ...f, day: e.target.value })} /></Field>
             <Field label="Transfers at most" hint="1 to 20"><input className={`${inputCls} type-amount`} inputMode="numeric" name="maxCount" value={f.count} onChange={(e) => setF({ ...f, count: e.target.value })} /></Field>
             <Field label="Valid for (hours)" hint="1 to 168"><input className={`${inputCls} type-amount`} inputMode="numeric" name="hours" value={f.hours} onChange={(e) => setF({ ...f, hours: e.target.value })} /></Field>
+            <Field label="Minutes between transfers" hint="0 for no spacing, up to 1440"><input className={`${inputCls} type-amount`} inputMode="numeric" name="gapMinutes" value={f.gap} onChange={(e) => setF({ ...f, gap: e.target.value })} /></Field>
           </div>
           {(["src", "dst"] as const).map((k) => (
             <fieldset key={k}><legend className="type-label text-fg-2">{k === "src" ? "Source networks" : "Destination networks"}</legend>
@@ -128,7 +130,11 @@ export function AgentPermissions({ agent }: { agent: AgentView }) {
         <details>
           <summary className="type-label cursor-pointer text-fg-2">Permission history</summary>
           <ol className="mt-2 flex flex-col">{v.history.map((h) => <li key={h.id} className="type-body-sm flex flex-wrap justify-between gap-3 border-t border-line py-2"><span className="text-fg">Version {h.version}: up to ${h.scope.maxTransactionUsd} each, {h.scope.maxTransactions} transfers</span><span className="text-fg-2">{STATUS[h.status].text}</span></li>)}</ol>
-          {v.approvals.length > 0 && <ol className="mt-2 flex flex-col">{v.approvals.map((a) => <li key={a.executionId} className="type-body-sm flex flex-wrap justify-between gap-3 border-t border-line py-2"><Mono value={a.executionId} /><span className="type-caption text-fg-2">Approved by your Agent (v{a.grantVersion}) {new Date(a.approvedAt).toLocaleString()}</span></li>)}</ol>}
+          {v.approvals.length > 0 && <ol className="mt-2 flex flex-col">{v.approvals.map((a) => (
+            <li key={a.executionId} data-agent-approval={a.state} className="type-body-sm flex flex-wrap items-center justify-between gap-3 border-t border-line py-2">
+              <span className="min-w-0"><span className="text-fg">{token(a.sourceAssetId)} {name(a.sourceNetwork)} to {name(a.destinationNetwork)}</span><span className="type-caption block text-fg-2">Approved by your Agent (v{a.grantVersion}) {new Date(a.approvedAt).toLocaleString()}{a.invalidatedAt ? " · approval withdrawn" : ""}</span></span>
+              {a.state === "AWAITING_DEPOSIT" && !a.invalidatedAt ? <Dot role="warning">Waiting for your wallet signature</Dot> : <Dot role={a.state === "COMPLETED" ? "success" : a.state === "FAILED" || a.state === "REFUNDED" || a.state === "EXPIRED" ? "error" : "neutral"}>{a.state.replace(/_/g, " ").toLowerCase().replace(/^./, (c) => c.toUpperCase())}</Dot>}
+            </li>))}</ol>}
         </details>
       )}
       <Modal open={confirmRevoke} onClose={() => setConfirmRevoke(false)} title="Revoke this permission?">

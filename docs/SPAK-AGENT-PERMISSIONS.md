@@ -114,3 +114,22 @@ All must be true before L3 ships. None is built now.
 ## 8. Preconditions for any future grant (from the hardening stage)
 
 A future permission grant must require, at grant time and at use time: Agent ownership current, dedicated account ACTIVE with fresh evidence (exact owner key only), and each wallet it names ACTIVE by its own fresh proof (`associationUsable()`). A suspended, expired or recovery-required component blocks the grant. None of this exists yet.
+
+## 9. Implemented scope (current code)
+
+The proposal above is partly built. What runs today (`src/agents/grants.ts`):
+
+| Limit | Field | Enforced |
+|---|---|---|
+| Per transfer | `maxTransactionUsd` (at or below SPak's ceiling) | Server, at approval, with the grant row locked |
+| Per 24 hours | `dailyLimitUsd` | Server, from Guard reservations of earlier Agent approvals |
+| Transfer count | `maxTransactions` (1 to 20) | Server |
+| Spacing (frequency) | `minIntervalMinutes` (0 to 1440, optional) | Server, from the time of the Agent's last approval |
+| Expiry | `durationHours` (1 to 168) | Server clock, at approval and again before the deposit |
+| Networks, tokens, recipients | `sourceNetworks`, `destinationNetworks`, `assets`, `recipients` | Server |
+
+- Every limit is in the bytes the owner signs (NEP-413). The server verifies against its stored copy of the message, never values sent by the browser. `minIntervalMinutes` appears in the message only when set, so older grants keep their exact hash.
+- Execution mode is "prepare, you sign": the Agent may approve a firm quote within the grant and Guard. The owner's wallet still signs every deposit. SPak holds no key and signs nothing.
+- Pause and revoke take effect at once. A paused, revoked or expired grant also blocks the deposit of an earlier Agent approval.
+- Monitoring: `GET /api/agents/:id/permissions` returns usage, version history and each Agent approval with the transfer's live state. `AWAITING_DEPOSIT` means it waits for the owner's wallet signature.
+- Not built: unattended signing (on-chain agent contract), mainnet dedicated Agent accounts (testnet only).

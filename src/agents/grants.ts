@@ -3,7 +3,7 @@ import { and, desc, eq, gte, inArray, isNull, gt, sql } from "drizzle-orm";
 import { hex } from "@scure/base";
 import { z } from "zod";
 import type { Db } from "../database/repositories";
-import { agentEvents, agentGrantChallenges, agentGrants, approvals, guardReservations } from "../database/schema";
+import { agentEvents, agentGrantChallenges, agentGrants, approvals, executions, guardReservations } from "../database/schema";
 import { AuthError } from "../auth/types";
 import { nearRpc as defaultNearRpc, verifyNearSignature, type NearRpc } from "../auth/verify/near";
 import { addDecimal, compareDecimal, isDecimal } from "../spak-in/lib/decimal";
@@ -22,6 +22,7 @@ export const GRANT_CHALLENGE_TTL_MS = 5 * 60_000;
 export const MAX_GRANT_HOURS = 168;
 export const MAX_GRANT_TRANSACTIONS = 20;
 export const DAY_MS = 24 * 3600_000;
+export const MAX_MIN_INTERVAL_MINUTES = 1440;
 
 const money = z.string().trim().refine((v) => isDecimal(v) && compareDecimal(v, "0") > 0, "Enter a positive amount in USD, like 25 or 25.50.");
 export const grantInputSchema = z.object({
@@ -29,6 +30,8 @@ export const grantInputSchema = z.object({
   dailyLimitUsd: money,
   maxTransactions: z.number().int().min(1).max(MAX_GRANT_TRANSACTIONS),
   durationHours: z.number().int().min(1).max(MAX_GRANT_HOURS),
+  /** Frequency limit: minimum minutes between two Agent approvals. 0 or absent means no spacing rule. */
+  minIntervalMinutes: z.number().int().min(0).max(MAX_MIN_INTERVAL_MINUTES).optional(),
   sourceNetworks: z.array(z.string().min(1).max(40)).min(1).max(20),
   destinationNetworks: z.array(z.string().min(1).max(40)).min(1).max(20),
   assets: z.array(z.string().min(1).max(200)).min(1).max(40),
@@ -42,6 +45,8 @@ export type GrantInput = z.input<typeof grantInputSchema>;
 /** The stored, signed scope. Sorted and de-duplicated so the same permission always hashes the same. */
 export interface GrantScope {
   maxTransactionUsd: string; dailyLimitUsd: string; maxTransactions: number;
+  /** Present only when set above 0, so grants signed before this field existed keep their exact hash and message. */
+  minIntervalMinutes?: number;
   sourceNetworks: string[]; destinationNetworks: string[]; assets: string[];
   recipients: { self: boolean; addresses: { network: string; address: string }[] };
 }
@@ -69,6 +74,7 @@ export function normalizeScope(input: unknown, ceilingUsd: string): { scope: Gra
   if (!g.recipients.self && addresses.size === 0) bad("Allow your own wallets, at least one recipient address, or both.");
   const scope: GrantScope = {
     maxTransactionUsd: g.maxTransactionUsd, dailyLimitUsd: g.dailyLimitUsd, maxTransactions: g.maxTransactions,
+    ...(g.minIntervalMinutes ? { minIntervalMinutes: g.minIntervalMinutes } : {}),
     sourceNetworks: uniqSorted(g.sourceNetworks), destinationNetworks: uniqSorted(g.destinationNetworks), assets: uniqSorted(g.assets),
     recipients: { self: g.recipients.self, addresses: [...addresses.values()].sort((a, b) => `${a.network}|${a.address}`.localeCompare(`${b.network}|${b.address}`)) },
   };
@@ -95,6 +101,7 @@ export function grantMessage(c: { agentId: string; userRef: string; accountId: s
     `Per transfer: up to $${s.maxTransactionUsd}`,
     `Per 24 hours: up to $${s.dailyLimitUsd}`,
     `Transfers: at most ${s.maxTransactions}`,
+    ...(s.minIntervalMinutes ? [`Spacing: at least ${s.minIntervalMinutes} minutes between transfers`] : []),
     `Source networks: ${s.sourceNetworks.join(", ")}`,
     `Destination networks: ${s.destinationNetworks.join(", ")}`,
     `Tokens: ${s.assets.join(", ")}`,
@@ -110,10 +117,10 @@ export function grantMessage(c: { agentId: string; userRef: string; accountId: s
 /* ---------------------------------------------------------------- assessment ---------------------------------------------------------------- */
 
 export type GrantRuleId = "AGENT" | "GRANT" | "GRANT_PAUSED" | "GRANT_EXPIRED" | "SOURCE_NETWORK" | "DESTINATION_NETWORK" | "SOURCE_ASSET" | "DESTINATION_ASSET"
-  | "RECIPIENT" | "VALUE_KNOWN" | "MAX_TRANSACTION" | "DAILY_LIMIT" | "MAX_TRANSACTIONS";
+  | "RECIPIENT" | "VALUE_KNOWN" | "MAX_TRANSACTION" | "DAILY_LIMIT" | "MAX_TRANSACTIONS" | "FREQUENCY";
 export interface GrantRule { rule: GrantRuleId; ok: boolean; reason: string }
 export interface GrantSubject { sourceNetwork: string; destinationNetwork: string; sourceAssetId: string; destinationAssetId: string; recipient: string; recipientKind: "SELF" | "EXTERNAL"; valueUsd: string | null }
-export interface GrantUsage { transactions: number; dayUsd: string }
+export interface GrantUsage { transactions: number; dayUsd: string; lastAt?: Date | null }
 type GrantRow = typeof agentGrants.$inferSelect;
 
 /**
@@ -151,6 +158,11 @@ export function assessGrant(args: { grant: Pick<GrantRow, "status" | "expiresAt"
   }
   const countOver = usage.transactions + 1 > sc.maxTransactions;
   add("MAX_TRANSACTIONS", !countOver, countOver ? `Your Agent already approved ${usage.transactions} of ${sc.maxTransactions} transfers allowed.` : `Transfer ${usage.transactions + 1} of ${sc.maxTransactions}.`);
+  if (sc.minIntervalMinutes) {
+    const next = usage.lastAt ? usage.lastAt.getTime() + sc.minIntervalMinutes * 60_000 : 0;
+    const early = now.getTime() < next;
+    add("FREQUENCY", !early, early ? `Your Agent must wait ${sc.minIntervalMinutes} minutes between transfers. Next allowed at ${new Date(next).toISOString()}.` : `At least ${sc.minIntervalMinutes} minutes since the Agent's last transfer.`);
+  }
   return done(rules);
 }
 const done = (rules: GrantRule[]) => ({ ok: rules.every((r) => r.ok), rules, reasons: rules.filter((r) => !r.ok).map((r) => r.reason) });
@@ -349,9 +361,12 @@ export class AgentGrantService {
       .where(and(eq(approvals.grantId, g.id), eq(approvals.approvedBy, "AGENT_GRANT")));
     const seen = new Map<string, (typeof rows)[number]>();
     for (const r of rows) if (r.executionId !== excludeExecutionId) seen.set(r.executionId, r);
-    let day = "0";
-    for (const r of seen.values()) if (r.status !== "RELEASED" && r.reservedAt.getTime() > now.getTime() - DAY_MS) day = addDecimal(day, r.amountUsd);
-    return { transactions: seen.size, dayUsd: day };
+    let day = "0", lastAt: Date | null = null;
+    for (const r of seen.values()) {
+      if (r.status !== "RELEASED" && r.reservedAt.getTime() > now.getTime() - DAY_MS) day = addDecimal(day, r.amountUsd);
+      if (!lastAt || r.reservedAt.getTime() > lastAt.getTime()) lastAt = r.reservedAt;
+    }
+    return { transactions: seen.size, dayUsd: day, lastAt };
   }
 
   private subject(row: ExecutionRow, firm: QuoteRow): GrantSubject {
@@ -406,8 +421,10 @@ export class AgentGrantService {
   /** History: every grant-approved transfer, newest first (ids and amounts only). */
   async approvals(userId: string, agentId: string) {
     await this.agentFor(userId, agentId);
-    return this.d.db.select({ executionId: approvals.executionId, grantId: approvals.grantId, grantVersion: approvals.grantVersion, approvedAt: approvals.approvedAt, invalidatedAt: approvals.invalidatedAt })
-      .from(approvals).innerJoin(agentGrants, eq(agentGrants.id, approvals.grantId))
+    // Execution monitoring: each Agent approval with the transfer's live state. AWAITING_DEPOSIT means it waits for the owner's wallet signature.
+    return this.d.db.select({ executionId: approvals.executionId, grantId: approvals.grantId, grantVersion: approvals.grantVersion, approvedAt: approvals.approvedAt, invalidatedAt: approvals.invalidatedAt,
+      state: executions.state, sourceNetwork: executions.sourceNetwork, destinationNetwork: executions.destinationNetwork, sourceAssetId: executions.sourceAssetId, destinationAssetId: executions.destinationAssetId, amountIn: executions.amountIn, recipient: executions.recipient })
+      .from(approvals).innerJoin(agentGrants, eq(agentGrants.id, approvals.grantId)).innerJoin(executions, and(eq(executions.id, approvals.executionId), eq(executions.userId, userId)))
       .where(and(eq(agentGrants.agentId, agentId), eq(agentGrants.userId, userId), eq(approvals.approvedBy, "AGENT_GRANT"), gte(approvals.approvedAt, new Date(0))))
       .orderBy(desc(approvals.approvedAt)).limit(50);
   }

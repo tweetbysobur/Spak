@@ -21,7 +21,7 @@ const STEPS: Step[] = [
   { view: "agent", anchor: "agent", title: "Agent", body: "Set up a SPak Agent identity on NEAR. In this release you approve every transfer yourself; Agents cannot move funds." },
   { view: "settings", anchor: "settings", title: "Settings and wallets", body: "Link more wallets (EVM, Solana, NEAR) to use them as sources and destinations, and choose which networks each one is used on." },
   { view: null, anchor: "account", title: "Your account", body: "Your signed-in wallet, sign-out, and this tour if you want it again." },
-  { view: "execute", anchor: null, title: "You are ready", body: "Start with a small transfer you know well. SPak will show the full review before your wallet asks you to sign." },
+  { view: "execute", anchor: null, title: "You are ready", body: "Start with a small transfer you know well. SPak will show the full review before your wallet asks you to sign. Open Guide in the menu any time for step-by-step help on each feature." },
 ];
 
 const KEY = (userId: string) => `spak.tour.v1.${userId}`;

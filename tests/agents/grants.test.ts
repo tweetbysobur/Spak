@@ -10,7 +10,7 @@ import { base64, hex } from "@scure/base";
 import type { ExecutionError } from "@/execution";
 import { agentEvents, agentGrants, agents, approvals } from "@/database/schema";
 import { AgentService, OWNERSHIP_VALID_MS } from "@/agents/service";
-import { assessGrant, normalizeScope, type GrantInput } from "@/agents/grants";
+import { assessGrant, normalizeScope, scopeHash, type GrantInput } from "@/agents/grants";
 import { approval, harness } from "../execution/harness";
 import { nearWallet } from "../auth/keys";
 
@@ -89,7 +89,7 @@ describe("granting needs the owner's signature over the exact permission", () =>
     expect(g).toMatchObject({ version: 1, status: "ACTIVE", scope: { maxTransactionUsd: "60", maxTransactions: 5 }, signerPublicKey: owner.publicKey });
     const v = await h.grants.view(u.userId, agentId);
     expect(v.mode).toBe("PREAUTHORIZED");
-    expect(v.usage).toEqual({ transactions: 0, dayUsd: "0" });
+    expect(v.usage).toMatchObject({ transactions: 0, dayUsd: "0" });
     expect((await h.db.select().from(agentEvents).where(eq(agentEvents.agentId, agentId))).map((e) => e.event)).toContain("GRANT_CREATED");
   });
   it("refuses another key, a tampered message, a key without full access, reuse, expiry and another site", async () => {
@@ -137,7 +137,7 @@ describe("the Agent approves inside its permission and Guard; anything else need
     expect(a).toMatchObject({ approvedBy: "AGENT_GRANT", grantId: g.id, grantVersion: 1 });
     const d = await deposit(x.id);
     expect(d.transaction).toBeTruthy();
-    expect((await h.grants.view(u.userId, agentId)).usage).toEqual({ transactions: 1, dayUsd: "50" });
+    expect((await h.grants.view(u.userId, agentId)).usage).toMatchObject({ transactions: 1, dayUsd: "50" });
   });
 
   it.each([
@@ -288,5 +288,90 @@ describe("assessGrant (pure)", () => {
     expect(assessGrant({ grant: g, agentProblem: "AGENT_SUSPENDED", subject: s, usage: { transactions: 0, dayUsd: "0" }, now }).ok).toBe(false);
     expect(assessGrant({ grant: { ...g, status: "PAUSED" }, agentProblem: null, subject: s, usage: { transactions: 0, dayUsd: "0" }, now }).ok).toBe(false);
     expect(assessGrant({ grant: { ...g, expiresAt: now }, agentProblem: null, subject: s, usage: { transactions: 0, dayUsd: "0" }, now }).ok).toBe(false);
+  });
+});
+
+describe("frequency limit (minimum spacing between Agent approvals)", () => {
+  it("is signed into the message only when set; grants without it keep the old message and hash", async () => {
+    const plain = await h.grants.prepare(u.userId, agentId, await scope(), DOMAIN);
+    expect(plain.message).not.toContain("Spacing");
+    const spaced = await h.grants.prepare(u.userId, agentId, await scope({ minIntervalMinutes: 30 }), DOMAIN);
+    expect(spaced.message).toContain("Spacing: at least 30 minutes between transfers");
+  });
+  it("refuses spacing outside 0 to 1440 minutes or not a whole number", async () => {
+    for (const bad of [-1, 1441, 2.5]) expect(() => normalizeScope({ maxTransactionUsd: "10", dailyLimitUsd: "10", maxTransactions: 1, durationHours: 1, sourceNetworks: ["base"], destinationNetworks: ["solana"], assets: [USDC_BASE], recipients: { self: true, addresses: [] }, minIntervalMinutes: bad }, "1000"), String(bad)).toThrow();
+  });
+  it("a second Agent approval inside the spacing needs the user (FREQUENCY); after the spacing it is allowed", async () => {
+    await grant({ minIntervalMinutes: 30 });
+    expect((await agentApprove(await start(20))).execution.state).toBe("AWAITING_DEPOSIT");
+    const early = await start(21);
+    const d = await details(agentApprove(early));
+    expect(d?.rules.filter((r) => !r.ok).map((r) => r.rule)).toEqual(["FREQUENCY"]);
+    expect(await h.records.activeApproval(early.id)).toBeNull();
+    h.clock.now += 30 * 60_000;
+    const later = await start(22);
+    expect((await agentApprove(later)).execution.state).toBe("AWAITING_DEPOSIT");
+  });
+  it("pure: exactly at the spacing boundary is allowed, one millisecond early is not", () => {
+    const now = new Date("2026-11-13T10:00:00Z");
+    const g = { status: "ACTIVE", validFrom: new Date(now.getTime() - 1000), expiresAt: new Date(now.getTime() + 3_600_000), scope: { maxTransactionUsd: "50", dailyLimitUsd: "80", maxTransactions: 5, minIntervalMinutes: 10, sourceNetworks: ["base"], destinationNetworks: ["solana"], assets: ["a", "b"], recipients: { self: true, addresses: [] } } };
+    const s = { sourceNetwork: "base", destinationNetwork: "solana", sourceAssetId: "a", destinationAssetId: "b", recipient: "x", recipientKind: "SELF" as const, valueUsd: "5" };
+    expect(assessGrant({ grant: g, agentProblem: null, subject: s, usage: { transactions: 1, dayUsd: "5", lastAt: new Date(now.getTime() - 600_000) }, now }).ok).toBe(true);
+    expect(assessGrant({ grant: g, agentProblem: null, subject: s, usage: { transactions: 1, dayUsd: "5", lastAt: new Date(now.getTime() - 599_999) }, now }).ok).toBe(false);
+  });
+});
+
+describe("execution monitoring: Agent approvals carry the transfer's live state", () => {
+  it("lists the Agent-approved transfer as waiting for the owner's wallet signature, scoped to the owner", async () => {
+    await grant();
+    const x = await start(50);
+    await agentApprove(x);
+    const list = await h.grants.approvals(u.userId, agentId);
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ executionId: x.id, state: "AWAITING_DEPOSIT", sourceNetwork: "base", destinationNetwork: "solana" });
+    const other = await h.newUser();
+    await expect(h.grants.approvals(other.userId, agentId)).rejects.toThrow();
+  });
+});
+
+describe("Phase 1 verification: spacing under concurrency, expiry boundaries, compatibility", () => {
+  it("concurrency: five simultaneous Agent approvals under a 60-minute spacing rule: exactly one succeeds", async () => {
+    await grant({ maxTransactions: 10, dailyLimitUsd: "1000", minIntervalMinutes: 60 });
+    const xs = [];
+    for (let i = 0; i < 5; i++) xs.push(await start(30 + i));
+    const out = await Promise.all(xs.map((x) => code(agentApprove(x))));
+    expect(out.filter((o) => o === "OK")).toHaveLength(1);
+    expect(out.every((o) => o === "OK" || o === "AGENT_APPROVAL_REQUIRED")).toBe(true);
+    const live = await h.db.select().from(approvals).where(eq(approvals.approvedBy, "AGENT_GRANT"));
+    expect(live.filter((a) => !a.invalidatedAt)).toHaveLength(1);
+  });
+  it("expiry boundary: one millisecond before expiry the Agent may approve; at expiry it may not", async () => {
+    const g = await grant({ durationHours: 1 });
+    const end = new Date(g.expiresAt).getTime();
+    h.clock.now = end - 1;
+    expect((await agentApprove(await start(41))).execution.state).toBe("AWAITING_DEPOSIT");
+    h.clock.now = end;
+    const late = await start(42);
+    const d = await details(agentApprove(late));
+    expect(d?.rules.filter((r) => !r.ok).map((r) => r.rule)).toContain("GRANT_EXPIRED");
+  });
+  it("compatibility: a permission signed before spacing existed keeps its exact scope, hash and message, and still works", async () => {
+    const input = await scope();
+    const { scope: sc } = normalizeScope(input, "1000");
+    expect("minIntervalMinutes" in sc).toBe(false);
+    expect(normalizeScope({ ...input, minIntervalMinutes: 0 }, "1000").scope).toEqual(sc);
+    const legacy = { maxTransactionUsd: sc.maxTransactionUsd, dailyLimitUsd: sc.dailyLimitUsd, maxTransactions: sc.maxTransactions, sourceNetworks: sc.sourceNetworks, destinationNetworks: sc.destinationNetworks, assets: sc.assets, recipients: sc.recipients };
+    expect(scopeHash(sc)).toBe(scopeHash(legacy));
+    const c = await h.grants.prepare(u.userId, agentId, input, DOMAIN);
+    expect(c.message).toContain("Transfers: at most 5\nSource networks: base");
+    const g = await grant();
+    expect(g.scope).toEqual(legacy);
+    expect((await agentApprove(await start(43))).execution.state).toBe("AWAITING_DEPOSIT");
+  });
+  it("browser-supplied spacing cannot be changed after signing: the server uses its stored copy", async () => {
+    const c = await h.grants.prepare(u.userId, agentId, await scope({ minIntervalMinutes: 30 }), DOMAIN);
+    const s = await owner.sign(c.message.replace("at least 30 minutes", "at least 0 minutes"), hex.encode(base64.decode(c.nonce)), c.recipient);
+    await expect(h.grants.confirm(u.userId, agentId, { challengeId: c.challengeId, accountId: owner.address, publicKey: s.publicKey, signature: s.signature, domain: DOMAIN })).rejects.toThrow();
+    expect((await h.grants.view(u.userId, agentId)).mode).toBe("MANUAL");
   });
 });
