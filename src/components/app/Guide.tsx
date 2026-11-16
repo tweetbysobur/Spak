@@ -58,6 +58,20 @@ const TOPICS: Topic[] = [
     open: { view: "execute", label: "Make a payment" },
   },
   {
+    id: "recurring", title: "Recurring payments", summary: "Pay the same amount to the same address on a schedule. Each payment still waits for your signature.",
+    steps: [
+      "Open Payments and choose New recurring payment.",
+      "Fill in a name, the token and amount, the recipient and their network, how often (every day, week, two weeks, month or N days), the first date and when it ends.",
+      "Check the summary, including the first dates, then create the schedule.",
+      "On each date SPak prepares that payment with a fresh quote. It appears under Waiting for you, and in Payments when you open them.",
+      "Choose Review and sign. Check the payment, then confirm. Your wallet signs the deposit.",
+      "If a date is missed, it shows as Missed. Choose Prepare now to pay it, or Skip.",
+      "Pause, resume or cancel a schedule at any time. A cancelled schedule never prepares another payment.",
+    ],
+    checks: ["Every payment is checked again by SPak Guard on its date.", "Every payment gets its own fresh quote, approval, deposit, tracking and receipt.", "A schedule never signs for you. Your Agent may approve a quote only within its signed permission; your wallet still signs."],
+    open: { view: "payments", label: "Open Payments" },
+  },
+  {
     id: "tracking", title: "Tracking and Activity", summary: "Follow every transfer until delivery is proven.",
     steps: [
       "After your deposit, the transfer page shows each step and refreshes on its own.",

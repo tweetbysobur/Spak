@@ -11,13 +11,14 @@ import { short } from "@/components/WalletsPanel";
 import type { Session } from "@/components/session";
 import { api } from "@/lib/client";
 
-export type View = "overview" | "execute" | "activity" | "portfolio" | "guard" | "agent" | "settings" | "guide";
+export type View = "overview" | "execute" | "activity" | "payments" | "portfolio" | "guard" | "agent" | "settings" | "guide";
 
 /** Navigation. `planned` items open honest pages that say what is and is not live. */
 export const NAV: { id: View; label: string; icon: IconName; planned?: boolean }[] = [
   { id: "overview", label: "Overview", icon: "home" },
   { id: "execute", label: "Execute", icon: "execute" },
   { id: "activity", label: "Activity", icon: "activity" },
+  { id: "payments", label: "Payments", icon: "wallet" },
   { id: "portfolio", label: "Intelligence", icon: "portfolio" },
   { id: "guard", label: "SPak Guard", icon: "guard" },
   { id: "agent", label: "Agent", icon: "agent" },

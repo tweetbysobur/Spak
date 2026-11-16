@@ -133,7 +133,7 @@ export function AgentPermissions({ agent }: { agent: AgentView }) {
           {v.approvals.length > 0 && <ol className="mt-2 flex flex-col">{v.approvals.map((a) => (
             <li key={a.executionId} data-agent-approval={a.state} className="type-body-sm flex flex-wrap items-center justify-between gap-3 border-t border-line py-2">
               <span className="min-w-0"><span className="text-fg">{token(a.sourceAssetId)} {name(a.sourceNetwork)} to {name(a.destinationNetwork)}</span><span className="type-caption block text-fg-2">Approved by your Agent (v{a.grantVersion}) {new Date(a.approvedAt).toLocaleString()}{a.invalidatedAt ? " · approval withdrawn" : ""}</span></span>
-              {a.state === "AWAITING_DEPOSIT" && !a.invalidatedAt ? <Dot role="warning">Waiting for your wallet signature</Dot> : <Dot role={a.state === "COMPLETED" ? "success" : a.state === "FAILED" || a.state === "REFUNDED" || a.state === "EXPIRED" ? "error" : "neutral"}>{a.state.replace(/_/g, " ").toLowerCase().replace(/^./, (c) => c.toUpperCase())}</Dot>}
+              {a.state === "AWAITING_DEPOSIT" && !a.invalidatedAt ? <Dot role="pending">Waiting for your wallet signature</Dot> : <Dot role={a.state === "COMPLETED" ? "success" : a.state === "REFUNDED" ? "refunded" : a.state === "FAILED" ? "warning" : "neutral"}>{a.state.replace(/_/g, " ").toLowerCase().replace(/^./, (c) => c.toUpperCase())}</Dot>}
             </li>))}</ol>}
         </details>
       )}

@@ -33,7 +33,7 @@ describe("alert scan", () => {
     await h.db.update(executions).set({ state: "PROCESSING", updatedAt: new Date(h.now().getTime() - 2 * 3600_000) }).where(eq(executions.id, ex.id));
     const ex2 = await approved("Swap 51 USDC on Base to SOL on Solana");
     await h.db.update(executions).set({ state: "UNKNOWN", error: { code: "NEEDS_RECONCILIATION", reason: "below minimum" }, monitorGaveUpAt: h.now() }).where(eq(executions.id, ex2.id));
-    await h.db.update(quotes).set({ status: "REJECTED", rejectionReason: "the quote signature does not verify against the provider's published key" }).where(eq(quotes.executionId, ex.id));
+    await h.db.update(quotes).set({ status: "REJECTED", rejectionReason: "SPak could not verify the signature from NEAR Intents on this quote against its published key, so it will not use it. Nothing was sent" }).where(eq(quotes.executionId, ex.id));
     await ops.scan();
     expect(await open()).toEqual(["MONITOR_GAVE_UP", "MONITOR_SILENT", "SECURITY_QUOTE_REJECTED", "SECURITY_QUOTE_REJECTED", "STALLED_EXECUTION", "UNVERIFIED_DELIVERY"]);
     await ops.scan(); // same conditions: counts go up, no duplicate open alerts

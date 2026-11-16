@@ -943,3 +943,64 @@ export const alerts = pgTable("spak_alerts", {
   uniqueIndex("spak_alerts_open_uq").on(t.dedupeKey).where(sql`resolved_at is null`),
   index("spak_alerts_undelivered_idx").on(t.deliveredAt, t.lastAt),
 ]);
+
+/**
+ * SPak Payments: recurring payment schedules. A schedule prepares one payment per occurrence through the normal
+ * execution path; it never authorizes a deposit. Dates are calendar dates in the owner's timezone.
+ */
+export const paymentSchedules = pgTable("spak_payment_schedules", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  status: text("status").notNull(), // ACTIVE | PAUSED | CANCELLED | FINISHED
+  sourceNetwork: text("source_network").notNull(),
+  sourceAssetId: text("source_asset_id").notNull(),
+  destinationNetwork: text("destination_network").notNull(),
+  destinationAssetId: text("destination_asset_id").notNull(),
+  amount: text("amount").notNull(), // decimal string in the source token
+  recipient: text("recipient").notNull(),
+  agentId: text("agent_id").references((): AnyPgColumn => agents.id),
+  frequency: text("frequency").notNull(), // DAILY | WEEKLY | BIWEEKLY | MONTHLY | EVERY_N_DAYS
+  intervalDays: integer("interval_days"),
+  startDate: text("start_date").notNull(), // YYYY-MM-DD
+  endDate: text("end_date"),
+  maxOccurrences: integer("max_occurrences"),
+  timezone: text("timezone").notNull(),
+  nextSeq: integer("next_seq").notNull().default(0),
+  nextDueDate: text("next_due_date"), // null once finished or cancelled
+  pausedAt: timestamp("paused_at", { withTimezone: true }),
+  cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+  rowVersion: integer("row_version").notNull().default(1),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+}, (t) => [
+  index("spak_payment_schedules_user_idx").on(t.userId, t.createdAt),
+  index("spak_payment_schedules_due_idx").on(t.status, t.nextDueDate),
+]);
+
+/**
+ * One row per scheduled date. Unique per (schedule, seq): the same date can never be prepared twice. Each attempt
+ * gets its own execution (own quote, approval, deposit, tracking and receipt); earlier attempts are kept in `attempts`.
+ */
+export const paymentOccurrences = pgTable("spak_payment_occurrences", {
+  id: text("id").primaryKey(),
+  scheduleId: text("schedule_id").notNull().references(() => paymentSchedules.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  seq: integer("seq").notNull(),
+  dueDate: text("due_date").notNull(),
+  status: text("status").notNull(), // PREPARING | PREPARED | FAILED | MISSED | SKIPPED | CANCELLED
+  executionId: text("execution_id").references((): AnyPgColumn => executions.id),
+  attempt: integer("attempt").notNull().default(0),
+  attempts: jsonb("attempts").notNull().default([]),
+  failureCode: text("failure_code"),
+  failureMessage: text("failure_message"),
+  leaseUntil: timestamp("lease_until", { withTimezone: true }),
+  preparedAt: timestamp("prepared_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+}, (t) => [
+  uniqueIndex("spak_payment_occurrences_seq_uq").on(t.scheduleId, t.seq),
+  uniqueIndex("spak_payment_occurrences_execution_uq").on(t.executionId),
+  index("spak_payment_occurrences_schedule_idx").on(t.scheduleId, t.seq),
+  index("spak_payment_occurrences_preparing_idx").on(t.status, t.leaseUntil),
+]);

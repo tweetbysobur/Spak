@@ -28,11 +28,14 @@ export function providerError(e: unknown): ExecutionError {
   logEvent("warn", "provider.error", { provider: PROVIDER, kind: (e as { kind?: string })?.kind ?? "UNKNOWN", status: (e as { httpStatus?: number })?.httpStatus ?? null });
   if (e instanceof OneClickError) {
     switch (e.kind) {
-      case "BAD_REQUEST": return new ExecutionError("QUOTE_REJECTED", `${PROVIDER} could not quote this: ${e.message}`);
+      case "BAD_REQUEST":
+        // Stellar tokens need a trustline on the receiving account; say so in one line instead of the raw provider text.
+        if (/trustline/i.test(e.message)) return new ExecutionError("QUOTE_REJECTED", "The recipient's Stellar account has no trustline for this token, so it cannot receive it. The recipient must add the trustline first. Nothing was sent.");
+        return new ExecutionError("QUOTE_REJECTED", `${PROVIDER} could not quote this: ${e.message.split("\n")[0]}`);
       case "UNAUTHORIZED": return new ExecutionError("PROVIDER_ERROR", `${PROVIDER} rejected SPak's credentials. This is a server configuration problem.`);
       case "RATE_LIMITED": return new ExecutionError("PROVIDER_UNAVAILABLE", `${PROVIDER} is rate limiting requests. Try again shortly.`);
       case "INVALID_RESPONSE": return new ExecutionError("PROVIDER_ERROR", e.message);
-      default: return new ExecutionError("PROVIDER_UNAVAILABLE", `${PROVIDER} is unavailable. Try again shortly.`);
+      default: return new ExecutionError("PROVIDER_UNAVAILABLE", `${PROVIDER} could not quote this route right now. Nothing was sent. Try again later.`);
     }
   }
   return new ExecutionError("PROVIDER_ERROR", (e as Error)?.message ?? "Provider error.");
@@ -69,7 +72,7 @@ export class QuoteService {
     const check = checkQuote(req, res, { sourceNetwork: src.network, now });
     // S-3: every quote must carry a valid signature from the provider's configured key. No key means no acceptance.
     if (!this.quotePublicKey) check.problems.push("no provider quote-signing key is configured, so the quote cannot be authenticated");
-    else if (!verifyQuoteSignature(res, this.quotePublicKey)) check.problems.push("the quote signature does not verify against the provider's published key");
+    else if (!verifyQuoteSignature(res, this.quotePublicKey)) check.problems.push(`SPak could not verify the signature from ${PROVIDER} on this quote against its published key, so it will not use it. Nothing was sent`);
     if (!dry && req.depositMode === "MEMO" && !res.quote.depositMemo) check.problems.push("memo deposit mode but no memo returned");
     const min = v.plan.constraints.minOutput;
     if (min) {

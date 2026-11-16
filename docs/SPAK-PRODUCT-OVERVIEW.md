@@ -21,13 +21,14 @@ Live means in the code, tested and running in production at usespak.vercel.app. 
 | NEAR recipient registration fix | Live | 1Click registers the recipient and charges the quoted withdrawFee |
 | Delivery verification | Live | 45 of 90 USDC routes automatic; others flagged for manual review up front |
 | Refund tracking | Live | |
-| One-time payments | Built | Pay another address on the same or another network; payment review, Activity filter and a downloadable receipt after verified delivery. Not yet deployed |
+| One-time payments | Live | Pay another address on the same or another network; payment review, Activity filter and a downloadable receipt after verified delivery. |
+| Recurring payments | Live | Daily, weekly, two-weekly, monthly or every N days. Each payment is prepared with a fresh quote and waits for your review and wallet signature. Prepared by a daily job (04:17 UTC) and when you open Payments |
 | SPak Guard | Live | Limits, allowed networks, assets, recipients |
 | SPak Intelligence | Live | Read-only balances and prices on 10 networks |
 | Guided tour | Live | First-run tour, replayable from the account menu |
-| SPak Agent | Partial | Identity, signed permissions (limits, spacing, expiry), pause, revoke and approval monitoring are built (spacing and monitoring not yet deployed). The Agent approves within limits; your wallet signs every deposit. No unattended signing |
+| SPak Agent | Partial | Identity, signed permissions (limits, spacing, expiry), pause, revoke and approval monitoring are live. The Agent approves within limits; your wallet signs every deposit. No unattended signing |
 | Verified mainnet settlement | In progress | No verified SPak mainnet settlement yet |
-| Conditional and scheduled execution | Upcoming | Parsed by SPak-in, not executed |
+| Conditional and scheduled execution | Upcoming | Parsed by SPak-in, not executed. Recurring payments (above) are the first scheduled feature |
 | Advanced Agents, developer APIs, rebalancing | Upcoming | |
 
 ## Screens
@@ -36,6 +37,7 @@ Live means in the code, tested and running in production at usespak.vercel.app. 
 |---|---|
 | Overview | Recent transfers and a start point |
 | Execute | Chat, review and confirm |
+| Payments | Recurring payment schedules and payments waiting for your signature |
 | Activity | Every transfer with live status |
 | Intelligence | Portfolio, insights, route comparison |
 | Guard | Your limits |

@@ -15,6 +15,7 @@ import { NAV, Shell, type View } from "@/components/app/Shell";
 import { Intelligence } from "@/components/intelligence/Intelligence";
 import { Tour } from "@/components/app/Tour";
 import { Guide } from "@/components/app/Guide";
+import { Payments } from "@/components/payments/Payments";
 import { PROVIDER_LABEL } from "@/environment";
 import { Overview } from "@/components/app/Overview";
 import { Interpretation } from "@/components/app/Interpretation";
@@ -169,6 +170,7 @@ export default function AppPage() {
             </div>
           )}
           {view === "activity" && <Activity onOpen={open} />}
+          {view === "payments" && <Payments onOpen={open} onReview={(i, x, q) => { setView("execute"); setPending({ intent: i, execution: x, quote: q }); }} />}
           {view === "portfolio" && <Intelligence onExecute={(t) => { setHandoff(t); setMode("chat"); setInterp(undefined); setView("execute"); }} />}
           {view === "guard" && <Guard />}
           {view === "agent" && <Agent session={session} refresh={refresh} signedOut={signedOut} />}

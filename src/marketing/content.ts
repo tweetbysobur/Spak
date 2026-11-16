@@ -89,9 +89,10 @@ export const PILLARS: Pillar[] = [
       "Send an asset to another person's address on a different network in one instruction.",
       "The recipient address is checked against the destination network before any quote.",
       "Delivery to the recipient is verified on the networks SPak can read.",
+      "Recurring payments: SPak prepares each one on its date with a fresh quote, and your wallet signs it.",
     ],
     planned: [
-      "Payment requests, checkout and recurring payments are not built.",
+      "Payment requests, invoices, checkout and bulk payouts are not built.",
     ],
   },
   {

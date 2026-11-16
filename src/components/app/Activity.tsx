@@ -29,8 +29,9 @@ export function Activity({ onOpen }: { onOpen: (x: ExecutionView) => void }) {
 
   return (
     <Card className="p-0 sm:p-0">
-      <div className="flex flex-col gap-3 px-5 pt-5 sm:flex-row sm:items-end sm:px-6 sm:pt-6">
-        <p className="type-body-sm flex-1 text-fg-2">Every transfer and payment you started, newest first. Open one to see its full tracking and receipt.</p>
+      <div className="flex flex-col gap-4 px-5 pt-5 sm:px-6 sm:pt-6">
+        <p className="type-body-sm text-fg-2">Every transfer and payment you started, newest first. Open one to see its full tracking and receipt.</p>
+        <div className="grid gap-3 sm:grid-cols-3">
         <label className="flex flex-col gap-1"><span className="type-caption text-fg-2">Type</span>
           <Select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} aria-label="Filter by type">
             <option value="all">All types</option>
@@ -46,6 +47,7 @@ export function Activity({ onOpen }: { onOpen: (x: ExecutionView) => void }) {
           <Select value={group} onChange={(e) => setGroup(e.target.value)} aria-label="Filter by status">
             {GROUPS.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
           </Select></label>
+        </div>
       </div>
       <div className="mt-5 border-t border-line">
         {error ? <div className="p-6"><ErrorText>{error}</ErrorText></div>

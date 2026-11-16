@@ -34,12 +34,15 @@ async function run(req: Request) {
     // Same scheduler, same secret: dedicated Agent account re-verification (read-only on NEAR) and association monitoring.
     const agents = await (await agentAccountService()).recheckDue({ limit: 25 }).catch((e) => { console.error("[spak-monitor] agent recheck failed", (e as Error).message); return { error: "AGENT_RECHECK_FAILED" }; });
     const associations = await monitorAssociations(await getDb(), new Date()).catch((e) => { console.error("[spak-monitor] association monitor failed", (e as Error).message); return { error: "ASSOCIATION_MONITOR_FAILED" }; });
+    // Same scheduler: prepare due recurring payments (fresh quote each; the user's wallet still signs every deposit).
+    const schedules = await (await spak()).schedules.processDue({ limit: 25 }).then((r) => ({ created: r.created, prepared: r.prepared, failed: r.failed }))
+      .catch((e) => { logEvent("error", "payment_schedules.run_failed", { error: (e as Error).message }); return { error: "PAYMENT_SCHEDULES_FAILED" }; });
     await new RateLimiter(await getDb()).prune().catch((e) => logEvent("warn", "rate_limit.prune_failed", { error: (e as Error).message }));
     // Operations: derive alerts from state and deliver them. A failure here is reported, never hidden.
     const ops = new AlertService(await getDb());
     const alerts = await ops.scan().then(async (open) => ({ open: open.length, delivery: await ops.deliver() })).catch((e) => { logEvent("error", "alert.scan_failed", { error: (e as Error).message }); return { error: "ALERT_SCAN_FAILED" }; });
     logEvent("info", "monitor.run", { trigger, ...summary });
-    return NextResponse.json({ ...summary, agentAccounts: agents, walletAssociations: associations, alerts });
+    return NextResponse.json({ ...summary, agentAccounts: agents, walletAssociations: associations, paymentSchedules: schedules, alerts });
   } catch (e) {
     logEvent("error", "monitor.run_failed", { trigger, error: (e as Error).message });
     await new AlertService(await getDb()).raise({ kind: "MONITOR_RUN_FAILED", severity: "HIGH", dedupeKey: "monitor-run-failed", message: `Monitor run failed: ${(e as Error).message.slice(0, 200)}` }).catch(() => undefined);

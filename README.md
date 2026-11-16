@@ -65,6 +65,7 @@ One interface where you state what you want to happen to your assets, and SPak h
 | SPak Guard | Per-transfer and daily limits, allowed networks, assets and recipients | Live |
 | SPak Intelligence | Read-only balances on 10 networks with independent prices, portfolio questions and route comparison | Live |
 | Refund tracking | Tracks failed transfers until the refund is verified | Live |
+| SPak Payments | One-time payments with a downloadable receipt, and recurring payment schedules that prepare each payment for your wallet to sign | Live |
 | Guided tour | First-run tour of every screen | Live |
 | SPak Agent | A NEAR identity for an Agent. Agents cannot move funds in this release | Partial |
 | Mainnet settlement | No verified SPak mainnet settlement yet. A first controlled transfer is being prepared | In progress |
@@ -156,12 +157,14 @@ SPak uses the NEAR Intents 1Click API for quotes, deposit addresses and settleme
 
 ## Networks and assets
 
-Ethereum, Base, Arbitrum, Optimism, Polygon, BNB Chain, Avalanche, Gnosis, Solana and NEAR. Assets come from the NEAR Intents token registry; deprecated tokens are skipped. Routes where SPak cannot verify delivery automatically are marked for manual review before you start.
+You can send from the 10 networks you sign in with: Ethereum, Base, Arbitrum, Optimism, Polygon, BNB Smart Chain, Avalanche, Gnosis, Solana and NEAR. You can also send to Bitcoin, Tron, Sui, XRP Ledger, Dogecoin, Litecoin, TON, Stellar and Aptos. Assets come from the NEAR Intents token registry; deprecated tokens are skipped.
+
+A live audit of every route (`scripts/route-audit.ts`) quotes all 290 routes between the sign-in networks cleanly. Limits on the receive-only networks come from NEAR Intents or the chain: Bitcoin quotes do not verify against NEAR Intents' signing key, so SPak refuses them; XRP quotes currently fail on their side; Stellar USDC needs a trustline on the recipient's account. Routes where SPak cannot verify delivery automatically are marked for manual review before you start.
 
 ![Manual review route](docs/assets/screenshots/app-14-manual-review-route.png)
 *A route SPak cannot verify automatically is labelled before you confirm.*
 
-Full list and verification coverage: [docs/SPAK-SUPPORTED-NETWORKS.md](docs/SPAK-SUPPORTED-NETWORKS.md).
+Full list, audit results and verification coverage: [docs/SPAK-SUPPORTED-NETWORKS.md](docs/SPAK-SUPPORTED-NETWORKS.md).
 
 ## Security
 

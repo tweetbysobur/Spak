@@ -211,7 +211,11 @@ function validateTx(draft: Draft, req: InterpretRequest, v: Validation, ask: Ask
   if (d.sourceNetwork && getNetwork(d.sourceNetwork)) {
     const refund = d.refundAddress ?? req.wallets[d.sourceNetwork] ?? null;
     const fam = getNetwork(d.sourceNetwork)!.family;
-    if (!refund) ask("refundAddress", `Connect a ${netName(d.sourceNetwork)} wallet so SPak has a refund address if the transaction fails.`);
+    // SPak signs in EVM, Solana and NEAR wallets only. Other networks can receive, but SPak cannot send from them.
+    const canSignIn = ["evm", "solana", "near"].includes(getNetwork(d.sourceNetwork)?.family ?? "");
+    if (!refund) ask("refundAddress", canSignIn
+      ? `Connect your ${netName(d.sourceNetwork)} wallet so SPak can send from it and has a refund address if the transfer fails.`
+      : `SPak can send to ${netName(d.sourceNetwork)} but not from it yet, because there is no ${netName(d.sourceNetwork)} wallet sign-in. Send from a network where you have a connected EVM, Solana or NEAR wallet.`);
     else if (!isAddressFor(fam, refund)) v.errors.push(err("ADDRESS_NETWORK_MISMATCH", `Refund address ${refund} is not a valid ${netName(d.sourceNetwork)} address.`, "refundAddress"));
     else v.refundAddress = refund;
   }

@@ -297,7 +297,7 @@ describe("S-3: provider quote signatures are mandatory", () => {
     hh.fake.mode = "bad-signature";
     const err = await hh.svc.create({ userId: uu.userId, planHash: r.plan!.hash, idempotencyKey: "sig-bad-0001", wallets: await uu.wallets() }).then(() => null, (e) => e);
     expect(err?.code).toBe("QUOTE_MISMATCH");
-    expect(err?.message).toMatch(/signature does not verify/);
+    expect(err?.message).toMatch(/could not verify the signature from .* against its published key/);
     hh.fake.mode = "ok";
     const { ExecutionService, ExecutionRecords, IntentLogPlanStore } = await import("@/execution");
     const { OneClickClient } = await import("@/integrations/near-intents/client");

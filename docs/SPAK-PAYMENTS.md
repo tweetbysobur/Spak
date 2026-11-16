@@ -1,6 +1,6 @@
 # SPak Payments
 
-Status: one-time payments are built and tested. Recurring and scheduled payments, payment requests, invoices, payroll and bulk payouts are not built.
+Status: one-time and recurring payments are live. Payment requests, invoices, payroll, bulk payouts and saved payees are not built.
 
 ## What a payment is
 
@@ -36,7 +36,75 @@ The review for a payment leads with the payee address and network, then what you
 | Agent may approve only payees in its signed permission; the wallet still signs | SPak Agent permissions |
 | Delivery counted only to the recipient, from a trusted sender, above the minimum | Destination verification |
 | Expired, refunded or unverified payments have no receipt | Receipt builder |
+| A schedule only prepares; every scheduled payment needs your review and wallet signature | Payment schedules |
+
+## Recurring payments
+
+A recurring payment pays the same amount of the same token to the same address on a schedule. It **prepares** each payment. It never signs, and it is never a permission to sign: your wallet signs every deposit.
+
+### Creating one
+
+Open **Payments**, choose **New recurring payment** and fill in: name, source network and token, amount, the recipient's network, token and address, how often, the first date, and when it ends (when you cancel, on a date, or after a number of payments). SPak shows a summary with the first dates before anything is created.
+
+| Frequency | Rule |
+|---|---|
+| Every day, week, two weeks | The start date plus 1, 7 or 14 days per payment |
+| Every N days | 1 to 365 days |
+| Every month | The start date's day of the month. Months without that day (29th, 30th, 31st) use their last day, and the next month returns to the original day (31 Jan, 28 Feb, 31 Mar) |
+
+Limits: first date from today to a year ahead; end date within five years; at most 520 payments; up to 20 active or paused schedules.
+
+The server validates every field again, plans one payment through SPak-in as a check (recipient valid for the network, supported token, Guard), and refuses a payment to your own wallet.
+
+### Dates and time
+
+Dates are calendar dates in your timezone, taken from your browser when you create the schedule and shown with it. A payment is due from the start of its date in that timezone.
+
+### When a payment is due
+
+1. The schedule and its status are read again (paused or cancelled schedules prepare nothing).
+2. SPak-in plans the payment again: recipient, networks, token and amount.
+3. SPak Guard checks it with your current settings.
+4. SPak Execution gets a fresh NEAR Intents quote. Each payment has its own execution, quote, approval, deposit, tracking and receipt. Nothing is reused from an earlier payment.
+5. If the schedule names your Agent, the Agent may approve the quote, only within its own signed permission.
+6. The payment waits in **Payments** as "Ready: review and sign". **Review and sign** gets another fresh quote and opens the normal payment review. Your wallet signs the deposit.
+
+Preparation runs in the existing monitoring job (`/api/internal/monitor`, daily on Vercel Cron, or more often from an external scheduler with `SPAK_MONITOR_SECRET`) and also when you open Payments, for your own schedules.
+
+### Missed payments
+
+If several dates pass before SPak runs (for example the job did not run for a while), only the latest is prepared. Earlier dates are recorded as **Missed**, never prepared together. For a missed or failed payment you choose **Prepare now** or **Skip**. A payment whose attempt expired unsigned, was cancelled or was refunded can be prepared again; the earlier attempt is kept in its history. Only one attempt can be live at a time.
+
+### Pause, resume, cancel
+
+- Pause: nothing new is prepared.
+- Resume: the same configuration continues from the next date on or after today. Dates that passed while paused are not created.
+- Cancel: final. No more payments are prepared, missed or failed dates are closed, and payments already prepared stay as they are for you to finish or cancel.
+
+### Concurrency and records
+
+- Due schedules are claimed with `FOR UPDATE SKIP LOCKED`; each date is unique per schedule (`(schedule_id, seq)`), so concurrent or repeated runs create one payment per date.
+- Preparation holds a two-minute lease and uses the idempotency key `sched:<occurrence>:<attempt>`, so a crashed run resumes into the same execution instead of a second one.
+- Every occurrence is a database row with its date, status, attempt history, failure reason and execution.
+
+### API
+
+| Method | Path | |
+|---|---|---|
+| GET | `/api/payments/schedules` | Your schedules with their payments; prepares your due payments first |
+| POST | `/api/payments/schedules` | Create |
+| POST | `/api/payments/schedules/:id/pause` · `/resume` · `/cancel` | Lifecycle |
+| POST | `/api/payments/occurrences/:id/retry` · `/skip` | Missed or failed payments |
+
+All owner-only, same-origin and rate-limited. Database: migration `0020_payment_schedules.sql` adds `spak_payment_schedules` and `spak_payment_occurrences`.
+
+### Limitations
+
+- The daily Vercel Cron prepares payments once a day (04:17 UTC); a payment can appear up to a day after its date unless you open Payments or an external scheduler runs the job more often.
+- No notifications outside SPak yet: a payment waiting for your signature is shown in Payments.
+- A schedule cannot be edited; cancel it and create a new one.
+- No real recurring payment has settled on mainnet yet. The flow is tested with simulated chains and a simulated NEAR Intents, and in the browser with a real NEAR Intents quote and a simulated wallet.
 
 ## Not built
 
-Recurring and scheduled payments, payment requests, invoices, vendor payouts, payroll, creator payments, bulk distributions, saved payees and notifications.
+Payment requests, invoices, vendor payouts, payroll, creator payments, bulk distributions, saved payees, notifications and unattended signing.
