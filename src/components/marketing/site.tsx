@@ -138,7 +138,7 @@ export function LivePlanned({ live, planned }: { live: readonly string[]; planne
         <ul className="mt-3 flex flex-col gap-3">{live.map((t) => <li key={t} className="type-body border-l-2 border-primary pl-4 text-fg">{t}</li>)}</ul>
       </div>
       <div>
-        <h3 className="type-label text-fg-2">Not live yet</h3>
+        <h3 className="type-label text-fg-2">Coming soon</h3>
         <ul className="mt-3 flex flex-col gap-3">{planned.map((t) => <li key={t} className="type-body border-l-2 border-dashed border-line-strong pl-4 text-fg-2">{t}</li>)}</ul>
       </div>
     </div>

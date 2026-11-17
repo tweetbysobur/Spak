@@ -65,7 +65,7 @@ One interface where you state what you want to happen to your assets, and SPak h
 | SPak Guard | Per-transfer and daily limits, allowed networks, assets and recipients | Live |
 | SPak Intelligence | Read-only balances on 10 networks with independent prices, portfolio questions and route comparison | Live |
 | Refund tracking | Tracks failed transfers until the refund is verified | Live |
-| SPak Payments | One-time payments with a downloadable receipt, and recurring payment schedules that prepare each payment for your wallet to sign | Live |
+| SPak Payments | One-time payments with a downloadable receipt, payment requests by link, and recurring payment schedules that prepare each payment for your wallet to sign | Live |
 | Guided tour | First-run tour of every screen | Live |
 | SPak Agent | A NEAR identity for an Agent. Agents cannot move funds in this release | Partial |
 | Mainnet settlement | No verified SPak mainnet settlement yet. A first controlled transfer is being prepared | In progress |

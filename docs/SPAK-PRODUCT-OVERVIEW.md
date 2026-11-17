@@ -22,6 +22,7 @@ Live means in the code, tested and running in production at usespak.vercel.app. 
 | Delivery verification | Live | 45 of 90 USDC routes automatic; others flagged for manual review up front |
 | Refund tracking | Live | |
 | One-time payments | Live | Pay another address on the same or another network; payment review, Activity filter and a downloadable receipt after verified delivery. |
+| Payment requests | Live | Ask for an amount by link; the payer pays from any supported network and the request turns Paid only after verified delivery of at least that amount |
 | Recurring payments | Live | Daily, weekly, two-weekly, monthly or every N days. Each payment is prepared with a fresh quote and waits for your review and wallet signature. Prepared by a daily job (04:17 UTC) and when you open Payments |
 | SPak Guard | Live | Limits, allowed networks, assets, recipients |
 | SPak Intelligence | Live | Read-only balances and prices on 10 networks |

@@ -79,6 +79,11 @@ export class Fake1Click {
     if (this.mode === "invalid-json-shape") return json(201, { quote: { amountIn: "x" } });
 
     const rate = !body.dry && this.firmRate ? this.firmRate : this.rate;
+    // EXACT_OUTPUT (sizing only): the input that buys `amount` of output at the current rate, rounded up.
+    if (body.swapType === "EXACT_OUTPUT") {
+      const amountIn = (BigInt(body.amount) * rate.den + rate.num - 1n) / rate.num;
+      return json(200, { timestamp: new Date().toISOString(), signature: "ed25519:sizing", quoteRequest: body, quote: { amountIn: amountIn.toString(), minAmountIn: amountIn.toString(), amountOut: body.amount, minAmountOut: body.amount } });
+    }
     const amountOut = (BigInt(body.amount) * rate.num) / rate.den;
     const minAmountOut = this.mode === "excess-slippage" ? amountOut / 2n : (amountOut * BigInt(10_000 - body.slippageTolerance)) / 10_000n;
     const echo = { ...body, depositMode: body.depositMode ?? "SIMPLE", appFees: [{ recipient: "fee.near", fee: 20 }] };

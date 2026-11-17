@@ -58,6 +58,18 @@ const TOPICS: Topic[] = [
     open: { view: "execute", label: "Make a payment" },
   },
   {
+    id: "request", title: "Request a payment", summary: "Ask someone to pay you an exact amount, from whatever they hold on any supported network.",
+    steps: [
+      "Open Payments and choose New request under Payment requests.",
+      "Enter the amount you want to receive, the token and network, and which of your wallets receives it. Add a note if you like.",
+      "Copy the link and send it to the person paying you.",
+      "They open it, sign in with their wallet, choose what to pay with and confirm. Their wallet signs the deposit.",
+      "The request shows Paid once SPak sees at least your amount arrive in your wallet on that network.",
+    ],
+    checks: ["The payment is always to one of your own verified wallets.", "Their quote guarantees you receive at least the requested amount, or it is refused.", "Only one payment at a time can be in progress for a request, so it cannot be paid twice by accident.", "You can cancel an open request at any time."],
+    open: { view: "payments", label: "Open Payments" },
+  },
+  {
     id: "recurring", title: "Recurring payments", summary: "Pay the same amount to the same address on a schedule. Each payment still waits for your signature.",
     steps: [
       "Open Payments and choose New recurring payment.",

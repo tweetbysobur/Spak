@@ -1,6 +1,6 @@
 # SPak Payments
 
-Status: one-time and recurring payments are live. Payment requests, invoices, payroll, bulk payouts and saved payees are not built.
+Status: one-time payments, recurring payments and payment requests. Invoices, payroll, bulk payouts and saved payees are not built.
 
 ## What a payment is
 
@@ -105,6 +105,26 @@ All owner-only, same-origin and rate-limited. Database: migration `0020_payment_
 - A schedule cannot be edited; cancel it and create a new one.
 - No real recurring payment has settled on mainnet yet. The flow is tested with simulated chains and a simulated NEAR Intents, and in the browser with a real NEAR Intents quote and a simulated wallet.
 
+## Payment requests
+
+Ask someone to pay you. Open **Payments**, choose **New request** and set the amount you want to receive, the token and network, the wallet that receives it (one of your own verified wallets on that network), an optional note, and how long the link works (1 to 90 days). Share the link (`/app?pay=<token>`, 32 random characters).
+
+Paying one is a normal payment:
+
+1. The payer opens the link. Signed out, they see the amount, network, receiving address, note and status, never who made it.
+2. They sign in and choose what to pay with. SPak asks NEAR Intents how much of that token delivers the requested amount (a dry EXACT_OUTPUT quote, used only for sizing), adds headroom for slippage, and plans a PAYMENT with the requested amount as its **minimum output**.
+3. The payer's SPak Guard checks it. The quote is a normal signature-checked EXACT_INPUT quote; SPak rejects it if its worst case delivers less than requested.
+4. The payer reviews it and their wallet signs the deposit.
+5. The request turns **Paid** only when SPak has verified on the destination chain that at least the requested amount reached the payee's wallet.
+
+The payer may send slightly more than the requested amount; any surplus reaches the payee.
+
+No double payment: preparing takes a short claim on the request under a row lock, and no new payment is prepared while an earlier one is in progress. An attempt left unapproved for 30 minutes is cancelled before someone else can pay. A request cannot be paid by the person who made it, or after it is paid, cancelled or expired.
+
+API: `GET`/`POST /api/payments/requests` (payee), `POST /api/payments/requests/:id/cancel` (payee), `GET /api/payments/requests/link/:token` (public), `POST /api/payments/requests/link/:token/pay` (signed-in payer; returns the review). Migration `0021_payment_requests.sql` adds `spak_payment_requests` and `spak_payment_request_attempts`.
+
+Same token on the same network to someone else (for example Base USDC to a Base address) is a payment SPak routes through NEAR Intents. To your own wallet it is refused, because it does nothing.
+
 ## Not built
 
-Payment requests, invoices, vendor payouts, payroll, creator payments, bulk distributions, saved payees, notifications and unattended signing.
+Invoices, vendor payouts, payroll, creator payments, bulk distributions, saved payees, notifications and unattended signing.

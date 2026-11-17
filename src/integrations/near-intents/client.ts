@@ -149,6 +149,17 @@ export class OneClickClient {
     return this.call("/v0/quote", quoteResponseSchema, { method: "POST", body: JSON.stringify(quoteRequestSchema.parse(body)) });
   }
 
+  /**
+   * Sizing only: how much of the origin asset delivers `amountOut` of the destination asset (a DRY EXACT_OUTPUT quote).
+   * Used to size a payment request; the payment itself is a normal EXACT_INPUT quote, signature-checked and bound to
+   * a minimum output, so nothing here is trusted for execution.
+   */
+  async estimateInput(body: Omit<OneClickQuoteRequest, "swapType" | "dry">): Promise<{ amountIn: string }> {
+    const req = { ...quoteRequestSchema.omit({ swapType: true, dry: true }).parse(body), dry: true, swapType: "EXACT_OUTPUT" };
+    const r = await this.call("/v0/quote", z.object({ quote: z.object({ amountIn: intStr }).passthrough() }).passthrough(), { method: "POST", body: JSON.stringify(req) });
+    return { amountIn: r.quote.amountIn };
+  }
+
   status(depositAddress: string, depositMemo?: string | null): Promise<OneClickStatusResponse> {
     const q = new URLSearchParams({ depositAddress, ...(depositMemo ? { depositMemo } : {}) });
     return this.call(`/v0/status?${q}`, statusResponseSchema);

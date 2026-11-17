@@ -18,6 +18,8 @@ import { AgentGrantService } from "@/agents/grants";
 import { httpPriceReader, PriceService } from "@/pricing/oracle";
 import { actingProblem } from "@/agents/authority";
 import { PaymentScheduleService, SCHEDULE_ERROR_STATUS, ScheduleError } from "@/payments/schedules";
+import { PaymentRequestService, REQUEST_ERROR_STATUS, RequestError } from "@/payments/requests";
+import { AssetResolver } from "@/execution/asset-resolver";
 import { agents as agentsTable } from "@/database/schema";
 import { and, eq } from "drizzle-orm";
 import { authService, requireUser, route } from "./auth";
@@ -72,7 +74,10 @@ async function build() {
   // SPak Payments: recurring schedules prepare payments through the same planning, Guard and execution path.
   const schedules = new PaymentScheduleService({ db, engine, guard, execution, log: (event, data) => logEvent("info", event, data),
     wallets: async (userId) => { const a = await authService(); return { context: await a.walletContext(userId), verified: (await a.listWallets(userId)).map((w) => ({ family: w.family, address: w.address, networks: w.networks })) }; } });
-  return { engine, execution, deposits, monitor, tracking: trackingService, failures, reviews, guard, grants, intelligence, schedules };
+  // SPak Payments: payment requests. Paying one is a normal payment with the requested amount as its minimum output.
+  const requests = new PaymentRequestService({ db, engine, guard, execution, client, resolver: new AssetResolver(client), log: (event, data) => logEvent("info", event, data),
+    wallets: async (userId) => { const a = await authService(); return { context: await a.walletContext(userId), verified: (await a.listWallets(userId)).map((w) => ({ family: w.family, address: w.address, networks: w.networks })) }; } });
+  return { engine, execution, deposits, monitor, tracking: trackingService, failures, reviews, guard, grants, intelligence, schedules, requests };
 }
 
 const g = globalThis as unknown as { __spak?: ReturnType<typeof build> };
@@ -113,6 +118,7 @@ export function handle(req: Request, fn: () => Promise<Response>): Promise<Respo
     } catch (e) {
       if (e instanceof SpakInError) return errorResponse(e.error);
       if (e instanceof ExecutionError) return NextResponse.json({ error: e.toJSON() }, { status: e.status });
+      if (e instanceof RequestError) return NextResponse.json({ error: { code: e.code, message: e.message, details: e.details ?? null } }, { status: REQUEST_ERROR_STATUS[e.code] });
       if (e instanceof ScheduleError) return NextResponse.json({ error: { code: e.code, message: e.message, details: e.details ?? null } }, { status: SCHEDULE_ERROR_STATUS[e.code] });
       if (e instanceof AuthError) throw e;
       if (e instanceof SyntaxError || (e as { name?: string }).name === "ZodError") throw e;

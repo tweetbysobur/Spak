@@ -88,3 +88,33 @@ describe("recurring payments API", () => {
     expect(s.occurrences[0]).toMatchObject({ dueDate: today, status: "PREPARED", executionState: "AWAITING_APPROVAL", action: "SIGN" });
   });
 });
+
+const { GET: listRequests, POST: createRequest } = await import("@/app/api/payments/requests/route");
+const { POST: cancelRequest } = await import("@/app/api/payments/requests/[id]/cancel/route");
+const { GET: publicRequest } = await import("@/app/api/payments/requests/link/[token]/route");
+const { POST: payRequest } = await import("@/app/api/payments/requests/link/[token]/pay/route");
+const tp = (token: string) => ({ params: Promise.resolve({ token }) });
+
+describe("payment requests API", () => {
+  it("create (201, own wallet only), public link without sign-in, pay needs sign-in, owner-only cancel, own request refused", async () => {
+    const payee = await user(), payer = await user();
+    const bad = await j(await createRequest(req("/api/payments/requests", { cookie: payee.cookie, body: { destinationNetwork: "base", destinationAssetId: `base:${USDC}`, amount: "5", recipient: "0x1111111111111111111111111111111111111111", expiresInDays: 7 } })));
+    expect(bad).toMatchObject({ status: 400, body: { error: { code: "REQUEST_BAD_REQUEST" } } });
+    const made = await j(await createRequest(req("/api/payments/requests", { cookie: payee.cookie, body: { destinationNetwork: "base", destinationAssetId: `base:${USDC}`, amount: "5", recipient: payee.evm.address, note: "Lunch", expiresInDays: 7 } })));
+    expect(made.status).toBe(201);
+    const token = made.body.token as string;
+    const pub = await j(await publicRequest(req(`/api/payments/requests/link/${token}`, { method: "GET" }), tp(token)));
+    expect(pub).toMatchObject({ status: 200, body: { status: "OPEN", amount: "5", symbol: "USDC", note: "Lunch" } });
+    expect(JSON.stringify(pub.body)).not.toMatch(/usr_|prq_/);
+    expect((await publicRequest(req("/api/payments/requests/link/nope", { method: "GET" }), tp("nope"))).status).toBe(404);
+    const body = { sourceNetwork: "base", sourceAssetId: `base:${USDC}` };
+    expect((await payRequest(req(`/api/payments/requests/link/${token}/pay`, { body }), tp(token))).status).toBe(401);
+    expect((await j(await payRequest(req(`/api/payments/requests/link/${token}/pay`, { cookie: payee.cookie, body }), tp(token)))).body.error.code).toBe("REQUEST_OWN");
+    const paid = await j(await payRequest(req(`/api/payments/requests/link/${token}/pay`, { cookie: payer.cookie, body }), tp(token)));
+    expect(paid.status, JSON.stringify(paid.body)).toBe(200);
+    expect(paid.body).toMatchObject({ intent: { intentType: "PAYMENT" }, execution: { state: "AWAITING_APPROVAL", recipient: { kind: "EXTERNAL" } }, quote: { id: expect.any(String) } });
+    expect((await cancelRequest(req(`/api/payments/requests/${made.body.id}/cancel`, { cookie: payer.cookie }), p(made.body.id))).status).toBe(404);
+    const list = await j(await listRequests(req("/api/payments/requests", { method: "GET", cookie: payee.cookie })));
+    expect(list.body.requests.map((r: { id: string }) => r.id)).toContain(made.body.id);
+  });
+});

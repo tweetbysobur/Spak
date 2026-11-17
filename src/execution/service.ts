@@ -94,7 +94,13 @@ export class ExecutionService {
       src = await this.resolver.resolve(v.leg.sourceAssetId, v.leg.sourceNetwork);
       dst = await this.resolver.resolve(v.leg.destinationAssetId, v.leg.destinationNetwork);
     } catch (e) { throw e instanceof ExecutionError ? e : providerError(e); }
-    if (src.id === dst.id) throw new ExecutionError("PLAN_NOT_EXECUTABLE", "Same asset on the same network is a wallet transfer, not an intent.");
+    // Same token on the same network back to the user's own wallet does nothing: refused. To someone else it is a payment,
+    // which NEAR Intents routes like any other (checked live: Base USDC to a Base address quotes and settles).
+    if (src.id === dst.id) {
+      const evm = getNetwork(dst.network)?.family === "evm";
+      const own = wallets.some((w) => (evm ? w.address.toLowerCase() === v.leg.recipient.toLowerCase() : w.address === v.leg.recipient));
+      if (own) throw new ExecutionError("PLAN_NOT_EXECUTABLE", "Same asset on the same network to your own wallet is a wallet transfer, not an intent.");
+    }
     return { v, src, dst };
   }
 

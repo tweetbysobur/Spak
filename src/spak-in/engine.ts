@@ -54,6 +54,8 @@ export const manualIntentSchema = z.object({
   destinationAsset: z.string().describe("Symbol or canonical asset id"),
   recipient: z.string().optional(),
   slippageBps: z.number().int().positive().optional(),
+  /** Minimum the recipient must receive, in the destination token (payment requests). A quote below it is rejected. */
+  minOutput: z.string().regex(/^\d+(\.\d+)?$/).optional(),
 });
 export type ManualIntent = z.infer<typeof manualIntentSchema>;
 
@@ -116,6 +118,7 @@ export class SpakIn {
     };
     if (draft.sourceAssetId) draft.sourceSymbol = getAsset(draft.sourceAssetId)?.symbol.toUpperCase() ?? null;
     if (draft.destAssetId) draft.destSymbol = getAsset(draft.destAssetId)?.symbol.toUpperCase() ?? null;
+    if (m.minOutput && draft.destSymbol) draft.constraints = { ...draft.constraints, minOutput: { value: m.minOutput.replace(/^0+(?=\d)/, ""), symbol: draft.destSymbol } };
     return this.finish(req, sessionId, null, draft, issues, "NONE", started, false);
   }
 

@@ -43,7 +43,7 @@ describe("marketing site: claims match the implementation", () => {
 
   it("every product part states what is live and what is not", () => {
     expect(PILLARS.map((p) => p.id)).toEqual(["agent", "intelligence", "guard", "payments", "conditional", "connect"]);
-    expect(PILLARS.find((p) => p.id === "conditional")?.status).toBe("Planned");
+    expect(PILLARS.find((p) => p.id === "conditional")?.status).toBe("Coming soon");
     for (const p of PILLARS) { expect(p.live.length).toBeGreaterThan(0); expect(p.planned.length).toBeGreaterThan(0); }
   });
 

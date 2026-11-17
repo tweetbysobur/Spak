@@ -95,6 +95,20 @@ describe("creating a payment", () => {
   });
 });
 
+describe("same token on the same network", () => {
+  it("to someone else: a payment that gets a signature-checked quote (regression: execution used to refuse it)", async () => {
+    const x = await created(`Pay 5 USDC from Base to ${PAYEE} on Base`);
+    expect(x.execution).toMatchObject({ sourceNetwork: "base", destinationNetwork: "base", recipient: PAYEE, recipientKind: "EXTERNAL" });
+    expect(x.quote!.providerSignature).toBeTruthy();
+  });
+  it("to the user's own wallet: still refused, it does nothing", async () => {
+    const r = await h.spakIn.interpretManual({ text: "", userId: u.userId, sessionId: "s-own", wallets: await h.auth.walletContext(u.userId), now: h.now().toISOString(), mode: "MANUAL",
+      intent: { type: "PAYMENT", sourceNetwork: "base", sourceAsset: `base:${USDC_BASE}`, amount: "5", destinationNetwork: "base", destinationAsset: `base:${USDC_BASE}`, recipient: u.evm.address } } as never);
+    if (r.status === "VALIDATED") expect(await code(h.svc.create({ userId: u.userId, planHash: r.plan!.hash, idempotencyKey: "k-own-1", wallets: await u.wallets() }))).toBe("PLAN_NOT_EXECUTABLE");
+    else expect(r.status).not.toBe("VALIDATED");
+  });
+});
+
 describe("quote, approval, deposit and delivery", () => {
   it("the execution records the external recipient; the quote is signature-verified and names the recipient", async () => {
     const x = await created();

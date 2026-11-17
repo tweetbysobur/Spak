@@ -1,17 +1,16 @@
 /** Small shared pieces for the marketing pages: availability status and the plan step list. */
 
-export type Status = "Live" | "Partly live" | "Planned";
+export type Status = "Live" | "Coming soon";
 
-/** Status in words with a shape: filled (live), half (partly live), hollow (planned). Never colour alone. */
+/** Status in words with a shape: filled (live), hollow dashed (coming soon). Never colour alone. */
 export function StatusMark({ status, className = "" }: { status: Status; className?: string }) {
-  const shape = status === "Live" ? "fill" : status === "Partly live" ? "half" : "none";
+  const live = status === "Live";
   return (
-    <span className={`type-label inline-flex items-center gap-2 ${status === "Planned" ? "text-fg-2" : "text-fg"} ${className}`}>
+    <span className={`type-label inline-flex items-center gap-2 ${live ? "text-fg" : "text-fg-2"} ${className}`}>
       <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
-        <circle cx="6" cy="6" r="5" fill={shape === "fill" ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5" strokeDasharray={shape === "none" ? "2 2" : undefined} />
-        {shape === "half" && <path d="M6 1a5 5 0 0 1 0 10Z" fill="currentColor" />}
+        <circle cx="6" cy="6" r="5" fill={live ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5" strokeDasharray={live ? undefined : "2 2"} />
       </svg>
-      {status === "Planned" ? "Planned, not available yet" : status}
+      {status}
     </span>
   );
 }

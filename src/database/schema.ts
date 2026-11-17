@@ -1004,3 +1004,44 @@ export const paymentOccurrences = pgTable("spak_payment_occurrences", {
   index("spak_payment_occurrences_schedule_idx").on(t.scheduleId, t.seq),
   index("spak_payment_occurrences_preparing_idx").on(t.status, t.leaseUntil),
 ]);
+
+/**
+ * SPak Payments: payment requests. A payee asks for an exact amount of a token on a network, paid to one of their own
+ * verified wallets. Anyone with the unguessable link can pay it through the normal payment path. A request is PAID only
+ * when SPak has verified, on the destination chain, at least the requested amount reaching that wallet.
+ */
+export const paymentRequests = pgTable("spak_payment_requests", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  publicToken: text("public_token").notNull(),
+  status: text("status").notNull(), // OPEN | PAID | CANCELLED (EXPIRED is derived from expires_at)
+  destinationNetwork: text("destination_network").notNull(),
+  destinationAssetId: text("destination_asset_id").notNull(),
+  amount: text("amount").notNull(), // decimal string the payee must receive at least
+  recipient: text("recipient").notNull(), // one of the payee's verified wallets on that network
+  note: text("note"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  /** Short claim while one payer's payment is being prepared, so two payers can never prepare at once. */
+  claimUserId: text("claim_user_id"),
+  claimUntil: timestamp("claim_until", { withTimezone: true }),
+  paidExecutionId: text("paid_execution_id").references((): AnyPgColumn => executions.id),
+  paidAt: timestamp("paid_at", { withTimezone: true }),
+  cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+}, (t) => [
+  uniqueIndex("spak_payment_requests_token_uq").on(t.publicToken),
+  index("spak_payment_requests_user_idx").on(t.userId, t.createdAt),
+]);
+
+/** Each attempt to pay a request: one execution, by one payer. At most one live attempt per request (enforced under the request's row lock). */
+export const paymentRequestAttempts = pgTable("spak_payment_request_attempts", {
+  id: text("id").primaryKey(),
+  requestId: text("request_id").notNull().references(() => paymentRequests.id, { onDelete: "cascade" }),
+  payerUserId: text("payer_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  executionId: text("execution_id").notNull().references((): AnyPgColumn => executions.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+}, (t) => [
+  uniqueIndex("spak_payment_request_attempts_execution_uq").on(t.executionId),
+  index("spak_payment_request_attempts_request_idx").on(t.requestId, t.createdAt),
+]);

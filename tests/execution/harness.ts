@@ -1,4 +1,6 @@
 import { PaymentScheduleService } from "@/payments/schedules";
+import { PaymentRequestService } from "@/payments/requests";
+import { AssetResolver } from "@/execution/asset-resolver";
 import { AuthService } from "@/auth/service";
 import { PgAuditLog, PgIntentLog, PgSessionStore, type Db } from "@/database/repositories";
 import { OneClickClient } from "@/integrations/near-intents/client";
@@ -83,7 +85,10 @@ export async function harness(opts: { client?: OneClickClient; quotePublicKey?: 
   }
   const schedules = new PaymentScheduleService({ db, engine: spakIn, guard, execution: svc, clock: now,
     wallets: async (userId) => ({ context: await auth.walletContext(userId), verified: (await auth.listWallets(userId)).map((w) => ({ family: w.family, address: w.address, networks: w.networks })) }) });
-  return { db, clock, now, auth, guard, grants, nearKeys, trusted, prices, spakIn, fake, svc, records, newUser, chain, deposits, depositRecords, tracking, destination, monitor, trackingService, failureRecords, refunds, failures, reviews, capability, schedules };
+  const rqClient = new OneClickClient({ fetchImpl: fake.fetch as typeof fetch });
+  const requests = new PaymentRequestService({ db, engine: spakIn, guard, execution: svc, client: rqClient, resolver: new AssetResolver(rqClient, now), clock: now,
+    wallets: async (userId) => ({ context: await auth.walletContext(userId), verified: (await auth.listWallets(userId)).map((w) => ({ family: w.family, address: w.address, networks: w.networks })) }) });
+  return { db, clock, now, auth, guard, grants, nearKeys, trusted, prices, spakIn, fake, svc, records, newUser, chain, deposits, depositRecords, tracking, destination, monitor, trackingService, failureRecords, refunds, failures, reviews, capability, schedules, requests };
 }
 
 export const approval = (planHash: string, at: Date, allowDuplicate = false, planRevision = 0) => ({ planHash, planRevision, approvedAt: at.toISOString(), allowDuplicate });

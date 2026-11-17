@@ -16,6 +16,7 @@ import { Intelligence } from "@/components/intelligence/Intelligence";
 import { Tour } from "@/components/app/Tour";
 import { Guide } from "@/components/app/Guide";
 import { Payments } from "@/components/payments/Payments";
+import { PayRequest, RequestPreview, Requests } from "@/components/payments/Requests";
 import { PROVIDER_LABEL } from "@/environment";
 import { Overview } from "@/components/app/Overview";
 import { Interpretation } from "@/components/app/Interpretation";
@@ -37,6 +38,10 @@ export default function AppPage() {
   const [handoff, setHandoff] = useState<string>();
   const [interp, setInterp] = useState<IntentResult>();
   const [pending, setPending] = useState<{ intent: IntentResult; execution: ExecutionView; quote: QuoteView }>();
+  // A payment request link (/app?pay=<token>): shown above sign-in, then as a pay card once signed in.
+  const [payToken, setPayToken] = useState<string | null>(null);
+  useEffect(() => { const t = new URLSearchParams(window.location.search).get("pay"); if (t && /^[A-Za-z0-9_-]{32}$/.test(t)) setPayToken(t); }, []);
+  const closePay = () => { setPayToken(null); const u = new URL(window.location.href); u.searchParams.delete("pay"); history.replaceState(null, "", u.pathname + u.hash); };
   const [active, setActive] = useState<ExecutionView>();
   const [timezone, setTimezone] = useState("UTC");
   const [notice, setNotice] = useState<string>();
@@ -110,6 +115,7 @@ export default function AppPage() {
           <div className="lg:col-start-1 lg:row-start-1">
             <h1 className="type-app-title max-w-[22ch] text-fg">Your wallet is your account.</h1>
             <p className="type-body mt-4 max-w-[46ch] text-fg-2">Sign one message to prove the wallet is yours. It is not a transaction and costs no gas. SPak never asks for a seed phrase or private key.</p>
+            {payToken && <div className="mt-8 max-w-[34rem]"><RequestPreview token={payToken} /></div>}
           </div>
           <div className="lg:col-start-2 lg:row-span-2 lg:row-start-1">{failed}{session === undefined ? <Card><Spinner label="Loading your session" /></Card> : <WalletPicker purpose="SIGN_IN" onDone={refresh} />}</div>
           <section aria-labelledby="next-steps" className="lg:col-start-1 lg:row-start-2">
@@ -137,8 +143,12 @@ export default function AppPage() {
   const title = active ? "Transfer" : NAV.find((n) => n.id === view)!.label;
   return (
     <Shell session={session} view={view} onSelect={setView} signedOut={signedOut} title={title} notice={failed}>
-      <Tour userId={session.userId} onSelect={setView} />
-      {active ? (
+      {/* The first-run tour waits until a payer arriving from a request link has finished with it. */}
+      {!payToken && <Tour userId={session.userId} onSelect={setView} />}
+      {payToken ? (
+        <PayRequest token={payToken} session={session} onClose={closePay}
+          onReview={(i, x, q) => { closePay(); setView("execute"); setPending({ intent: i, execution: x, quote: q }); }} />
+      ) : active ? (
         <div className="mx-auto flex max-w-[48rem] flex-col gap-4">
           <div><Button variant="ghost" size="sm" onClick={() => setActive(undefined)}>← Back</Button></div>
           <Tracker key={active.id} initial={active} onNotify={notify} />
@@ -170,7 +180,12 @@ export default function AppPage() {
             </div>
           )}
           {view === "activity" && <Activity onOpen={open} />}
-          {view === "payments" && <Payments onOpen={open} onReview={(i, x, q) => { setView("execute"); setPending({ intent: i, execution: x, quote: q }); }} />}
+          {view === "payments" && (
+            <div className="flex flex-col gap-10">
+              <Payments onOpen={open} onReview={(i, x, q) => { setView("execute"); setPending({ intent: i, execution: x, quote: q }); }} />
+              <div className="mx-auto w-full max-w-[52rem]"><Requests session={session} /></div>
+            </div>
+          )}
           {view === "portfolio" && <Intelligence onExecute={(t) => { setHandoff(t); setMode("chat"); setInterp(undefined); setView("execute"); }} />}
           {view === "guard" && <Guard />}
           {view === "agent" && <Agent session={session} refresh={refresh} signedOut={signedOut} />}

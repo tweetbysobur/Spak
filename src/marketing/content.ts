@@ -40,7 +40,7 @@ export const STEPS = [
   { id: "verify", lane: "SPak", title: "Verify the outcome", body: "SPak reads the destination chain and compares the delivery with what you approved. Only then does it say Completed.", moves: true },
 ] as const;
 
-export type Pillar = { id: string; name: string; summary: string; status: "Live" | "Partly live" | "Planned"; live: string[]; planned: string[] };
+export type Pillar = { id: string; name: string; summary: string; status: "Live" | "Coming soon"; live: string[]; planned: string[] };
 
 export const PILLARS: Pillar[] = [
   {
@@ -91,13 +91,14 @@ export const PILLARS: Pillar[] = [
       "The recipient address is checked against the destination network before any quote.",
       "Delivery to the recipient is verified on the networks SPak can read.",
       "Recurring payments: SPak prepares each one on its date with a fresh quote, and your wallet signs it.",
+      "Payment requests: share a link asking for an amount; the payer pays from any supported network, and you receive at least that amount.",
     ],
     planned: [
-      "Payment requests, invoices, checkout and bulk payouts are not built.",
+      "Invoices, checkout and bulk payouts are not built.",
     ],
   },
   {
-    id: "conditional", name: "SPak Conditional Execution", status: "Planned",
+    id: "conditional", name: "SPak Conditional Execution", status: "Coming soon",
     summary: "Transfers that wait for a time or a price. SPak reads these instructions today; it does not run them.",
     live: [
       "Understands many scheduled and price-conditional instructions and shows the plan they would follow.",

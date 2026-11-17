@@ -12,7 +12,7 @@ function Lists({ live, planned }: { live: readonly string[]; planned: readonly s
   return (
     <div className="grid gap-6 sm:grid-cols-2">
       <div><p className="type-label text-fg">Live today</p><ul className="mt-2 flex flex-col gap-2">{live.map((t) => <li key={t} className="type-body-sm flex gap-2 text-fg"><Icon name="success" size={16} className="mt-0.5 shrink-0 text-primary" />{t}</li>)}</ul></div>
-      <div><p className="type-label text-fg-2">Planned, not available yet</p><ul className="mt-2 flex flex-col gap-2">{planned.map((t) => <li key={t} className="type-body-sm flex gap-2 text-fg-2"><Icon name="neutral" size={16} className="mt-0.5 shrink-0" />{t}</li>)}</ul></div>
+      <div><p className="type-label text-fg-2">Coming soon</p><ul className="mt-2 flex flex-col gap-2">{planned.map((t) => <li key={t} className="type-body-sm flex gap-2 text-fg-2"><Icon name="neutral" size={16} className="mt-0.5 shrink-0" />{t}</li>)}</ul></div>
     </div>
   );
 }
