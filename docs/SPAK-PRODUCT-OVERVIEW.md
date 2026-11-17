@@ -26,7 +26,7 @@ Live means in the code, tested and running in production at usespak.vercel.app. 
 | SPak Guard | Live | Limits, allowed networks, assets, recipients |
 | SPak Intelligence | Live | Read-only balances and prices on 10 networks |
 | Guided tour | Live | First-run tour, replayable from the account menu |
-| SPak Agent | Partial | Identity, signed permissions (limits, spacing, expiry), pause, revoke and approval monitoring are live. The Agent approves within limits; your wallet signs every deposit. No unattended signing |
+| SPak Agent | Live | Identity, signed permissions (limits, spacing, expiry), pause, revoke and approval monitoring are live. The Agent approves within limits; your wallet signs every deposit. No unattended signing |
 | Verified mainnet settlement | In progress | No verified SPak mainnet settlement yet |
 | Conditional and scheduled execution | Upcoming | Parsed by SPak-in, not executed. Recurring payments (above) are the first scheduled feature |
 | Advanced Agents, developer APIs, rebalancing | Upcoming | |

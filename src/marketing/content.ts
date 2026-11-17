@@ -44,12 +44,13 @@ export type Pillar = { id: string; name: string; summary: string; status: "Live"
 
 export const PILLARS: Pillar[] = [
   {
-    id: "agent", name: "SPak Agent", status: "Partly live",
+    id: "agent", name: "SPak Agent", status: "Live",
     summary: "A NEAR account that represents you inside SPak. Your connected wallets stay yours and keep signing.",
     live: [
-      "Mark one verified NEAR wallet as your agent identity. This records the link only.",
+      "Prove a NEAR account you own as your agent identity by signing with its key.",
       "The agent identity is tied to your account and checked on every request.",
-      "Your agent can approve a quote for you, only inside limits you sign with your NEAR key. Your wallet still signs every deposit.",
+      "Your agent can approve a quote for you, only inside limits you sign with your NEAR key: per transfer, per day, how many, how often, and for how long. Your wallet still signs every deposit.",
+      "See every transfer your agent approved, and which ones wait for your signature.",
     ],
     planned: [
       "A dedicated NEAR account created for your agent.",
@@ -83,7 +84,7 @@ export const PILLARS: Pillar[] = [
     ],
   },
   {
-    id: "payments", name: "SPak Payments", status: "Partly live",
+    id: "payments", name: "SPak Payments", status: "Live",
     summary: "Pay someone on another network from the asset you hold.",
     live: [
       "Send an asset to another person's address on a different network in one instruction.",
@@ -107,7 +108,7 @@ export const PILLARS: Pillar[] = [
     ],
   },
   {
-    id: "connect", name: "SPak Connect", status: "Partly live",
+    id: "connect", name: "SPak Connect", status: "Live",
     summary: "How wallets, and later other apps, connect to SPak.",
     live: [
       "Sign in with an EVM, Solana or NEAR wallet by signing a one-time message. No password, key or seed phrase.",
